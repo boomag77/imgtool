@@ -1,4 +1,47 @@
-ECHO is on.
-secret.json 
+# Build results
 bin/
+obj/
+
+# Visual Studio
 .vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build outputs
+*.dll
+*.exe
+*.pdb
+*.cache
+*.config
+*.manifest
+
+# WPF temporary compile files
+*_wpftmp.csproj
+*_wpftmp/
+*.g.i.cs
+*.g.cs
+*.baml
+
+# NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nuget.props
+*.nuget.targets
+*.nuget.cache
+
+# OS stuff
+Thumbs.db
+Desktop.ini
+
+# Secrets
+secret.json
