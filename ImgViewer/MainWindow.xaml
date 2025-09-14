@@ -55,14 +55,21 @@
         <!--Image preview -->
         <Image x:Name="ImgBox"
                Grid.Row="1" Grid.Column="1"
+               
                 Stretch="Uniform"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch"/>
         
         <!--Controls -->
         <StackPanel Grid.Row="1" Grid.Column="2" Margin="5">
+            <TextBlock Text="Controls" FontWeight="Bold" FontSize="16" Margin="5"/>
+            <Separator Margin="5"/>
             <Button Content="Open" Click="OpenFile" Margin="5"/>
-            <Button Content="Process" Click="ProcessAllImgs" Margin="5"/>
+            <Button Content="Apply Deskew" Click="ApplyDeskew" Margin="5"/>
+            <Button Content="Remove borders" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
+            <Button Content="Auto crop" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
+            <Button Content="Run Despeckle" Click="ApplyDespeckleCommand" Margin="5"/>
+            <Button Content="AutoBinarize" Click="ApplyAutoBinarizeCommand" Margin="5"/>
         </StackPanel>
 
     </Grid>

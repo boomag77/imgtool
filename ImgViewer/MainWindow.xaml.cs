@@ -1,5 +1,4 @@
 ﻿using ImgViewer.Internal;
-using LeadImgProcessor;
 using Microsoft.Win32;
 using System;
 using System.Collections.ObjectModel;
@@ -10,6 +9,8 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Media.Imaging;
 using System.Text.Json;
+using ImgProcessor.Abstractions;
+using LeadImgProcessor;
 
 
 namespace ImgViewer
@@ -19,13 +20,13 @@ namespace ImgViewer
     /// </summary>
     public partial class MainWindow : Window
     {
-        private LeadImageProcessor _processor;
+        private IImageProcessor _processor;
 
         private CancellationTokenSource _cts;
 
         private readonly FileExplorer _explorer = new FileExplorer();
 
-        public class FileItem
+        public class Thumbnail
         {
             public string Name { get; set; }
             public BitmapImage Thumb { get; set; }
@@ -38,7 +39,7 @@ namespace ImgViewer
             public string? LicenseKey { get; set; }
         }
 
-        public ObservableCollection<FileItem> Files { get; set; } = new ObservableCollection<FileItem>();
+        public ObservableCollection<Thumbnail> Files { get; set; } = new ObservableCollection<Thumbnail>();
 
         public MainWindow()
         {
@@ -47,7 +48,13 @@ namespace ImgViewer
             var creds = ReadLicenseCreds();
             string licPath = creds.LicenseFilePath;
             string key = creds.LicenseKey;
-            _processor = new LeadImageProcessor(licPath, key);
+            IImageProcessorFactory factory = new LeadImgProcessorFactory(licPath, key);
+            _processor = factory.CreateProcessor();
+            _processor.ImageUpdated += (stream) =>
+            {
+                var bitmap = streamToBitmapSource(stream);
+                Dispatcher.InvokeAsync(() => ImgBox.Source = bitmap);
+            };
         }
 
         private LicenseCredentials ReadLicenseCreds()
@@ -66,10 +73,30 @@ namespace ImgViewer
             }
         }
 
+          
+
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             _cts?.Cancel();
             base.OnClosing(e);
+        }
+
+        private BitmapSource streamToBitmapSource(Stream stream)
+        {
+            if (stream == null || stream == Stream.Null)
+                return null!;
+
+            if (stream.CanSeek)
+                stream.Position = 0;
+
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze(); // чтобы можно было использовать из любого потока
+
+            return bitmap;
         }
 
         private async Task LoadFolder(string folderPath, CancellationToken token)
@@ -96,7 +123,7 @@ namespace ImgViewer
                                 {
                                     if (!IsLoaded || token.IsCancellationRequested)
                                         return; 
-                                    Files.Add(new FileItem
+                                    Files.Add(new Thumbnail
                                     {
                                         Name = System.IO.Path.GetFileName(file),
                                         Thumb =bmp,
@@ -123,10 +150,9 @@ namespace ImgViewer
 
         private void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (ImgListBox.SelectedItem is FileItem item)
+            if (ImgListBox.SelectedItem is Thumbnail item)
             {
-                //ImgBox.Source = _explorer.LoadImage(item.Path);
-                ImgBox.Source = _processor.LoadImage(item.Path);
+                _processor.LoadImage(item.Path);
             }
         }
 
@@ -163,17 +189,7 @@ namespace ImgViewer
             {
                 try
                 {
-                    //using var stream = new FileStream(dlg.FileName, FileMode.Open, FileAccess.Read);
-                    //var bitmap = new BitmapImage();
-                    //bitmap.BeginInit();
-                    //bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    //bitmap.UriSource = null;
-                    //bitmap.StreamSource = stream;
-                    //bitmap.EndInit();
-                    //bitmap.Freeze();
-
-                    //ImgBox.Source = bitmap;
-                    ImgBox.Source = _processor.LoadImage(dlg.FileName);
+                    _processor.LoadImage(dlg.FileName);
                     Title = $"ImgViewer - {Path.GetFileName(dlg.FileName)}";
 
                 }
@@ -186,12 +202,39 @@ namespace ImgViewer
 
 
 
-        private void ProcessAllImgs(object sender, RoutedEventArgs e)
+        private void ApplyDeskew(object sender, RoutedEventArgs e)
         {
-            var updated = _processor.ApplyDeskewCurrent();
-            ImgBox.Source = updated;
-            Console.WriteLine("Processing all images... -> Done..");
+            _processor.ApplyCommandToCurrent(ProcessorCommands.Deskew, new Dictionary<string, object>());
+            //var updated = _processor.ApplyDeskewCurrent();
+            //ImgBox.Source = updated;
         }
+
+        private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
+        {
+            //var updated = _processor.ApplyAutoCropRectangleCurrent();
+            //ImgBox.Source = updated;
+        }
+
+        private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)
+        {
+            //var updated = _processor.ApplyDespeckleCurrent();
+            //ImgBox.Source = updated;
+        }
+
+
+        private void ApplyBorderRemoveCommand(object sender, RoutedEventArgs e)
+        {
+            //var updated = _processor.ApplyBorderRemoveCurrent();
+            //ImgBox.Source = updated;
+        }
+
+        private void ApplyAutoBinarizeCommand(object sender, RoutedEventArgs e)
+        {
+            _processor.ApplyCommandToCurrent(ProcessorCommands.Binarize, new Dictionary<string, object>());
+            //var updated = _processor.ApplyAutoBinarizeCurrent();
+            //ImgBox.Source = updated;
+        }
+
         private void ExitClick(object sender, RoutedEventArgs e)
         {
             Close();

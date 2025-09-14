@@ -11,6 +11,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\ImgProcessor.Abstractions\ImgProcessor.Abstractions.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Reference Include="Leadtools">
 			<HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.dll</HintPath>
 		</Reference>

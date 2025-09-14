@@ -17,7 +17,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DocPostProcessor\LeadImgProcessor.csproj" />
+	  <ProjectReference Include="..\DocPostProcessor\LeadImgProcessor.csproj" />
+	  <ProjectReference Include="..\ImgProcessor.Abstractions\ImgProcessor.Abstractions.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
