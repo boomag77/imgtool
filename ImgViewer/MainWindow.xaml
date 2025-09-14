@@ -1,0 +1,70 @@
+﻿<Window x:Class="ImgViewer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ImgViewer"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="600" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Menu bar row -->
+            <RowDefinition Height="*"/>
+            <!-- Main content row -->
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*"/>
+            <!--Folder images list -->
+            <ColumnDefinition Width="6*"/>
+            <!--Image preview -->
+            <ColumnDefinition Width="3*"/>
+            <!--Controls -->
+        </Grid.ColumnDefinitions>
+
+        <!--Menu -->
+        <Menu Grid.Row="0" VerticalAlignment="Top" Grid.ColumnSpan="3">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open File" Click="OpenFile"/>
+                <Separator/>
+                <MenuItem Header="_Open Folder" Click="OpenFolder"/>
+                <Separator/>
+                <MenuItem Header="_Exit" Click="ExitClick"/>
+            </MenuItem>
+        </Menu>
+
+        <!--Folder images list -->
+        <ListBox x:Name="ImgListBox"
+                 Grid.Row="1" Grid.Column="0"
+                 Margin="5"
+                 SelectionChanged="ImgList_SelectionChanged"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Vertical" Margin="5">
+                        <Image Source="{Binding Thumb}"
+                               Width="50" Height="50" Stretch="UniformToFill"
+                               Margin="5"/>
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!--Image preview -->
+        <Image x:Name="ImgBox"
+               Grid.Row="1" Grid.Column="1"
+                Stretch="Uniform"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"/>
+        
+        <!--Controls -->
+        <StackPanel Grid.Row="1" Grid.Column="2" Margin="5">
+            <Button Content="Open" Click="OpenFile" Margin="5"/>
+            <Button Content="Process" Click="ProcessAllImgs" Margin="5"/>
+        </StackPanel>
+
+    </Grid>
+    
+</Window>

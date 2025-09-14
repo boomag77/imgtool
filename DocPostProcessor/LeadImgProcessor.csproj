@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<LangVersion>latest</LangVersion>	
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Platforms>AnyCPU;x64</Platforms>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Reference Include="Leadtools">
+			<HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.dll</HintPath>
+		</Reference>
+		<Reference Include="Leadtools.Codecs">
+			<HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.Codecs.dll</HintPath>
+		</Reference>
+		<Reference Include="Leadtools.Codecs.Cmp">
+			<HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.Codecs.Cmp.dll</HintPath>
+			<Private>True</Private>
+		</Reference>
+		<Reference Include="Leadtools.Codecs.Png">
+		  <HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.Codecs.Png.dll</HintPath>
+		</Reference>
+		<Reference Include="Leadtools.ImageProcessing.Core">
+			<HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.ImageProcessing.Core.dll</HintPath>
+		</Reference>
+		<Reference Include="Leadtools.Windows.Media">
+			<HintPath>C:\LEADTOOLS23\Bin\DotNet4\x64\Leadtools.Windows.Media.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+</Project>
