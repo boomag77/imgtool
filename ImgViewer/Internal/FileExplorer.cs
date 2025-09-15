@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.IO;
 using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Internal
@@ -24,6 +20,12 @@ namespace ImgViewer.Internal
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
+        }
+
+        public Stream LoadImage(string path)
+        {
+            var stream = new MemoryStream();
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         }
     }
 }

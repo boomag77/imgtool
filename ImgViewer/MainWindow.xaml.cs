@@ -1,16 +1,11 @@
-﻿using ImgViewer.Internal;
-using Microsoft.Win32;
-using System;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Configuration;
-using System.IO;
-using System.Windows;
-using System.Windows.Forms;
-using System.Windows.Media.Imaging;
-using System.Text.Json;
-using ImgProcessor.Abstractions;
+﻿using ImgProcessor.Abstractions;
+using ImgViewer.Internal;
 using LeadImgProcessor;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Media.Imaging;
 
 
 namespace ImgViewer
@@ -32,7 +27,7 @@ namespace ImgViewer
             public BitmapImage Thumb { get; set; }
             public string Path { get; set; }
         }
-            
+
         private class LicenseCredentials
         {
             public string? LicenseFilePath { get; set; }
@@ -73,7 +68,7 @@ namespace ImgViewer
             }
         }
 
-          
+
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
@@ -101,7 +96,7 @@ namespace ImgViewer
 
         private async Task LoadFolder(string folderPath, CancellationToken token)
         {
-            
+
             Files.Clear();
             await Task.Run(() =>
                 {
@@ -122,11 +117,11 @@ namespace ImgViewer
                                 Dispatcher.InvokeAsync(() =>
                                 {
                                     if (!IsLoaded || token.IsCancellationRequested)
-                                        return; 
+                                        return;
                                     Files.Add(new Thumbnail
                                     {
                                         Name = System.IO.Path.GetFileName(file),
-                                        Thumb =bmp,
+                                        Thumb = bmp,
                                         Path = file
                                     });
                                     if (Files.Count == 1)
@@ -145,7 +140,7 @@ namespace ImgViewer
                         }
                     }
                 }, token);
-            
+
         }
 
         private void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -160,7 +155,7 @@ namespace ImgViewer
         {
             var dlg = new System.Windows.Forms.FolderBrowserDialog();
 
-            if (dlg.ShowDialog() ==System.Windows.Forms.DialogResult.OK)
+            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 string folderPath = dlg.SelectedPath;
                 _cts?.Cancel();
@@ -211,28 +206,23 @@ namespace ImgViewer
 
         private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
         {
-            //var updated = _processor.ApplyAutoCropRectangleCurrent();
-            //ImgBox.Source = updated;
+            _processor.ApplyCommandToCurrent(ProcessorCommands.AutoCropRectangle, new Dictionary<string, object>());
         }
 
         private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)
         {
-            //var updated = _processor.ApplyDespeckleCurrent();
-            //ImgBox.Source = updated;
+            _processor.ApplyCommandToCurrent(ProcessorCommands.Despeckle, new Dictionary<string, object>());
         }
 
 
         private void ApplyBorderRemoveCommand(object sender, RoutedEventArgs e)
         {
-            //var updated = _processor.ApplyBorderRemoveCurrent();
-            //ImgBox.Source = updated;
+            _processor.ApplyCommandToCurrent(ProcessorCommands.BorderRemove, new Dictionary<string, object>());
         }
 
         private void ApplyAutoBinarizeCommand(object sender, RoutedEventArgs e)
         {
             _processor.ApplyCommandToCurrent(ProcessorCommands.Binarize, new Dictionary<string, object>());
-            //var updated = _processor.ApplyAutoBinarizeCurrent();
-            //ImgBox.Source = updated;
         }
 
         private void ExitClick(object sender, RoutedEventArgs e)
