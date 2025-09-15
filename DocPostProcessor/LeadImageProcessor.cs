@@ -66,7 +66,7 @@ namespace LeadImgProcessor
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        applyAutoBinarizeCurrent();
+                        ApplyAutoBinarizeCurrent();
                         break;
                     case ProcessorCommands.Deskew:
                         applyDeskewCurrent();
@@ -80,6 +80,9 @@ namespace LeadImgProcessor
                     case ProcessorCommands.AutoCropRectangle:
                         applyAutoCropRectangleCurrent();
                         break;
+                    case ProcessorCommands.LineRemove:
+                        ApplyLinesRemoveCurrent();
+                        break;
 
                 }
                 updateImagePreview();
@@ -87,11 +90,11 @@ namespace LeadImgProcessor
         }
 
 
-        private void applyAutoBinarizeCurrent()
+        private void ApplyAutoBinarizeCurrent()
         {   
             var command = new AutoBinarizeCommand();
             command.Flags = AutoBinarizeCommandFlags.UsePercentileThreshold | AutoBinarizeCommandFlags.DontUsePreProcessing;
-            command.Factor = 7000; // use 20% threshold 
+            command.Factor = 4000; // use % threshold 
             command.Run(_currentImage);
         }
 
@@ -120,7 +123,8 @@ namespace LeadImgProcessor
             };
 
             // 4) Толерантность побольше из-за JPEG-шума
-            var tol = new RasterColor(48, 48, 48);
+            var lower = new RasterColor(0, 0, 0);
+            var upper = new RasterColor(100, 100, 100);
 
             foreach (var s in seeds)
             {
@@ -131,14 +135,14 @@ namespace LeadImgProcessor
                 _currentImage.MakeRegionEmpty();
 
                 // НИКАКИХ клип-прямоугольников — нам нужен весь связный чёрный фон
-                _currentImage.AddMagicWandToRegion(s.X, s.Y, tol, tol, RasterRegionCombineMode.Set);
+                _currentImage.AddMagicWandToRegion(s.X, s.Y, lower, upper, RasterRegionCombineMode.Set);
 
                 // Заливаем найденный регион цветом бумаги
                 new FillCommand { Color = paper }.Run(_currentImage);
             }
 
             _currentImage.MakeRegionEmpty();
-
+            applyHolePunchRemoveCurrent();
         }
 
         private static bool IsDark(RasterColor c)
@@ -146,6 +150,47 @@ namespace LeadImgProcessor
             // простая яркость по sRGB
             int y = (int)(0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B);
             return y < 96; // порог под себя
+        }
+
+        private void applyHolePunchRemoveCurrent()
+        {
+            if (_currentImage.BitsPerPixel != 1)
+            {
+                var cr = new ColorResolutionCommand
+                {
+                    BitsPerPixel = 1
+                };
+                cr.Run(_currentImage);
+            }
+            var command = new HolePunchRemoveCommand();
+            command.Location = HolePunchRemoveCommandLocation.Left;
+            command.MinimumHoleCount = 2;
+            command.Run(_currentImage);
+        }
+
+        private void ApplyLinesRemoveCurrent()
+        {
+            if (_currentImage == null)
+                return;
+            if (_currentImage.BitsPerPixel != 1)
+            {
+                var cr = new ColorResolutionCommand
+                {
+                    BitsPerPixel = 1
+                };
+                cr.Run(_currentImage);
+            }
+            try
+            {
+                var command = new LineRemoveCommand();
+                command.Run(_currentImage);
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Ошибка LEADTOOLS while lines removal: {ex.Message}");
+                //throw new Exception($"Ошибка LEADTOOLS при удалении линий: {ex.Message}", ex);
+            }
+
         }
 
 

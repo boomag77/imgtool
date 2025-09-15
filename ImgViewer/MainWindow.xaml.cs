@@ -232,6 +232,11 @@ namespace ImgViewer
             _processor.ApplyCommandToCurrent(ProcessorCommands.Binarize, new Dictionary<string, object>());
         }
 
+        private void ApplyLineRemoveCommand(object sender, RoutedEventArgs e)
+        {
+            _processor.ApplyCommandToCurrent(ProcessorCommands.LineRemove, new Dictionary<string, object>());
+        }
+
         private void SaveAsClick(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
