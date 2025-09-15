@@ -70,6 +70,8 @@
             <Button Content="Auto crop" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
             <Button Content="Run Despeckle" Click="ApplyDespeckleCommand" Margin="5"/>
             <Button Content="AutoBinarize" Click="ApplyAutoBinarizeCommand" Margin="5"/>
+            <Separator Margin="10"/>
+            <Button Content="Save As..." Click="SaveAsClick" Margin="5"/>
         </StackPanel>
 
     </Grid>

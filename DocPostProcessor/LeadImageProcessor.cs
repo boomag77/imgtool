@@ -104,8 +104,48 @@ namespace LeadImgProcessor
         private void applyDeskewCurrent()
         {
             var command = new DeskewCommand();
-            command.FillColor = new RasterColor(255, 255, 255); // white background
+            //command.FillColor = new RasterColor(255, 255, 255); // white background
+            //command.FillColor = RasterColor.FromKnownColor(RasterKnownColor.White);
             command.Run(_currentImage);
+
+            var paper = new RasterColor(255, 255, 255);
+
+            // 3) Точки-«семена» по углам (немного отступаем от границы)
+            var seeds = new[]
+            {
+                new LeadPoint(2, 2),
+                new LeadPoint(_currentImage.Width - 3, 2),
+                new LeadPoint(2, _currentImage.Height - 3),
+                new LeadPoint(_currentImage.Width - 3, _currentImage.Height - 3),
+            };
+
+            // 4) Толерантность побольше из-за JPEG-шума
+            var tol = new RasterColor(48, 48, 48);
+
+            foreach (var s in seeds)
+            {
+                // Если вдруг в этом углу не чёрный (бывает), пропускаем
+                var p = _currentImage.GetPixelColor(s.X, s.Y);
+                if (!IsDark(p)) continue;
+
+                _currentImage.MakeRegionEmpty();
+
+                // НИКАКИХ клип-прямоугольников — нам нужен весь связный чёрный фон
+                _currentImage.AddMagicWandToRegion(s.X, s.Y, tol, tol, RasterRegionCombineMode.Set);
+
+                // Заливаем найденный регион цветом бумаги
+                new FillCommand { Color = paper }.Run(_currentImage);
+            }
+
+            _currentImage.MakeRegionEmpty();
+
+        }
+
+        private static bool IsDark(RasterColor c)
+        {
+            // простая яркость по sRGB
+            int y = (int)(0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B);
+            return y < 96; // порог под себя
         }
 
 
@@ -137,7 +177,22 @@ namespace LeadImgProcessor
             }
         }
 
-        
+        public void SaveCurrentImage(string path)
+        {
+            if (_currentImage != null)
+            {
+                try
+                {
+                    _codecs.Save(_currentImage, path, RasterImageFormat.Jpeg, 24);
+                }
+                catch (Exception ex)
+                {
+                    ErrorOccured?.Invoke($"Ошибка LEADTOOLS при сохранении {path}: {ex.Message}");
+                    //throw new Exception($"Ошибка LEADTOOLS при сохранении {path}: {ex.Message}", ex);
+                }
+            }
+        }
+
 
         public void LoadImage(string path)
         {

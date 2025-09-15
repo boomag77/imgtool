@@ -50,6 +50,13 @@ namespace ImgViewer
                 var bitmap = streamToBitmapSource(stream);
                 Dispatcher.InvokeAsync(() => ImgBox.Source = bitmap);
             };
+            _processor.ErrorOccured += (msg) =>
+            {
+                Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            };
         }
 
         private LicenseCredentials ReadLicenseCreds()
@@ -223,6 +230,17 @@ namespace ImgViewer
         private void ApplyAutoBinarizeCommand(object sender, RoutedEventArgs e)
         {
             _processor.ApplyCommandToCurrent(ProcessorCommands.Binarize, new Dictionary<string, object>());
+        }
+
+        private void SaveAsClick(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog();
+            dlg.Filter = "PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|TIFF Image|*.tif;*.tiff|Bitmap Image|*.bmp|All Files|*.*";
+            if (dlg.ShowDialog() == true)
+            {
+                var path = dlg.FileName;
+                _processor.SaveCurrentImage(path);
+            }
         }
 
         private void ExitClick(object sender, RoutedEventArgs e)

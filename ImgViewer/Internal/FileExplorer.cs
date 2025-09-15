@@ -27,5 +27,10 @@ namespace ImgViewer.Internal
             var stream = new MemoryStream();
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         }
+
+        public byte[] LoadImageBytes(string path)
+        {
+            return File.ReadAllBytes(path);
+        }
     }
 }
