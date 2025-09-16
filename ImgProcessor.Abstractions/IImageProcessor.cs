@@ -25,7 +25,8 @@ namespace ImgProcessor.Abstractions
         BorderRemove,
         Despeckle,
         AutoCropRectangle,
-        LineRemove
+        LineRemove,
+        DotsRemove
     }
 }
 

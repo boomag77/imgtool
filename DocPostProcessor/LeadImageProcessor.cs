@@ -3,7 +3,10 @@ using Leadtools;
 using Leadtools.Codecs;
 using Leadtools.ImageProcessing;
 using Leadtools.ImageProcessing.Core;
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.RightsManagement;
 using System.Windows.Media.Imaging;
 
 namespace LeadImgProcessor
@@ -59,6 +62,49 @@ namespace LeadImgProcessor
             }
         }
 
+        private void RemoveSpecksWithHandler()
+        {
+            int seen = 0, removed = 0;
+            // ВАЖНО: 1-bit! Если у вас 24bpp — сначала AutoBinarize + принудительно ColorResolution до 1 bpp.
+            var cmd = new DotRemoveCommand
+            {
+                Flags = DotRemoveCommandFlags.UseSize
+                      | DotRemoveCommandFlags.UseDiagonals
+                      | DotRemoveCommandFlags.SingleRegion
+                      | DotRemoveCommandFlags.UseDpi,
+                MinimumDotWidth = 100,
+                MinimumDotHeight = 100,
+                MaximumDotWidth = 600,
+                MaximumDotHeight = 600
+            };
+
+            cmd.DotRemove += (sender, e) =>
+            {
+                // Пример простой эвристики:
+                seen++;
+                var r = e.BoundingRectangle;
+                int area = Math.Max(1, r.Width * r.Height);
+                double fill = (double)e.BlackCount / area; // доля "чёрного" в bbox
+
+                // если blob "плотный" (прямоугольное окно/засветка), удаляем;
+                // если есть белые "дыры" или blob разреженный — оставляем
+                if (fill >= 0.60) { e.Status = RemoveStatus.Remove; removed++; }
+                else e.Status = RemoveStatus.NoRemove;
+            };
+
+            try
+            {
+                cmd.Run(_currentImage);
+            }
+            finally
+            {
+                //cmd.DotRemove -= handler;
+                _currentImage.MakeRegionEmpty(); // важно снять регион
+            }
+
+            Debug.WriteLine($"DotRemove: candidates={seen}, removed={removed}, bpp={_currentImage.BitsPerPixel}");
+        }
+
         public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters)
         {
             if (_currentImage != null)
@@ -83,6 +129,10 @@ namespace LeadImgProcessor
                     case ProcessorCommands.LineRemove:
                         ApplyLinesRemoveCurrent();
                         break;
+                    case ProcessorCommands.DotsRemove:
+                        RemoveSpecksWithHandler();
+                        break;
+
 
                 }
                 updateImagePreview();
@@ -93,9 +143,19 @@ namespace LeadImgProcessor
         private void ApplyAutoBinarizeCurrent()
         {   
             var command = new AutoBinarizeCommand();
-            command.Flags = AutoBinarizeCommandFlags.UsePercentileThreshold | AutoBinarizeCommandFlags.DontUsePreProcessing;
-            command.Factor = 4000; // use % threshold 
+            command.Flags = AutoBinarizeCommandFlags.UseUserThreshold | AutoBinarizeCommandFlags.DontUsePreProcessing;
+            command.Factor = 230; 
             command.Run(_currentImage);
+
+            if (_currentImage.BitsPerPixel != 1)
+            {
+                new ColorResolutionCommand
+                {
+                    BitsPerPixel = 1,
+                    DitheringMethod = RasterDitheringMethod.None,
+                    PaletteFlags = ColorResolutionCommandPaletteFlags.Fixed
+                }.Run(_currentImage);
+            }
         }
 
         private void applyDespeckleCurrent()
@@ -103,6 +163,7 @@ namespace LeadImgProcessor
             var command = new DespeckleCommand();
             command.Run(_currentImage);
         }
+
 
         private void applyDeskewCurrent()
         {
@@ -142,7 +203,7 @@ namespace LeadImgProcessor
             }
 
             _currentImage.MakeRegionEmpty();
-            applyHolePunchRemoveCurrent();
+            //RemoveSpecksWithHandler();
         }
 
         private static bool IsDark(RasterColor c)
@@ -152,21 +213,6 @@ namespace LeadImgProcessor
             return y < 96; // порог под себя
         }
 
-        private void applyHolePunchRemoveCurrent()
-        {
-            if (_currentImage.BitsPerPixel != 1)
-            {
-                var cr = new ColorResolutionCommand
-                {
-                    BitsPerPixel = 1
-                };
-                cr.Run(_currentImage);
-            }
-            var command = new HolePunchRemoveCommand();
-            command.Location = HolePunchRemoveCommandLocation.Left;
-            command.MinimumHoleCount = 2;
-            command.Run(_currentImage);
-        }
 
         private void ApplyLinesRemoveCurrent()
         {
@@ -228,7 +274,9 @@ namespace LeadImgProcessor
             {
                 try
                 {
-                    _codecs.Save(_currentImage, path, RasterImageFormat.Jpeg, 24);
+                    _currentImage.XResolution = 300;
+                    _currentImage.YResolution = 300;
+                    _codecs.Save(_currentImage, path, RasterImageFormat.CcittGroup4, 1);
                 }
                 catch (Exception ex)
                 {
