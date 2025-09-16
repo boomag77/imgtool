@@ -5,9 +5,6 @@ using Leadtools.ImageProcessing;
 using Leadtools.ImageProcessing.Core;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Security.RightsManagement;
-using System.Windows.Media.Imaging;
 
 namespace LeadImgProcessor
 {
@@ -141,10 +138,10 @@ namespace LeadImgProcessor
 
 
         private void ApplyAutoBinarizeCurrent()
-        {   
+        {
             var command = new AutoBinarizeCommand();
             command.Flags = AutoBinarizeCommandFlags.UseUserThreshold | AutoBinarizeCommandFlags.DontUsePreProcessing;
-            command.Factor = 230; 
+            command.Factor = 230;
             command.Run(_currentImage);
 
             if (_currentImage.BitsPerPixel != 1)
