@@ -12,6 +12,8 @@
             <!-- Menu bar row -->
             <RowDefinition Height="*"/>
             <!-- Main content row -->
+            <RowDefinition Height="Auto"/>
+            <!--Status bar row -->
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="1*"/>
@@ -32,8 +34,16 @@
                 <MenuItem Header="_Exit" Click="ExitClick"/>
             </MenuItem>
         </Menu>
-
-        <!--Folder images list -->
+        <StatusBar Grid.Row="2" Grid.ColumnSpan="3" VerticalAlignment="Bottom">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="Ready" />
+            </StatusBarItem>
+            <StatusBarItem>
+                <ProgressBar x:Name="MyProgressBar" Width="200" Height="16" Minimum="0" Maximum="100" />
+            </StatusBarItem>
+        </StatusBar>
+            
+            <!--Folder images list -->
         <ListBox x:Name="ImgListBox"
                  Grid.Row="1" Grid.Column="0"
                  Margin="5"

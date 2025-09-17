@@ -15,7 +15,11 @@ namespace ImgViewer.Internal
         private readonly int _workersCount;
         private readonly ProcessorCommands[] _commandsQueue;
 
+        private int _processedCount;
+        private readonly int _totalCount;
+
         public event Action<string>? ErrorOccured;
+        public event Action<int, int>? ProgressChanged;
 
         public ImgWorkerPool(CancellationTokenSource cts,
                              ProcessorCommands[] commandsQueue,
@@ -37,12 +41,14 @@ namespace ImgViewer.Internal
             _filesQueue = new BlockingCollection<string>(
                 maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
             );
+            _processedCount = 0;
+            _totalCount = sourceFolder.Files.Length;
         }
 
         /// <summary>
         /// Наполняем очередь файлами
         /// </summary>
-        private void EnqueueFiles()
+        private async Task EnqueueFiles()
         {
             foreach (var file in _sourceFolder.Files)
             {
@@ -50,9 +56,11 @@ namespace ImgViewer.Internal
                     break;
 
                 _filesQueue.Add(file);
+                await Task.Yield(); 
             }
 
             _filesQueue.CompleteAdding();
+
         }
 
         /// <summary>
@@ -75,6 +83,7 @@ namespace ImgViewer.Internal
                     // Устанавливаем картинку в процессор
                     proc.Load(filePath);
 
+
                     // Применяем команды
                     foreach (var command in _commandsQueue)
                     {
@@ -89,11 +98,15 @@ namespace ImgViewer.Internal
                     var outputFilePath = Path.Combine(outputDir, fileName);
                     proc.SaveCurrentImage(outputFilePath);
 
+                    Interlocked.Increment(ref _processedCount);
+                    ProgressChanged?.Invoke(_processedCount, _totalCount);
+
                 }
                 catch (Exception ex)
                 {
                     ErrorOccured?.Invoke($"Error processing {filePath}: {ex.Message}");
                 }
+               
             }
         }
 
@@ -111,8 +124,8 @@ namespace ImgViewer.Internal
             }
 
             // Параллельно наполняем очередь
-            EnqueueFiles();
-
+            var enqueueTask =  Task.Run(() => EnqueueFiles(), _cts.Token);
+            tasks.Add(enqueueTask);
             await Task.WhenAll(tasks);
 
         }

@@ -79,10 +79,12 @@ namespace ImgViewer
         {
             try
             {
-                var secret = File.ReadAllText("secret.json");
+                var secretPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "secret.json");
+                var secret = File.ReadAllText(secretPath);
                 var creds = JsonSerializer.Deserialize<LicenseCredentials>(secret);
                 if (creds == null || string.IsNullOrWhiteSpace(creds.LicenseFilePath) || string.IsNullOrWhiteSpace(creds.LicenseKey))
                     throw new Exception("Invalid license credentials in secret.json");
+                creds.LicenseFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, creds.LicenseFilePath);
                 return creds;
             }
             catch (Exception ex)
@@ -282,11 +284,23 @@ namespace ImgViewer
                 {
                     ProcessorCommands.Binarize,
                     ProcessorCommands.Deskew,
+                   
+                   
                     ProcessorCommands.DotsRemove
                 };
                 var fileExplorer = new FileExplorer(_cts);
                 var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
-                var workerPool = new ImgWorkerPool(_cts, commands, 0, _factory, fileExplorer, sourceFolder, 0);
+                var workerPool = new ImgWorkerPool(_cts, commands, 1, _factory, fileExplorer, sourceFolder, 0);
+                StatusText.Text = "Processing...";
+                await Task.Yield();
+                workerPool.ProgressChanged += (done, total) =>
+                {
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        MyProgressBar.Maximum = total;
+                        MyProgressBar.Value = done;
+                    });
+                };
                 workerPool.ErrorOccured += (msg) =>
                 {
                     Dispatcher.InvokeAsync(() =>
@@ -300,10 +314,12 @@ namespace ImgViewer
                 }
                 catch (OperationCanceledException)
                 {
-                    Console.WriteLine("Обработка отменена.");
+                   StatusText.Text = "Cancelled";
 
                 }
             }
+            StatusText.Text = "Ready";
+            MyProgressBar.Value = 0;
         }
 
         private void SaveAsClick(object sender, RoutedEventArgs e)
