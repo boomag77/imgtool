@@ -80,6 +80,7 @@
             <Button Content="AutoBinarize" Click="ApplyAutoBinarizeCommand" Margin="5"/>
             <Button Content="Lines remove" Click="ApplyLineRemoveCommand" Margin="5"/>
             <Button Content="Remove Punches" Click="ApplyPunchesRemoveCommand" Margin="5"/>
+            <Button Content="Process Folder" Click="ProcessFolderClick" Margin="5"/>
             <Separator Margin="10"/>
             <Button Content="Save As..." Click="SaveAsClick" Margin="5"/>
         </StackPanel>

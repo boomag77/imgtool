@@ -1,14 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿
+using System.IO;
+using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Internal.Abstractions
 {
-    public interface JSONProcessor
+
+    public interface IFileProcessor
     {
-        T? Deserialize<T>(string json);
-        string Serialize<T>(T obj);
+        void Load(string path, Stream stream);
+        BitmapImage Load(string path, int? decodePixelWidth = null);
+        void Save(Stream stream, string path);
+
+        event Action<string> ErrorOccured;
     }
+
+    public class SourceImageFolder
+    {
+        public string Path { get; set; }
+        public string ParentPath { get; set; }
+        public string[] Files { get; set; }
+    }
+
 }

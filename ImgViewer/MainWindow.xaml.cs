@@ -6,6 +6,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using ImgViewer.Internal.Abstractions;
 
 
 namespace ImgViewer
@@ -15,11 +16,13 @@ namespace ImgViewer
     /// </summary>
     public partial class MainWindow : Window
     {
-        private IImageProcessor _processor;
+        private readonly IImageProcessor _processor;
+        private readonly IFileProcessor _explorer;
+        private readonly IImageProcessorFactory _factory;
 
         private CancellationTokenSource _cts;
 
-        private readonly FileExplorer _explorer = new FileExplorer();
+       
 
         public class Thumbnail
         {
@@ -39,11 +42,15 @@ namespace ImgViewer
         public MainWindow()
         {
             InitializeComponent();
+
+            _cts = new CancellationTokenSource();
+
             ImgListBox.ItemsSource = Files;
             var creds = ReadLicenseCreds();
             string licPath = creds.LicenseFilePath;
             string key = creds.LicenseKey;
             IImageProcessorFactory factory = new LeadImgProcessorFactory(licPath, key);
+            _factory = factory;
             _processor = factory.CreateProcessor();
             _processor.ImageUpdated += (stream) =>
             {
@@ -57,6 +64,15 @@ namespace ImgViewer
                     System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             };
+            _explorer = new FileExplorer(_cts);
+            _explorer.ErrorOccured += (msg) =>
+            {
+                Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            };
+
         }
 
         private LicenseCredentials ReadLicenseCreds()
@@ -107,54 +123,70 @@ namespace ImgViewer
             Files.Clear();
             await Task.Run(() =>
                 {
-                    foreach (var file in Directory.EnumerateFiles(folderPath, "*.*"))
+                    var files = Directory.GetFiles(folderPath, "*.*")
+                             .Where(file =>
+                                 file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                 file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                 file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                 file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+                                 file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                             .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) // сортировка по имени
+                             .ToArray();
+                    foreach (var file in files)
                     {
                         if (token.IsCancellationRequested)
                             break;
 
-                        if (file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                            file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                            file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                            file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-                            file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                        try
                         {
-                            try
+                            var bmp = _explorer.Load(file, 80);
+                            Dispatcher.InvokeAsync(() =>
                             {
-                                var bmp = _explorer.LoadImage(file, 80);
-                                Dispatcher.InvokeAsync(() =>
+                                if (!IsLoaded || token.IsCancellationRequested)
+                                    return;
+                                Files.Add(new Thumbnail
                                 {
-                                    if (!IsLoaded || token.IsCancellationRequested)
-                                        return;
-                                    Files.Add(new Thumbnail
-                                    {
-                                        Name = System.IO.Path.GetFileName(file),
-                                        Thumb = bmp,
-                                        Path = file
-                                    });
-                                    if (Files.Count == 1)
-                                        ImgListBox.SelectedIndex = 0;
+                                    Name = System.IO.Path.GetFileName(file),
+                                    Thumb = bmp,
+                                    Path = file
                                 });
-                            }
-                            catch (Exception ex)
-                            {
-                                // Handle exceptions (e.g., log them)
-                                System.Windows.MessageBox.Show(
-                                     string.Format("Error loading image {0}: {1}", file, ex.Message),
-                                     "Error",
-                                     MessageBoxButton.OK,
-                                     MessageBoxImage.Error);
-                            }
+                                if (Files.Count == 1)
+                                    ImgListBox.SelectedIndex = 0;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            // Handle exceptions (e.g., log them)
+                            System.Windows.MessageBox.Show(
+                                 string.Format("Error loading image {0}: {1}", file, ex.Message),
+                                 "Error",
+                                 MessageBoxButton.OK,
+                                 MessageBoxImage.Error);
                         }
                     }
                 }, token);
 
         }
 
+        private BitmapImage BitmapFromStream(Stream stream, int thumbWidth)
+        {
+            if (stream == null || stream == Stream.Null)
+                return null!;
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.DecodePixelWidth = thumbWidth;
+            bitmap.EndInit();
+            bitmap.Freeze(); // чтобы можно было использовать из любого потока
+            return bitmap;
+        }
+
         private void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (ImgListBox.SelectedItem is Thumbnail item)
             {
-                _processor.LoadImage(item.Path);
+                _processor.Load(item.Path);
             }
         }
 
@@ -165,8 +197,6 @@ namespace ImgViewer
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 string folderPath = dlg.SelectedPath;
-                _cts?.Cancel();
-                _cts = new CancellationTokenSource();
 
                 try
                 {
@@ -191,7 +221,7 @@ namespace ImgViewer
             {
                 try
                 {
-                    _processor.LoadImage(dlg.FileName);
+                    _processor.Load(dlg.FileName);
                     Title = $"ImgViewer - {Path.GetFileName(dlg.FileName)}";
 
                 }
@@ -242,6 +272,40 @@ namespace ImgViewer
             _processor.ApplyCommandToCurrent(ProcessorCommands.DotsRemove, new Dictionary<string, object>());
         }
 
+        private async void ProcessFolderClick(object sender, RoutedEventArgs e)
+        {
+            var dlg = new System.Windows.Forms.FolderBrowserDialog();
+            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                string folderPath = dlg.SelectedPath;
+                ProcessorCommands[] commands =
+                {
+                    ProcessorCommands.Binarize,
+                    ProcessorCommands.Deskew,
+                    ProcessorCommands.DotsRemove
+                };
+                var fileExplorer = new FileExplorer(_cts);
+                var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
+                var workerPool = new ImgWorkerPool(_cts, commands, 0, _factory, fileExplorer, sourceFolder, 0);
+                workerPool.ErrorOccured += (msg) =>
+                {
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    });
+                };
+                try
+                {
+                    await workerPool.RunAsync();
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine("Обработка отменена.");
+
+                }
+            }
+        }
+
         private void SaveAsClick(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
@@ -256,6 +320,11 @@ namespace ImgViewer
         private void ExitClick(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }

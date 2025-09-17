@@ -16,10 +16,11 @@ namespace LeadImgProcessor
         {
             _licensePath = licensePath;
             _licenseKey = licenseKey;
+            RasterSupport.SetLicense(_licensePath, _licenseKey);
         }
         public IImageProcessor CreateProcessor()
         {
-            return new LeadImageProcessor(_licensePath, _licenseKey);
+            return new LeadImageProcessor();
         }
     }
 
@@ -31,9 +32,9 @@ namespace LeadImgProcessor
         private readonly RasterCodecs _codecs;
         private RasterImage? _currentImage;
 
-        public LeadImageProcessor(string licensePath, string key)
+        public LeadImageProcessor()
         {
-            RasterSupport.SetLicense(licensePath, key);
+            //RasterSupport.SetLicense(licensePath, key);
             _codecs = new RasterCodecs();
         }
 
@@ -99,7 +100,7 @@ namespace LeadImgProcessor
                 _currentImage.MakeRegionEmpty(); // важно снять регион
             }
 
-            Debug.WriteLine($"DotRemove: candidates={seen}, removed={removed}, bpp={_currentImage.BitsPerPixel}");
+            //Debug.WriteLine($"DotRemove: candidates={seen}, removed={removed}, bpp={_currentImage.BitsPerPixel}");
         }
 
         public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters)
@@ -134,6 +135,32 @@ namespace LeadImgProcessor
                 }
                 updateImagePreview();
             }
+        }
+
+
+        public void ApplyCommandsToImageStream(Stream input, Stream output, ProcessorCommands[] commandsQueue, Dictionary<string, object> parameters)
+        {
+            RasterImage tmp = _currentImage;
+            _currentImage = _codecs.Load(input);
+
+
+            foreach (var command in commandsQueue)
+            {
+               ApplyCommandToCurrent(command, parameters);
+            }
+
+            try
+            {
+                _currentImage.XResolution = 300;
+                _currentImage.YResolution = 300;
+                _codecs.Save(_currentImage, output, RasterImageFormat.CcittGroup4, 1);
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Ошибка LEADTOOLS при сохранении в поток: {ex.Message}");
+                //throw new Exception($"Ошибка LEADTOOLS при сохранении в поток: {ex.Message}", ex);
+            }
+            _currentImage = tmp;
         }
 
 
@@ -284,7 +311,7 @@ namespace LeadImgProcessor
         }
 
 
-        public void LoadImage(string path)
+        public void Load(string path)
         {
             try
             {
