@@ -10,7 +10,6 @@ namespace ImgViewer.Internal
     internal class FileExplorer : IFileProcessor
     {
         private CancellationToken _token;
-        private IImageProcessor _processor;
 
         public event Action<string> ErrorOccured;
 
@@ -51,12 +50,10 @@ namespace ImgViewer.Internal
                 if (decodePixelWidth.HasValue)
                     settings.Width = decodePixelWidth.Value;
 
-                using (var image = new MagickImage(path))
+                using (var image = new MagickImage(path, settings))
                 {   
                     switch (typeof(T))
                     {
-                        case Type type when type == typeof(MagickImage):
-                            return (T)(object)image.Clone();
                         case Type type when type == typeof(BitmapImage):
 
                             using (var ms = new MemoryStream())
@@ -76,7 +73,7 @@ namespace ImgViewer.Internal
                                 bitmap.BeginInit();
                                 if (decodePixelWidth.HasValue)
                                 {
-                                    bitmap.DecodePixelWidth = (int)decodePixelWidth.Value;
+                                    //bitmap.DecodePixelWidth = (int)decodePixelWidth.Value;
                                     bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
                                 }
 

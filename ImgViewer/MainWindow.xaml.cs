@@ -8,6 +8,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
@@ -22,6 +23,7 @@ namespace ImgViewer
 
 
         private CancellationTokenSource _cts;
+        private CancellationTokenSource? _currentLoadPreviewCts;
 
 
 
@@ -160,6 +162,7 @@ namespace ImgViewer
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             _cts?.Cancel();
+            _currentLoadPreviewCts?.Cancel();
             base.OnClosing(e);
         }
 
@@ -198,7 +201,7 @@ namespace ImgViewer
                              .ToArray();
                     if (token.IsCancellationRequested)
                         return;
-                    var thumbs = files.Select((f, v) => new Thumbnail(token, this.Dispatcher, _explorer, f, v < 30)).ToList();
+                    var thumbs = files.Select((f, v) => new Thumbnail(token, this.Dispatcher, _explorer, f, v < 20)).ToList();
 
                     Dispatcher.InvokeAsync(async () =>
                     {
@@ -218,11 +221,24 @@ namespace ImgViewer
 
         }
 
-        private void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private async void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (ImgListBox.SelectedItem is Thumbnail item)
             {
-                SetImgBoxSource(item.Path);
+                try
+                {
+                    await SetImgBoxSourceAsync(item.Path);
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show
+                    (
+                        $"Error loading image for preview: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
+                }
 
             }
         }
@@ -250,19 +266,50 @@ namespace ImgViewer
             }
         }
 
-        private void SetImgBoxSource(string filePath)
+        private async Task SetImgBoxSourceAsync(string filePath)
         {
+            _currentLoadPreviewCts?.Cancel();
+            _currentLoadPreviewCts = new CancellationTokenSource();
+            var ctoken = _currentLoadPreviewCts.Token;
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
+                return;
+            }
             try
             {
-                var bitmap = _explorer.Load<BitmapImage>(filePath);
-                Dispatcher.InvokeAsync(() => ImgBox.Source = bitmap);
-                Title = $"ImgViewer - {Path.GetFileName(filePath)}";
+                var bitmap = await Task.Run(() =>
+                {
+                    return _explorer.Load<BitmapImage>(filePath);
+                }, ctoken).ConfigureAwait(false);
+
+                ctoken.ThrowIfCancellationRequested();
+
+                if (bitmap == null)
+                {
+                    await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
+                }
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.LowQuality);
+                    ImgBox.Source = bitmap;
+                    Title = $"ImgViewer - {Path.GetFileName(filePath)}";
+                }, DispatcherPriority.Background).Task;
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.HighQuality);
+                }, DispatcherPriority.ContextIdle).Task;
+            }
+            catch (OperationCanceledException)
+            {
+                // Load was cancelled, do nothing
             }
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show
                 (
-                    $"Error loading image for private: {ex.Message}",
+                    $"Error loading image for preview: {ex.Message}",
                     "Error",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error
@@ -270,13 +317,30 @@ namespace ImgViewer
             }
         }
 
-        private void OpenFile(object sender, RoutedEventArgs e)
+        private async void OpenFile_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.OpenFileDialog();
             dlg.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tif;*.tiff|All Files|*.*";
             if (dlg.ShowDialog() == true)
             {
-                SetImgBoxSource(dlg.FileName);
+                try
+                {
+                    await SetImgBoxSourceAsync(dlg.FileName);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Load was cancelled, do nothing
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show
+                    (
+                        $"Error loading image for preview: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
+                }
             }
         }
 

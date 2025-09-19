@@ -16,9 +16,9 @@
             <!--Status bar row -->
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="2*"/>
             <!--Folder images list -->
-            <ColumnDefinition Width="6*"/>
+            <ColumnDefinition Width="5*"/>
             <!--Image preview -->
             <ColumnDefinition Width="3*"/>
             <!--Controls -->
@@ -27,7 +27,7 @@
         <!--Menu -->
         <Menu Grid.Row="0" VerticalAlignment="Top" Grid.ColumnSpan="3">
             <MenuItem Header="_File">
-                <MenuItem Header="_Open File" Click="OpenFile"/>
+                <MenuItem Header="_Open File" Click="OpenFile_Click"/>
                 <Separator/>
                 <MenuItem Header="_Open Folder" Click="OpenFolder"/>
                 <Separator/>
@@ -57,7 +57,7 @@
                 <DataTemplate>
                     <StackPanel Orientation="Vertical" Margin="5">
                         <Image Source="{Binding Thumb}"
-                               Width="80" Height="80" Stretch="UniformToFill"
+                               Width="80" Stretch="Uniform"
                                Margin="5"/>
                         <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                     </StackPanel>
@@ -86,7 +86,7 @@
         <StackPanel Grid.Row="1" Grid.Column="2" Margin="5">
             <TextBlock Text="Controls" FontWeight="Bold" FontSize="16" Margin="5"/>
             <Separator Margin="5"/>
-            <Button Content="Open" Click="OpenFile" Margin="5"/>
+            <Button Content="Open" Click="OpenFile_Click" Margin="5"/>
             <Button Content="Apply Deskew" Click="ApplyDeskew" Margin="5"/>
             <Button Content="Remove borders" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
             <Button Content="Auto crop" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
