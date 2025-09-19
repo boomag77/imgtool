@@ -13,6 +13,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.8.2" />
 	  <PackageReference Include="System.Text.Json" Version="9.0.9" />
 	</ItemGroup>
 
@@ -25,6 +26,22 @@
 	  <None Update="secret.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="D:\Users\boomag\.nuget\packages\magick.net-q8-x64\14.8.2\buildTransitive\netstandard20\..\..\runtimes\win-x64\native\Magick.Native-Q8-x64.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="D:\Users\boomag\.nuget\packages\magick.net-q8-x64\14.8.2\buildTransitive\netstandard20\..\..\runtimes\win-x64\native\Magick.Native-Q8-x64.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="D:\Users\boomag\.nuget\packages\magick.net-q8-x64\14.8.2\buildTransitive\netstandard20\..\..\runtimes\win-x64\native\Magick.Native-Q8-x64.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="D:\Users\boomag\.nuget\packages\magick.net-q8-x64\14.8.2\buildTransitive\netstandard20\..\..\runtimes\win-x64\native\Magick.Native-Q8-x64.dll" />
 	</ItemGroup>
 
 </Project>

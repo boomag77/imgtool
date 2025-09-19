@@ -310,12 +310,55 @@ namespace LeadImgProcessor
             }
         }
 
+        public Stream? LoadAsPNGStream(string path, int targetBPP = 24)
+        {
+            try
+            {
+                using var codecs = new RasterCodecs();
+                var img = codecs.Load(path);
+                
+                var ms = new MemoryStream();
+                codecs.Save(img, ms, RasterImageFormat.Png, targetBPP);
+                ms.Position = 0;
+                return ms;
+            }
+            catch (Leadtools.RasterException rex)
+            {
+                ErrorOccured?.Invoke(
+                    $"LEADTOOLS ошибка при загрузке {path}:\n" +
+                    $"ErrorId: {rex.Code}\n" +
+                    $"Сообщение: {rex.Message}");
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke(
+                    $"Общая ошибка при загрузке {path}:\n" +
+                    $"Тип: {ex.GetType().Name}\n" +
+                    $"Сообщение: {ex.Message}\n" +
+                    $"StackTrace: {ex.StackTrace}");
+
+
+            }
+            return null;
+        }
+
 
         public void Load(string path)
         {
             try
             {
+
                 _currentImage = _codecs.Load(path);
+        //        if (_currentImage != null && _currentImage.BitsPerPixel == 1)
+        //{
+        //            var cr = new ColorResolutionCommand
+        //            {
+        //                BitsPerPixel = 24,
+        //                PaletteFlags = ColorResolutionCommandPaletteFlags.None,
+        //                DitheringMethod = RasterDitheringMethod.None
+        //            };
+        //            cr.Run(_currentImage);
+        //        }
             }
             catch (Exception ex)
             {

@@ -1,6 +1,7 @@
 ﻿using ImgProcessor.Abstractions;
 using ImgViewer.Internal.Abstractions;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 
 namespace ImgViewer.Internal
@@ -12,6 +13,7 @@ namespace ImgViewer.Internal
         private readonly IImageProcessorFactory _processorFactory;
         private readonly IFileProcessor _fileExplorer;
         private readonly SourceImageFolder _sourceFolder;
+        private string _outputFolder = string.Empty;
         private readonly int _workersCount;
         private readonly ProcessorCommands[] _commandsQueue;
 
@@ -33,6 +35,9 @@ namespace ImgViewer.Internal
             _fileExplorer = fileExplorer;
             _processorFactory = processorFactory;
             _sourceFolder = sourceFolder;
+            
+            _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
+            Directory.CreateDirectory(_outputFolder);
             _commandsQueue = commandsQueue;
 
             int cpuCount = Environment.ProcessorCount;
@@ -87,15 +92,16 @@ namespace ImgViewer.Internal
                     // Применяем команды
                     foreach (var command in _commandsQueue)
                     {
+                        
                         proc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
                     }
 
                     // Сохраняем результат
-                    var outputDir = Path.Combine(_sourceFolder.Path, "Processed");
-                    Directory.CreateDirectory(outputDir);
+                    //var outputDir = Path.Combine(_sourceFolder.Path, "Processed");
+                    //Directory.CreateDirectory(_outputFolder);
 
                     var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
-                    var outputFilePath = Path.Combine(outputDir, fileName);
+                    var outputFilePath = Path.Combine(_outputFolder, fileName);
                     proc.SaveCurrentImage(outputFilePath);
 
                     Interlocked.Increment(ref _processedCount);
