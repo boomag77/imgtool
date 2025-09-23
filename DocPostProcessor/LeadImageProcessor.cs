@@ -3,41 +3,64 @@ using Leadtools;
 using Leadtools.Codecs;
 using Leadtools.ImageProcessing;
 using Leadtools.ImageProcessing.Core;
-using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
+
 
 namespace LeadImgProcessor
 {
-    public class LeadImgProcessorFactory : IImageProcessorFactory
-    {
-        private readonly string _licensePath;
-        private readonly string _licenseKey;
-        public LeadImgProcessorFactory(string licensePath, string licenseKey)
-        {
-            _licensePath = licensePath;
-            _licenseKey = licenseKey;
-            RasterSupport.SetLicense(_licensePath, _licenseKey);
-        }
-        public IImageProcessor CreateProcessor()
-        {
-            return new LeadImageProcessor();
-        }
 
 
-    }
+
+
 
     public class LeadImageProcessor : IImageProcessor
     {
+
+        private readonly string _licensePath;
+        private readonly string _licenseKey;
+
         public event Action<Stream>? ImageUpdated;
         public event Action<string>? ErrorOccured;
 
         private readonly RasterCodecs _codecs;
         private RasterImage? _currentImage;
 
+        private class LicenseCredentials
+        {
+            public string? LicenseFilePath { get; set; }
+            public string? LicenseKey { get; set; }
+        }
+
+
         public LeadImageProcessor()
         {
-            //RasterSupport.SetLicense(licensePath, key);
+
+            var creds = ReadLicenseCreds();
+            string licPath = creds.LicenseFilePath;
+            string key = creds.LicenseKey;
+
+
+            RasterSupport.SetLicense(licPath, key);
             _codecs = new RasterCodecs();
+        }
+
+        private LicenseCredentials ReadLicenseCreds()
+        {
+            try
+            {
+                var secretPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "secret.json");
+                var secret = File.ReadAllText(secretPath);
+                var creds = JsonSerializer.Deserialize<LicenseCredentials>(secret);
+                if (creds == null || string.IsNullOrWhiteSpace(creds.LicenseFilePath) || string.IsNullOrWhiteSpace(creds.LicenseKey))
+                    throw new Exception("Invalid license credentials in secret.json");
+                creds.LicenseFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, creds.LicenseFilePath);
+                return creds;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error reading license credentials: " + ex.Message, ex);
+            }
         }
 
         public void SaveImage(string path, Stream stream)
@@ -148,7 +171,7 @@ namespace LeadImgProcessor
 
             foreach (var command in commandsQueue)
             {
-               ApplyCommandToCurrent(command, parameters);
+                ApplyCommandToCurrent(command, parameters);
             }
 
             try
@@ -318,7 +341,7 @@ namespace LeadImgProcessor
             {
                 using var codecs = new RasterCodecs();
                 var img = codecs.Load(path);
-                
+
                 var ms = new MemoryStream();
                 codecs.Save(img, ms, RasterImageFormat.Png, targetBPP);
                 ms.Position = 0;
@@ -351,16 +374,16 @@ namespace LeadImgProcessor
             {
 
                 _currentImage = _codecs.Load(path);
-        //        if (_currentImage != null && _currentImage.BitsPerPixel == 1)
-        //{
-        //            var cr = new ColorResolutionCommand
-        //            {
-        //                BitsPerPixel = 24,
-        //                PaletteFlags = ColorResolutionCommandPaletteFlags.None,
-        //                DitheringMethod = RasterDitheringMethod.None
-        //            };
-        //            cr.Run(_currentImage);
-        //        }
+                //        if (_currentImage != null && _currentImage.BitsPerPixel == 1)
+                //{
+                //            var cr = new ColorResolutionCommand
+                //            {
+                //                BitsPerPixel = 24,
+                //                PaletteFlags = ColorResolutionCommandPaletteFlags.None,
+                //                DitheringMethod = RasterDitheringMethod.None
+                //            };
+                //            cr.Run(_currentImage);
+                //        }
             }
             catch (Exception ex)
             {

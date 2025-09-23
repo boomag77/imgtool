@@ -1,18 +1,16 @@
 ﻿using ImgProcessor.Abstractions;
 using ImgViewer.Internal;
 using ImgViewer.Internal.Abstractions;
-using LeadImgProcessor;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
+
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ImgViewer.Models;
 
 
 namespace ImgViewer
@@ -117,11 +115,7 @@ namespace ImgViewer
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
-        private class LicenseCredentials
-        {
-            public string? LicenseFilePath { get; set; }
-            public string? LicenseKey { get; set; }
-        }
+        
 
         public ObservableCollection<Thumbnail> Files { get; set; } = new ObservableCollection<Thumbnail>();
 
@@ -132,12 +126,10 @@ namespace ImgViewer
             _cts = new CancellationTokenSource();
 
             ImgListBox.ItemsSource = Files;
-            var creds = ReadLicenseCreds();
-            string licPath = creds.LicenseFilePath;
-            string key = creds.LicenseKey;
-            IImageProcessorFactory factory = new LeadImgProcessorFactory(licPath, key);
+            IImageProcessorFactory factory = new ImageProcessorFactory();
             _factory = factory;
-            _processor = factory.CreateProcessor();
+            //_processor = factory.CreateProcessor(ImageProcessorType.Leadtools);
+            _processor = factory.CreateProcessor(ImageProcessorType.OpenCV);
             _processor.ImageUpdated += (stream) =>
             {
                 var bitmap = streamToBitmapSource(stream);
@@ -161,23 +153,7 @@ namespace ImgViewer
 
         }
 
-        private LicenseCredentials ReadLicenseCreds()
-        {
-            try
-            {
-                var secretPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "secret.json");
-                var secret = File.ReadAllText(secretPath);
-                var creds = JsonSerializer.Deserialize<LicenseCredentials>(secret);
-                if (creds == null || string.IsNullOrWhiteSpace(creds.LicenseFilePath) || string.IsNullOrWhiteSpace(creds.LicenseKey))
-                    throw new Exception("Invalid license credentials in secret.json");
-                creds.LicenseFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, creds.LicenseFilePath);
-                return creds;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Error reading license credentials: " + ex.Message, ex);
-            }
-        }
+        
 
 
 
@@ -379,6 +355,7 @@ namespace ImgViewer
                 try
                 {
                     await SetImgBoxSourceAsync(dlg.FileName);
+                    _processor.Load(dlg.FileName);
                 }
                 catch (OperationCanceledException)
                 {

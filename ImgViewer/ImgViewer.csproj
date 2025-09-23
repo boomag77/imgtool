@@ -14,12 +14,17 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.8.2" />
+	  <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+	  <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
+	  <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
+	  <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.11.0.20250507" />
 	  <PackageReference Include="System.Text.Json" Version="9.0.9" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <ProjectReference Include="..\DocPostProcessor\LeadImgProcessor.csproj" />
 	  <ProjectReference Include="..\ImgProcessor.Abstractions\ImgProcessor.Abstractions.csproj" />
+	  <ProjectReference Include="..\OpenCVProcessor\OpenCVProcessor.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -48,10 +53,6 @@
 	  <Page Update="Views\MainWindow.xaml">
 	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 	  </Page>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Models\" />
 	</ItemGroup>
 
 </Project>

@@ -125,7 +125,8 @@ namespace ImgViewer.Internal
 
             for (int i = 0; i < _workersCount; i++)
             {
-                var proc = _processorFactory.CreateProcessor();
+                //var proc = _processorFactory.CreateProcessor(ImageProcessorType.Leadtools);
+                var proc = _processorFactory.CreateProcessor(ImageProcessorType.OpenCV);
                 tasks.Add(Task.Run(() => Worker(proc), _cts.Token));
             }
 

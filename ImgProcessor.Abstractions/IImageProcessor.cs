@@ -12,10 +12,19 @@
         event Action<string> ErrorOccured;
     }
 
+    public enum ImageProcessorType
+    {
+        OpenCV,
+        Leadtools,
+        ImageMagick
+    }
+
     public interface IImageProcessorFactory
     {
-        IImageProcessor CreateProcessor();
+        IImageProcessor CreateProcessor(ImageProcessorType procType, string licPath = null, string licKey = null);
     }
+
+
 
     public enum ProcessorCommands
     {
