@@ -29,7 +29,7 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_Open File" Click="OpenFile_Click"/>
                 <Separator/>
-                <MenuItem Header="_Open Folder" Click="OpenFolder"/>
+                <MenuItem Header="_Open Folder" Click="OpenFolder_Click"/>
                 <Separator/>
                 <MenuItem Header="_Exit" Click="ExitClick"/>
             </MenuItem>
@@ -57,7 +57,7 @@
                 <DataTemplate>
                     <StackPanel Orientation="Vertical" Margin="5">
                         <Image Source="{Binding Thumb}"
-                               Width="80" Stretch="Uniform"
+                               Width="80" Height="80" Stretch="UniformToFill"
                                Margin="5"/>
                         <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                     </StackPanel>

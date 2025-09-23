@@ -44,5 +44,15 @@
 	  <None Remove="D:\Users\boomag\.nuget\packages\magick.net-q8-x64\14.8.2\buildTransitive\netstandard20\..\..\runtimes\win-x64\native\Magick.Native-Q8-x64.dll" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Page Update="Views\MainWindow.xaml">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Models\" />
+	</ItemGroup>
+
 </Project>
 

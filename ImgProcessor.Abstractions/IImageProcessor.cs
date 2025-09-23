@@ -3,6 +3,7 @@
     public interface IImageProcessor
     {
         void Load(string path);
+
         Stream? LoadAsPNGStream(string path, int targetBPP);
         void SaveCurrentImage(string path);
         void ApplyCommandToCurrent(ProcessorCommands commandName, Dictionary<string, object> parameters);

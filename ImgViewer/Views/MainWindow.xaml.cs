@@ -8,6 +8,8 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -24,68 +26,88 @@ namespace ImgViewer
 
         private CancellationTokenSource _cts;
         private CancellationTokenSource? _currentLoadPreviewCts;
+        private CancellationTokenSource? _currentLoadThumbnailsCts;
 
 
 
-        public class Thumbnail : INotifyPropertyChanged
+        public class Thumbnail : INotifyPropertyChanged, IDisposable
         {
-            private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(8);
+            private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(Math.Max(1, Environment.ProcessorCount / 2));
             private IFileProcessor Explorer { get; }
             private readonly Dispatcher _dispatcher;
-            private readonly CancellationToken _token;
+            private readonly CancellationToken _parentToken;
+            private CancellationTokenSource? _localCts;
             public string Name { get; }
             public string Path { get; }
             private BitmapImage? _thumb;
             public BitmapImage Thumb
             {
-                get
-                {
-                    if (_thumb == null)
-                        LoadThumbAsync();
-                    return _thumb!;
-                }
+                get => _thumb;
                 private set
                 {
                     _thumb = value;
                     OnPropertyChanged();
                 }
             }
-            public Thumbnail(CancellationToken token, Dispatcher dispatcher, IFileProcessor explorer, string path, bool visible = false)
+            public Thumbnail(CancellationToken parentToken, Dispatcher dispatcher, IFileProcessor explorer, string path, bool preload = false)
             {
-                _token = token;
+                _parentToken = parentToken;
                 Explorer = explorer;
                 _dispatcher = dispatcher;
                 Name = System.IO.Path.GetFileName(path);
                 Path = path;
 
-                if (visible)
+                if (preload)
                 {
-                    Thumb = Explorer.Load<BitmapImage>(Path, 80);
+                    _ = LoadThumbAsync(_parentToken);
                 }
-                else
-                {
-                    Task.Run(() => LoadThumbAsync(token));
-                }
-
 
             }
-
-            private async void LoadThumbAsync(CancellationToken token = default)
+            public void Dispose()
             {
-                await _semaphore.WaitAsync();
                 try
                 {
-                    if (token.IsCancellationRequested)
+                    _localCts?.Cancel();
+                    _localCts?.Dispose();
+                    _localCts = null;
+                }
+                catch { }
+
+                Thumb = null;
+            }
+
+            public async Task LoadThumbAsync(CancellationToken token = default)
+            {
+                try
+                {
+                    _localCts?.Cancel();
+                    _localCts?.Dispose();
+                }
+                catch { /* ignore */ }
+
+                _localCts = CancellationTokenSource.CreateLinkedTokenSource(_parentToken, token);
+                var ct = _localCts.Token;
+
+                await _semaphore.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (ct.IsCancellationRequested)
                         return;
-                    var bmp = Explorer.Load<BitmapImage>(Path, 80);
-                    if (!token.IsCancellationRequested)
+                    var bmp = await Task.Run(() => Explorer.Load<BitmapImage>(Path, 50), ct).ConfigureAwait(false);
+                    if (!ct.IsCancellationRequested && bmp != null)
                     {
-                        await _dispatcher.InvokeAsync(() => Thumb = bmp);
+                        await _dispatcher.InvokeAsync(() => Thumb = bmp).Task.ConfigureAwait(false);
                     }
                 }
                 finally
                 {
-                    _semaphore.Release();
+                    try { _semaphore.Release(); } catch { }
+                    try
+                    {
+                        _localCts?.Dispose();
+                    }
+                    catch { }
+                    _localCts = null;
                 }
             }
 
@@ -125,7 +147,7 @@ namespace ImgViewer
             {
                 Dispatcher.InvokeAsync(() =>
                 {
-                    System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Windows.MessageBox.Show(this, msg, "Processor Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             };
             _explorer = new FileExplorer(_cts.Token);
@@ -133,7 +155,7 @@ namespace ImgViewer
             {
                 Dispatcher.InvokeAsync(() =>
                 {
-                    System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Windows.MessageBox.Show(this, msg, " Explorer Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             };
 
@@ -163,6 +185,7 @@ namespace ImgViewer
         {
             _cts?.Cancel();
             _currentLoadPreviewCts?.Cancel();
+            _currentLoadThumbnailsCts?.Cancel();
             base.OnClosing(e);
         }
 
@@ -184,41 +207,70 @@ namespace ImgViewer
             return bitmap;
         }
 
-        private async Task LoadFolder(string folderPath, CancellationToken token)
+        private async Task LoadFolder(string folderPath)
         {
+            _currentLoadThumbnailsCts?.Cancel();
+            _currentLoadThumbnailsCts = new CancellationTokenSource();
+            var ct = _currentLoadThumbnailsCts.Token;
 
-            Files.Clear();
-            await Task.Run(() =>
+            
+            await Dispatcher.InvokeAsync(() =>
+            {
+                foreach (var old in Files.OfType<IDisposable>().ToList())
                 {
-                    var files = Directory.GetFiles(folderPath, "*.*")
-                             .Where(file =>
-                                 file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                                 file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                                 file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                                 file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-                                 file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
-                             .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) // сортировка по имени
-                             .ToArray();
-                    if (token.IsCancellationRequested)
+                    if (ct.IsCancellationRequested)
                         return;
-                    var thumbs = files.Select((f, v) => new Thumbnail(token, this.Dispatcher, _explorer, f, v < 20)).ToList();
+                    old.Dispose();
+                }
 
-                    Dispatcher.InvokeAsync(async () =>
-                    {
-                        uint i = 0;
-                        foreach (var thumb in thumbs)
-                        {
-                            Files.Add(thumb);
-                            if (i++ % 10 == 0) 
-                                 await Task.Yield();
-                        }
-                               
+                   
+                Files.Clear();
+            }, DispatcherPriority.Background).Task;
 
-                        if (Files.Count > 0)
-                            ImgListBox.SelectedIndex = 0;
-                    });
-                }, token);
-
+            string[] filePaths = await Task.Run(() =>
+            {
+                if (!Directory.Exists(folderPath))
+                    throw new DirectoryNotFoundException($"Directory does not exist: {folderPath}");
+                return Directory.GetFiles(folderPath, "*.*")
+                         .Where(file =>
+                             file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                             file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                             file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+                             file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                         .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) // sort by name
+                         .ToArray();
+            }, ct);
+            if (ct.IsCancellationRequested)
+                return;
+            const int preLoadCount = 20;
+            const int batchSize = 10;
+            int filesCount = filePaths.Length;
+            for (int i = 0; i < filePaths.Length; i += batchSize)
+            {
+                if (ct.IsCancellationRequested)
+                    return;
+                int end = Math.Min(i + batchSize, filesCount);
+                var batch = new List<Thumbnail>(end - i);
+                for (int j = i; j < end; j++)
+                {
+                    if (ct.IsCancellationRequested)
+                        return;
+                    var item = filePaths[j];
+                    var thumb = new Thumbnail(ct, this.Dispatcher, _explorer, item, j < preLoadCount);
+                    batch.Add(thumb);
+                    Files.Add(thumb);
+                }
+                foreach (var t in batch)
+                {
+                    _ = t.LoadThumbAsync(ct); // не await, пусть LoadThumbAsync сам поймает исключения
+                }
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (Files.Count > 0)
+                    ImgListBox.SelectedIndex = 0;
+            }, DispatcherPriority.Background).Task;
         }
 
         private async void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -228,6 +280,7 @@ namespace ImgViewer
                 try
                 {
                     await SetImgBoxSourceAsync(item.Path);
+                    _processor.Load(item.Path);
                 }
                 catch (Exception ex)
                 {
@@ -239,13 +292,13 @@ namespace ImgViewer
                         MessageBoxImage.Error
                     );
                 }
-
             }
         }
 
-        private async void OpenFolder(object sender, RoutedEventArgs e)
+        private async void OpenFolder_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new System.Windows.Forms.FolderBrowserDialog();
+            dlg.SelectedPath = "G:\\My Drive\\LEAD";
 
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
@@ -253,7 +306,7 @@ namespace ImgViewer
 
                 try
                 {
-                    await LoadFolder(dlg.SelectedPath, _cts.Token);
+                    await LoadFolder(dlg.SelectedPath);
                     Title = $"ImgViewer - {dlg.SelectedPath}";
 
                     if (Files.Count > 0)
@@ -295,7 +348,7 @@ namespace ImgViewer
                     RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.LowQuality);
                     ImgBox.Source = bitmap;
                     Title = $"ImgViewer - {Path.GetFileName(filePath)}";
-                }, DispatcherPriority.Background).Task;
+                }, DispatcherPriority.Render).Task;
                 await Dispatcher.InvokeAsync(() =>
                 {
                     RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.HighQuality);
@@ -450,5 +503,8 @@ namespace ImgViewer
         {
 
         }
+
+
+
     }
 }

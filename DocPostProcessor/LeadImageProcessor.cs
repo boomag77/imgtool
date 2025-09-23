@@ -22,6 +22,8 @@ namespace LeadImgProcessor
         {
             return new LeadImageProcessor();
         }
+
+
     }
 
     public class LeadImageProcessor : IImageProcessor

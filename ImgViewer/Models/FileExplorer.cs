@@ -60,8 +60,8 @@ namespace ImgViewer.Internal
                             {
                                 if (decodePixelWidth.HasValue)
                                 {
-                                    image.Quality = 50;
-                                    image.Write(ms, MagickFormat.Jpeg);
+                                    //image.Quality = 50;
+                                    image.Write(ms, MagickFormat.Png);
                                 }
                                 else
                                 {
