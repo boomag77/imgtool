@@ -88,7 +88,7 @@
             <Separator Margin="5"/>
             <Button Content="Open" Click="OpenFile_Click" Margin="5"/>
             <Button Content="Apply Deskew" Click="ApplyDeskew" Margin="5"/>
-            <Button Content="Remove borders" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
+            <Button Content="Remove borders" Click="ApplyBorderRemoveCommand_Click" Margin="5"/>
             <Button Content="Auto crop" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
             <Button Content="Run Despeckle" Click="ApplyDespeckleCommand" Margin="5"/>
             <Button Content="AutoBinarize" Click="ApplyAutoBinarizeCommand" Margin="5"/>

@@ -392,8 +392,9 @@ namespace ImgViewer
         }
 
 
-        private void ApplyBorderRemoveCommand(object sender, RoutedEventArgs e)
+        private void ApplyBorderRemoveCommand_Click(object sender, RoutedEventArgs e)
         {
+
             _processor.ApplyCommandToCurrent(ProcessorCommands.BorderRemove, new Dictionary<string, object>());
         }
 
