@@ -4,14 +4,18 @@ using OpenCvSharp.WpfExtensions;
 using OpenCvSharp.XPhoto;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Claims;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 
 namespace OpenCVProcessor
 {
     public class OpenCVImageProcessor : IImageProcessor, IDisposable
     {
         private Mat _currentImage;
+        private Scalar _pageColor;
+        private Scalar _borderColor;
 
         public OpenCVImageProcessor()
         {
@@ -40,6 +44,132 @@ namespace OpenCVProcessor
             {
                 ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
             }
+            //_pageColor = ScalarFromNormalized(AnalyzePageAndBorderColorsSimple(_currentImage).pageColorNorm);
+            //_borderColor = ScalarFromNormalized(AnalyzePageAndBorderColorsSimple(_currentImage).borderColorNorm);
+            
+        }
+
+        
+
+        public (Vec3d pageColorNorm, Vec3d borderColorNorm) AnalyzePageAndBorderColorsSimple(
+            Mat src,
+            int borderStripPx = 32)   // ширина полосы по краям для оценки бордюра; уменьшите для мелких изображений
+        {
+            if (src == null || src.Empty())
+                throw new ArgumentException("src is null or empty");
+
+            // Приведём к CV_8UC3 (BGR) если нужно
+            Mat img = src;
+            Mat tmp = null;
+            if (src.Type() == MatType.CV_8UC3)
+            {
+                // ничего не делаем
+            }
+            else if (src.Type() == MatType.CV_8UC1)
+            {
+                tmp = new Mat();
+                Cv2.CvtColor(src, tmp, ColorConversionCodes.GRAY2BGR);
+                img = tmp;
+            }
+            else if (src.Type() == MatType.CV_8UC4)
+            {
+                tmp = new Mat();
+                Cv2.CvtColor(src, tmp, ColorConversionCodes.BGRA2BGR);
+                img = tmp;
+            }
+            else
+            {
+                // универсальный fallback: конвертируем в 8UC3 через преобразование типа + возможное BGR конвертирование
+                tmp = new Mat();
+                src.ConvertTo(tmp, MatType.CV_8UC3);
+                // Если исходный имел 1 канал, ConvertTo даст 3 одинаковых канала — но это крайний случай.
+                img = tmp;
+            }
+
+            try
+            {
+                int W = img.Cols;
+                int H = img.Rows;
+
+                // центральная область ~ 1/3 x 1/3
+                int cw = Math.Max(1, W / 3);
+                int ch = Math.Max(1, H / 3);
+                int cx = Math.Max(0, (W - cw) / 2);
+                int cy = Math.Max(0, (H - ch) / 2);
+                var centralRect = new Rect(cx, cy, cw, ch);
+                using var central = new Mat(img, centralRect);
+
+                // Усреднённый цвет центральной области (Scalar: B,G,R,[A])
+                Scalar meanCentral = Cv2.Mean(central);
+                Vec3d page = new Vec3d(meanCentral.Val0 / 255.0, meanCentral.Val1 / 255.0, meanCentral.Val2 / 255.0);
+
+                // полосы по краям (clamp размера)
+                int strip = Math.Max(1, Math.Min(borderStripPx, Math.Min(W, H) / 4));
+
+                using var top = new Mat(img, new Rect(0, 0, W, strip));
+                using var bottom = new Mat(img, new Rect(0, Math.Max(0, H - strip), W, Math.Min(strip, H)));
+                using var left = new Mat(img, new Rect(0, 0, strip, H));
+                using var right = new Mat(img, new Rect(Math.Max(0, W - strip), 0, Math.Min(strip, W), H));
+
+                // усреднённый цвет бордюров по площадям
+                double totalPixels = (double)(top.Rows * top.Cols + bottom.Rows * bottom.Cols + left.Rows * left.Cols + right.Rows * right.Cols);
+                double sumB = 0, sumG = 0, sumR = 0;
+
+                Scalar mTop = Cv2.Mean(top);
+                sumB += mTop.Val0 * top.Rows * top.Cols;
+                sumG += mTop.Val1 * top.Rows * top.Cols;
+                sumR += mTop.Val2 * top.Rows * top.Cols;
+
+                Scalar mBottom = Cv2.Mean(bottom);
+                sumB += mBottom.Val0 * bottom.Rows * bottom.Cols;
+                sumG += mBottom.Val1 * bottom.Rows * bottom.Cols;
+                sumR += mBottom.Val2 * bottom.Rows * bottom.Cols;
+
+                Scalar mLeft = Cv2.Mean(left);
+                sumB += mLeft.Val0 * left.Rows * left.Cols;
+                sumG += mLeft.Val1 * left.Rows * left.Cols;
+                sumR += mLeft.Val2 * left.Rows * left.Cols;
+
+                Scalar mRight = Cv2.Mean(right);
+                sumB += mRight.Val0 * right.Rows * right.Cols;
+                sumG += mRight.Val1 * right.Rows * right.Cols;
+                sumR += mRight.Val2 * right.Rows * right.Cols;
+
+                if (totalPixels <= 0) totalPixels = 1; // safety
+
+                var border = new Vec3d((sumB / totalPixels) / 255.0, (sumG / totalPixels) / 255.0, (sumR / totalPixels) / 255.0);
+
+                return (page, border);
+            }
+            finally
+            {
+                tmp?.Dispose();
+            }
+        }
+
+        private  int ClampRound255(double v)
+        {
+            int iv = (int)Math.Round(v * 255.0);
+            if (iv < 0) iv = 0;
+            if (iv > 255) iv = 255;
+            return iv;
+        }
+
+        private  Scalar ScalarFromNormalized(Vec3d normBgr)
+        {
+            int b = ClampRound255(normBgr.Item0);
+            int g = ClampRound255(normBgr.Item1);
+            int r = ClampRound255(normBgr.Item2);
+            return new Scalar(b, g, r); // BGR order
+        }
+
+        private  Vec3b Vec3bFromNormalized(Vec3d normBgr)
+        {
+            return new Vec3b(
+                (byte)ClampRound255(normBgr.Item0),
+                (byte)ClampRound255(normBgr.Item1),
+                (byte)ClampRound255(normBgr.Item2)
+            );
         }
 
         private Stream BitmapSourceToStream(BitmapSource bmpSource)
@@ -64,14 +194,15 @@ namespace OpenCVProcessor
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        Binarize();
+                        //Binarize();
+                        BinarizeAdaptive();
                         break;
                     case ProcessorCommands.Deskew:
                         Deskew();
                         break;
                     case ProcessorCommands.BorderRemove:
                         Debug.WriteLine("ApplyCommandToCurrent: BorderRemove");
-                        RemoveBordersByRowColWhite(threshFrac: 0.30,  contrastThr: 15,  centralSample: 0.30,  maxRemoveFrac: 0.25);
+                        RemoveBordersByRowColWhite(threshFrac: 0.25,  contrastThr: 50,  centralSample: 0.50,  maxRemoveFrac: 0.25);
                         break;
                     case ProcessorCommands.Despeckle:
                         //applyDespeckleCurrent();
@@ -161,7 +292,88 @@ namespace OpenCVProcessor
         //    //return MatToBitmapSource(gray);
         //}
 
-        public void Binarize(int threshold = 200)
+        private Mat? MatToGray(Mat src)
+        {
+            if (src == null || src.Empty()) return null; // уже в градациях серого
+            using var gray = new Mat();
+            switch (src.Channels())
+            {
+                case 1:
+                    // уже в градациях серого
+                    src.CopyTo(gray);
+                    break;
+                case 3:
+                    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+                    break;
+                case 4:
+                    Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
+                    break;
+                default:
+                    {
+                        // универсальный fallback: конвертируем в 8UC3 через преобразование типа + возможное BGR конвертирование
+                        using var tmp = new Mat();
+                        src.ConvertTo(tmp, MatType.CV_8UC3);
+                        Cv2.CvtColor(tmp, gray, ColorConversionCodes.BGR2GRAY);
+                    }
+                    break;
+            }
+            src.Dispose();
+            src = gray.Clone();
+            return src;
+        }
+
+        private void BinarizeAdaptive(int? blockSize = null, double C = 7, bool useGaussian = true, bool invert = false)
+        {
+            if (_currentImage == null || _currentImage.Empty()) return;
+
+            using var gray = MatToGray(_currentImage);
+            if (gray == null) return;
+
+
+            int bs;
+            if (blockSize.HasValue && blockSize > 0)
+            {
+                bs = blockSize.Value;
+            }
+            else
+            {
+                // heuristic: блок ~min(width, height) / 30, clamp to[3..201]
+                int baseBs = Math.Max(3, Math.Min(201, Math.Min(gray.Cols, gray.Rows) / 30));
+                if ((baseBs & 1) == 0) baseBs++; // сделать нечётным
+                bs = baseBs;
+            }
+            if (bs < 3) bs = 3;
+            if ((bs & 1) == 0) bs++; // сделать нечётным
+
+            using var blur = new Mat();
+            Cv2.GaussianBlur(gray, blur, new Size(3, 3), 0);
+
+            using var bin = new Mat();
+            var adaptiveType = useGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
+            var threshType = invert ? ThresholdTypes.BinaryInv : ThresholdTypes.Binary;
+            Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, C);
+
+            // 5) опционально: морфология небольшая (убрать шум/скрепить буквы) — можно раскомментировать при желании
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+            Cv2.MorphologyEx(bin, bin, MorphTypes.Close, kernel, iterations: 1);
+
+            using var color = new Mat();
+            Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
+
+            var result = color.Clone();
+            Mat old = null;
+            lock (this)
+            {
+                old = _currentImage;
+                _currentImage = result;
+            }
+            old?.Dispose();
+
+            updateImagePreview();
+        }
+
+
+        private void Binarize(int threshold = 180)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
