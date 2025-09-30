@@ -32,7 +32,7 @@ namespace ImgViewer.Models
             try
             {
                 _currentImage = Cv2.ImRead(path, ImreadModes.Color);
-                BitmapSource bmpSource = MatToBitmapSource(_currentImage);
+                //BitmapSource bmpSource = MatToBitmapSource(_currentImage);
                 //ImageUpdated?.Invoke(BitmapSourceToStream(bmpSource));
             }
             catch (Exception ex)

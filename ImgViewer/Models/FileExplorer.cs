@@ -47,23 +47,24 @@ namespace ImgViewer.Models
                 if (decodePixelWidth.HasValue)
                     settings.Width = decodePixelWidth.Value;
 
-                using (var image = new MagickImage(path, settings))
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan))
+                using (var image = new MagickImage(fs, settings))
                 {
                     switch (typeof(T))
                     {
                         case Type type when type == typeof(BitmapImage):
-
-                            using (var ms = new MemoryStream())
+                            byte[] bmpBytes = image.ToByteArray(MagickFormat.Bmp);
+                            using (var ms = new MemoryStream(bmpBytes))
                             {
-                                if (decodePixelWidth.HasValue)
-                                {
-                                    //image.Quality = 50;
-                                    image.Write(ms, MagickFormat.Png);
-                                }
-                                else
-                                {
-                                    image.Write(ms, MagickFormat.Png);
-                                }
+                                //if (decodePixelWidth.HasValue)
+                                //{
+                                //    //image.Quality = 50;
+                                //    image.Write(ms, MagickFormat.Png);
+                                //}
+                                //else
+                                //{
+                                //    image.Write(ms, MagickFormat.Png);
+                                //}
 
                                 ms.Position = 0;
                                 var bitmap = new BitmapImage();

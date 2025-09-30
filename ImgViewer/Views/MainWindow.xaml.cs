@@ -368,7 +368,7 @@ namespace ImgViewer.Views
                 try
                 {
                     //await SetImgBoxSourceAsync(dlg.FileName);
-                    _mvm.LoadImagAsync(dlg.FileName);
+                    await _mvm.LoadImagAsync(dlg.FileName);
                     _lastOpenedFolder = Path.GetDirectoryName(dlg.FileName);
                     _processor.Load(dlg.FileName);
                 }
