@@ -1,8 +1,7 @@
 ﻿
 using System.IO;
-using System.Windows.Media.Imaging;
 
-namespace ImgViewer.Internal.Abstractions
+namespace ImgViewer.Models
 {
 
     public interface IFileProcessor
@@ -21,6 +20,10 @@ namespace ImgViewer.Internal.Abstractions
         public string ParentPath { get; set; }
         public string[] Files { get; set; }
     }
+
+
+
+
 
 }
 

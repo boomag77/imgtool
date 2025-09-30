@@ -1,10 +1,10 @@
 ﻿using OpenCvSharp;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
-using ImgViewer.Models;
 
-namespace OpenCVProcessor
+namespace ImgViewer.Models
 {
     public class OpenCVImageProcessor : IImageProcessor, IDisposable
     {
@@ -33,7 +33,7 @@ namespace OpenCVProcessor
             {
                 _currentImage = Cv2.ImRead(path, ImreadModes.Color);
                 BitmapSource bmpSource = MatToBitmapSource(_currentImage);
-                ImageUpdated?.Invoke(BitmapSourceToStream(bmpSource));
+                //ImageUpdated?.Invoke(BitmapSourceToStream(bmpSource));
             }
             catch (Exception ex)
             {
@@ -47,6 +47,12 @@ namespace OpenCVProcessor
         public void SaveImageFax()
         {
 
+        }
+
+        public Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression)
+        {
+            //throw new NotImplementedException();
+            return null;
         }
 
 
@@ -346,7 +352,7 @@ namespace OpenCVProcessor
             if ((bs & 1) == 0) bs++; // сделать нечётным
 
             using var blur = new Mat();
-            Cv2.GaussianBlur(gray, blur, new Size(3, 3), 0);
+            Cv2.GaussianBlur(gray, blur, new OpenCvSharp.Size(3, 3), 0);
 
             using var bin = new Mat();
             var adaptiveType = useGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
@@ -354,7 +360,7 @@ namespace OpenCVProcessor
             Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, C);
 
             // 5) опционально: морфология небольшая (убрать шум/скрепить буквы) — можно раскомментировать при желании
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
             Cv2.MorphologyEx(bin, bin, MorphTypes.Close, kernel, iterations: 1);
 
             using var color = new Mat();
@@ -594,7 +600,7 @@ namespace OpenCVProcessor
             M.Set(1, 2, M.Get<double>(1, 2) + (newH / 2.0 - center.Y));
 
             using var rotated = new Mat();
-            Cv2.WarpAffine(src, rotated, M, new Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
+            Cv2.WarpAffine(src, rotated, M, new OpenCvSharp.Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
 
             // 5) (опционально) Обрезаем вокруг содержимого, как в предыдущем примере.
             //using var mask = PrecomputeDarkMask_Otsu(src);
@@ -688,7 +694,7 @@ namespace OpenCVProcessor
             Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
             // оценка фона большим ядром (например 101x101)
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(101, 101));
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(101, 101));
             var bg = new Mat();
             Cv2.MorphologyEx(gray, bg, MorphTypes.Open, kernel);
 
@@ -768,14 +774,14 @@ namespace OpenCVProcessor
 
                 //+++
                 int kernelWidth = Math.Max(15, working.Cols / 30);
-                using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(kernelWidth, 3));
+                using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 3));
                 Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
-                using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+                using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
                 Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
                 //+++
 
                 // small open to reduce noise
-                using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3)))
+                using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3)))
                 {
                     Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kOpen);
                 }
@@ -860,7 +866,7 @@ namespace OpenCVProcessor
                 // create blurred mask (CV_8U -> blurred uchar)
                 using var blurred = new Mat();
                 int ksize = Math.Max(3, (featherPx / 2) * 2 + 1);
-                Cv2.GaussianBlur(selectedMask, blurred, new Size(ksize, ksize), 0);
+                Cv2.GaussianBlur(selectedMask, blurred, new OpenCvSharp.Size(ksize, ksize), 0);
 
                 // compute bounding box of blurred mask (scan for nonzero)
                 int top = -1, bottom = -1, left = -1, right = -1;
@@ -954,7 +960,7 @@ namespace OpenCVProcessor
             using var crop = new Mat(tmp, cropRect);
 
             // 3) сгладим немного, чтобы уменьшить шум
-            Cv2.GaussianBlur(crop, crop, new Size(3, 3), 0);
+            Cv2.GaussianBlur(crop, crop, new OpenCvSharp.Size(3, 3), 0);
 
             // 4) Otsu на центральной области — возвращает порог (double)
             using var bin = new Mat();
@@ -1002,14 +1008,14 @@ namespace OpenCVProcessor
             Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
             // небольшая фильтрация шума
-            Cv2.GaussianBlur(gray, gray, new Size(3, 3), 0);
+            Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
 
             // Otsu + инверсия: dark -> 255
             var darkMask = new Mat();
             Cv2.Threshold(gray, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
 
             // убираем мелкие отверстия/шум
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
             Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
 
             gray.Dispose();
@@ -1026,11 +1032,11 @@ namespace OpenCVProcessor
             ycrcb.Dispose();
 
             // опционально CLAHE, чтобы усилить контраст
-            var clahe = Cv2.CreateCLAHE(2.0, new Size(8, 8));
+            var clahe = Cv2.CreateCLAHE(2.0, new OpenCvSharp.Size(8, 8));
             clahe.Apply(gray, gray);
 
             // сглаживание
-            Cv2.GaussianBlur(gray, gray, new Size(3, 3), 0);
+            Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
 
             var darkMask = new Mat();
             // AdaptiveThreshold: используем BinaryInv чтобы тёмные стали 255
@@ -1038,7 +1044,7 @@ namespace OpenCVProcessor
                 AdaptiveThresholdTypes.GaussianC, ThresholdTypes.BinaryInv, blockSize, C);
 
             // морфологическая очистка
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
             Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
 
             gray.Dispose();
@@ -1348,7 +1354,7 @@ namespace OpenCVProcessor
             var center = new Point2f(srcGrayBinary.Width / 2f, srcGrayBinary.Height / 2f);
             var M = Cv2.GetRotationMatrix2D(center, angle, 1.0);
             var dst = new Mat();
-            Cv2.WarpAffine(srcGrayBinary, dst, M, new Size(srcGrayBinary.Width, srcGrayBinary.Height),
+            Cv2.WarpAffine(srcGrayBinary, dst, M, new OpenCvSharp.Size(srcGrayBinary.Width, srcGrayBinary.Height),
                            InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(0)); // задний фон = 0 (т.к. текст = белый/255)
             return dst;
         }
@@ -1359,13 +1365,13 @@ namespace OpenCVProcessor
         {
             // Работает на уменьшенной копии для скорости
             int maxDetectWidth = 1000;
-            Mat small = src.Width > maxDetectWidth ? src.Resize(new Size(maxDetectWidth, (int)(src.Height * (maxDetectWidth / (double)src.Width)))) : src.Clone();
+            Mat small = src.Width > maxDetectWidth ? src.Resize(new OpenCvSharp.Size(maxDetectWidth, (int)(src.Height * (maxDetectWidth / (double)src.Width)))) : src.Clone();
 
             using var gray = new Mat();
             Cv2.CvtColor(small, gray, ColorConversionCodes.BGR2GRAY);
 
             // Убираем шум (блюр)
-            Cv2.GaussianBlur(gray, gray, new Size(5, 5), 0);
+            Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(5, 5), 0);
 
             // Края
             using var edges = new Mat();
@@ -1415,7 +1421,7 @@ namespace OpenCVProcessor
             // Метод: ищем угол, при котором горизонтальные проекции (row sums) дают наиболее выраженные пики => максимальная дисперсия
             // Для скорости работаем на уменьшенной серой бинарной картинке.
             int detectWidth = 1000;
-            Mat small = src.Width > detectWidth ? src.Resize(new Size(detectWidth, (int)(src.Height * (detectWidth / (double)src.Width)))) : src.Clone();
+            Mat small = src.Width > detectWidth ? src.Resize(new OpenCvSharp.Size(detectWidth, (int)(src.Height * (detectWidth / (double)src.Width)))) : src.Clone();
 
             using var gray = new Mat();
             Cv2.CvtColor(small, gray, ColorConversionCodes.BGR2GRAY);
@@ -1427,7 +1433,7 @@ namespace OpenCVProcessor
             Cv2.BitwiseNot(bw, bw);
 
             // Убираем мелкие шумы (опционно)
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
             Cv2.MorphologyEx(bw, bw, MorphTypes.Open, kernel);
 
             Func<Mat, double> scoreFor = (Mat m) =>

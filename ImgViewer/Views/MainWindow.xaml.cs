@@ -1,30 +1,31 @@
-﻿using ImgProcessor.Abstractions;
-using ImgViewer.Internal;
-using ImgViewer.Internal.Abstractions;
+﻿using ImgViewer.Models;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
-
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using ImgViewer.Models;
 
 
-namespace ImgViewer
+namespace ImgViewer.Views
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IMainView
     {
         private readonly IImageProcessor _processor;
         private readonly IFileProcessor _explorer;
         private readonly IImageProcessorFactory _factory;
 
+        private readonly AppManager _manager;
+        private readonly MainViewModel _mvm;
+
 
         private CancellationTokenSource _cts;
         private CancellationTokenSource? _currentLoadPreviewCts;
         private CancellationTokenSource? _currentLoadThumbnailsCts;
+
+        private string _lastOpenedFolder = string.Empty;
 
 
 
@@ -115,7 +116,7 @@ namespace ImgViewer
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
-        
+
 
         public ObservableCollection<Thumbnail> Files { get; set; } = new ObservableCollection<Thumbnail>();
 
@@ -123,6 +124,9 @@ namespace ImgViewer
         {
             InitializeComponent();
 
+            _manager = new AppManager(this);
+            _mvm = new MainViewModel();
+            DataContext = _mvm;
             _cts = new CancellationTokenSource();
 
             ImgListBox.ItemsSource = Files;
@@ -153,7 +157,11 @@ namespace ImgViewer
 
         }
 
-        
+        public void UpdatePreview(Stream stream)
+        {
+            var bitmap = streamToBitmapSource(stream);
+            Dispatcher.InvokeAsync(() => ImgBox.Source = bitmap);
+        }
 
 
 
@@ -189,7 +197,7 @@ namespace ImgViewer
             _currentLoadThumbnailsCts = new CancellationTokenSource();
             var ct = _currentLoadThumbnailsCts.Token;
 
-            
+
             await Dispatcher.InvokeAsync(() =>
             {
                 foreach (var old in Files.OfType<IDisposable>().ToList())
@@ -199,7 +207,7 @@ namespace ImgViewer
                     old.Dispose();
                 }
 
-                   
+
                 Files.Clear();
             }, DispatcherPriority.Background).Task;
 
@@ -274,7 +282,11 @@ namespace ImgViewer
         private async void OpenFolder_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new System.Windows.Forms.FolderBrowserDialog();
-            dlg.SelectedPath = "G:\\My Drive\\LEAD";
+
+            if (!string.IsNullOrEmpty(_lastOpenedFolder) && Directory.Exists(_lastOpenedFolder))
+                dlg.SelectedPath = _lastOpenedFolder;
+            else if (Directory.Exists("G:\\My Drive\\LEAD"))
+                dlg.SelectedPath = "G:\\My Drive\\LEAD";
 
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
@@ -283,6 +295,7 @@ namespace ImgViewer
                 try
                 {
                     await LoadFolder(dlg.SelectedPath);
+                    _lastOpenedFolder = dlg.SelectedPath;
                     Title = $"ImgViewer - {dlg.SelectedPath}";
 
                     if (Files.Count > 0)
@@ -354,7 +367,9 @@ namespace ImgViewer
             {
                 try
                 {
-                    await SetImgBoxSourceAsync(dlg.FileName);
+                    //await SetImgBoxSourceAsync(dlg.FileName);
+                    _mvm.LoadImagAsync(dlg.FileName);
+                    _lastOpenedFolder = Path.GetDirectoryName(dlg.FileName);
                     _processor.Load(dlg.FileName);
                 }
                 catch (OperationCanceledException)
@@ -415,71 +430,84 @@ namespace ImgViewer
 
         private async void ProcessFolderClick(object sender, RoutedEventArgs e)
         {
-            var dlg = new System.Windows.Forms.FolderBrowserDialog();
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            {
-                string folderPath = dlg.SelectedPath;
-                ProcessorCommands[] commands =
-                {
-                    ProcessorCommands.Binarize,
-                    ProcessorCommands.Deskew,
+            //var dlg = new System.Windows.Forms.FolderBrowserDialog();
+            //if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            //{
+            //    string folderPath = dlg.SelectedPath;
+            //    ProcessorCommands[] commands =
+            //    {
+            //        ProcessorCommands.Binarize,
+            //        ProcessorCommands.Deskew,
 
 
-                    ProcessorCommands.DotsRemove
-                };
-                var fileExplorer = new FileExplorer(_cts.Token);
-                var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
-                var workerPool = new ImgWorkerPool(_cts, commands, 1, _factory, fileExplorer, sourceFolder, 0);
-                StatusText.Text = "Processing...";
-                await Task.Yield();
-                workerPool.ProgressChanged += (done, total) =>
-                {
-                    Dispatcher.InvokeAsync(() =>
-                    {
-                        MyProgressBar.Maximum = total;
-                        MyProgressBar.Value = done;
-                    });
-                };
-                workerPool.ErrorOccured += (msg) =>
-                {
-                    Dispatcher.InvokeAsync(() =>
-                    {
-                        System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    });
-                };
-                try
-                {
-                    await workerPool.RunAsync();
-                }
-                catch (OperationCanceledException)
-                {
-                    StatusText.Text = "Cancelled";
+            //        ProcessorCommands.DotsRemove
+            //    };
+            //    var fileExplorer = new FileExplorer(_cts.Token);
+            //    var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
+            //    var workerPool = new ImgWorkerPool(_cts, commands, 1, _factory, fileExplorer, sourceFolder, 0);
+            //    StatusText.Text = "Processing...";
+            //    await Task.Yield();
+            //    workerPool.ProgressChanged += (done, total) =>
+            //    {
+            //        Dispatcher.InvokeAsync(() =>
+            //        {
+            //            MyProgressBar.Maximum = total;
+            //            MyProgressBar.Value = done;
+            //        });
+            //    };
+            //    workerPool.ErrorOccured += (msg) =>
+            //    {
+            //        Dispatcher.InvokeAsync(() =>
+            //        {
+            //            System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            //        });
+            //    };
+            //    try
+            //    {
+            //        await workerPool.RunAsync();
+            //    }
+            //    catch (OperationCanceledException)
+            //    {
+            //        StatusText.Text = "Cancelled";
 
-                }
-            }
-            StatusText.Text = "Ready";
-            MyProgressBar.Value = 0;
+            //    }
+            //}
+            //StatusText.Text = "Ready";
+            //MyProgressBar.Value = 0;
         }
 
         private void SaveAsClick(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
-            dlg.Filter = "PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|TIFF Image|*.tif;*.tiff|Bitmap Image|*.bmp|All Files|*.*";
+            dlg.InitialDirectory = _lastOpenedFolder;
+            dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
+
             if (dlg.ShowDialog() == true)
             {
                 var path = dlg.FileName;
-                _processor.SaveCurrentImage(path);
+                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                if (ext == ".tif" || ext == ".tiff")
+                {
+                    var tiffOptionsWindow = new TiffSavingOptionsWindow();
+                    tiffOptionsWindow.Owner = this;
+
+                    if (tiffOptionsWindow.ShowDialog() == true)
+                    {
+                        var compression = tiffOptionsWindow.SelectedCompression;
+                    }
+                    else
+                    {
+                        // User cancelled the TIFF options dialog
+                        return;
+                    }
+                }
+                //_processor.SaveCurrentImage(path);
             }
         }
 
         private void ExitClick(object sender, RoutedEventArgs e)
         {
             Close();
-        }
-
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-
         }
 
 

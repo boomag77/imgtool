@@ -1,8 +1,4 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Windows;
-
-namespace ImgViewer
+﻿namespace ImgViewer
 {
     /// <summary>
     /// Interaction logic for App.xaml

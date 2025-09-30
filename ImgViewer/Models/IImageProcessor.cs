@@ -1,4 +1,6 @@
-﻿namespace ImgProcessor.Abstractions
+﻿using System.IO;
+
+namespace ImgViewer.Models
 {
     public interface IImageProcessor
     {
@@ -6,7 +8,7 @@
         
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
-        //void GetStreamForSaving(Stream outputStream, ImageFormat format, TiffCompression compression);
+        Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
         void ApplyCommandToCurrent(ProcessorCommands commandName, Dictionary<string, object> parameters);
 
         event Action<Stream> ImageUpdated;

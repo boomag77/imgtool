@@ -1,13 +1,4 @@
-﻿using ImgProcessor.Abstractions;
-using LeadImgProcessor;
-using OpenCVProcessor;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ImgViewer.Models
+﻿namespace ImgViewer.Models
 {
     internal class ImageProcessorFactory : IImageProcessorFactory
     {
@@ -24,7 +15,7 @@ namespace ImgViewer.Models
                 case ImageProcessorType.ImageMagick:
                     throw new NotImplementedException("ImageMagick processor is not implemented in this factory.");
                 case ImageProcessorType.Leadtools:
-                    return new LeadImageProcessor();
+                    //return new LeadImageProcessor();
                 default:
                     throw new ArgumentException("Unsupported processor type.");
             }

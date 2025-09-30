@@ -1,4 +1,4 @@
-﻿using ImgProcessor.Abstractions;
+﻿using ImgViewer.Models;
 using Leadtools;
 using Leadtools.Codecs;
 using Leadtools.ImageProcessing;

@@ -22,12 +22,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\DocPostProcessor\LeadImgProcessor.csproj" />
-	  <ProjectReference Include="..\ImgProcessor.Abstractions\ImgProcessor.Abstractions.csproj" />
-	  <ProjectReference Include="..\OpenCVProcessor\OpenCVProcessor.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
 	  <None Update="secret.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>

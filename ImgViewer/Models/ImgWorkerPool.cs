@@ -1,10 +1,7 @@
-﻿using ImgProcessor.Abstractions;
-using ImgViewer.Internal.Abstractions;
-using System.Collections.Concurrent;
-using System.Diagnostics;
+﻿using System.Collections.Concurrent;
 using System.IO;
 
-namespace ImgViewer.Internal
+namespace ImgViewer.Models
 {
     internal class ImgWorkerPool
     {
@@ -35,7 +32,7 @@ namespace ImgViewer.Internal
             _fileExplorer = fileExplorer;
             _processorFactory = processorFactory;
             _sourceFolder = sourceFolder;
-            
+
             _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
             Directory.CreateDirectory(_outputFolder);
             _commandsQueue = commandsQueue;
@@ -61,7 +58,7 @@ namespace ImgViewer.Internal
                     break;
 
                 _filesQueue.Add(file);
-                await Task.Yield(); 
+                await Task.Yield();
             }
 
             _filesQueue.CompleteAdding();
@@ -92,7 +89,7 @@ namespace ImgViewer.Internal
                     // Применяем команды
                     foreach (var command in _commandsQueue)
                     {
-                        
+
                         proc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
                     }
 
@@ -102,7 +99,7 @@ namespace ImgViewer.Internal
 
                     var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
                     var outputFilePath = Path.Combine(_outputFolder, fileName);
-                    proc.SaveCurrentImage(outputFilePath);
+                    //proc.SaveCurrentImage(outputFilePath);
 
                     Interlocked.Increment(ref _processedCount);
                     ProgressChanged?.Invoke(_processedCount, _totalCount);
@@ -112,7 +109,7 @@ namespace ImgViewer.Internal
                 {
                     ErrorOccured?.Invoke($"Error processing {filePath}: {ex.Message}");
                 }
-               
+
             }
         }
 
@@ -131,7 +128,7 @@ namespace ImgViewer.Internal
             }
 
             // Параллельно наполняем очередь
-            var enqueueTask =  Task.Run(() => EnqueueFiles(), _cts.Token);
+            var enqueueTask = Task.Run(() => EnqueueFiles(), _cts.Token);
             tasks.Add(enqueueTask);
             await Task.WhenAll(tasks);
 

@@ -10,11 +10,7 @@
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
 	<PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.11.0.20250507" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\ImgProcessor.Abstractions\ImgProcessor.Abstractions.csproj" />
-	
+	  
   </ItemGroup>
 
 </Project>
