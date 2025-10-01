@@ -1,4 +1,4 @@
-﻿using ImgViewer.Models;
+﻿using ImgViewer.Interfaces;
 using System.Windows;
 
 namespace ImgViewer.Views

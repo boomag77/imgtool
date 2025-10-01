@@ -1,21 +1,39 @@
-﻿using OpenCvSharp;
+﻿using ImgViewer.Interfaces;
+using OpenCvSharp;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
     public class OpenCVImageProcessor : IImageProcessor, IDisposable
     {
+        private byte[] _bmpBytes;
         private Mat _currentImage;
         private Scalar _pageColor;
         private Scalar _borderColor;
+        private readonly IAppManager _appManager;
 
-        public OpenCVImageProcessor()
+        public byte[] BmpBytes
         {
+            set
+            {
+                if (value.Length == 0) return;
+                _bmpBytes = value;
+                using var ms = new MemoryStream(_bmpBytes);
+                _currentImage = Mat.FromStream(ms, ImreadModes.Color);
+            }
+        }
+
+        public OpenCVImageProcessor(IAppManager appManager, CancellationToken token)
+        {
+            _appManager = appManager;
             //throw new NotImplementedException();
         }
+
+        
 
         public void Dispose()
         {
@@ -52,6 +70,65 @@ namespace ImgViewer.Models
         public Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
             //throw new NotImplementedException();
+            if (_currentImage != null && !_currentImage.Empty())
+            {
+                if (format == ImageFormat.Tiff)
+                {
+                    var paramsList = new List<int>();
+                    switch (compression)
+                    {
+                        case TiffCompression.None:
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.None);
+                            break;
+                        case TiffCompression.CCITTG4:
+                            if (_currentImage.Channels() != 1)
+                            {
+                                // для G4 нужно 1-битное изображение
+                                using var gray = new Mat();
+                                Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
+                                using var bin = new Mat();
+                                Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                                _currentImage = bin.Clone();
+                            }
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.CCITTG4);
+                            break;
+                        case TiffCompression.CCITTG3:
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.CCITTG3);
+                            break;
+                        case TiffCompression.LZW:
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.LZW);
+                            break;
+                        case TiffCompression.Deflate:
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.Deflate);
+                            break;
+                        case TiffCompression.JPEG:
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.JPEG);
+                            break;
+                        case TiffCompression.PackBits:
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.PackBits);
+                            break;
+                        default:
+                            // default to None
+                            paramsList.Add((int)ImwriteFlags.TiffCompression);
+                            paramsList.Add((int)TiffCompression.None);
+                            break;
+                    }
+                    byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
+                    return new MemoryStream(tiffData);
+                }
+                else
+                {
+                    // для других форматов просто PNG
+                    return MatToStream(_currentImage);
+                }
+            }
             return null;
         }
 
@@ -193,7 +270,7 @@ namespace ImgViewer.Models
             //throw new NotImplementedException();
         }
 
-        public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters)
+        public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters = null)
         {
             if (_currentImage != null)
             {
@@ -233,8 +310,7 @@ namespace ImgViewer.Models
         {
             if (_currentImage != null)
             {
-                var stream = MatToStream(_currentImage);
-                ImageUpdated?.Invoke(stream);
+               _appManager.SetBmpImageOnPreview(MatToBitmapSource(_currentImage));
             }
         }
 

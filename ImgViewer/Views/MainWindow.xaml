@@ -78,6 +78,7 @@
                 SnapsToDevicePixels="True">
             <Viewbox Stretch="Uniform">
                 <Image x:Name="ImgBox"
+                       RenderOptions.BitmapScalingMode="HighQuality"
                        Source="{Binding ImageOnPreview}"
                 Stretch="None"/>
             </Viewbox>

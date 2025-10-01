@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using ImgViewer.Interfaces;
+using System.Collections.Concurrent;
 using System.IO;
 
 namespace ImgViewer.Models

@@ -1,4 +1,5 @@
-﻿using ImgViewer.Models;
+﻿using ImgViewer.Interfaces;
+using ImgViewer.Models;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -15,10 +16,18 @@ namespace ImgViewer.Views
     {
         private readonly IImageProcessor _processor;
         private readonly IFileProcessor _explorer;
-        private readonly IImageProcessorFactory _factory;
 
-        private readonly AppManager _manager;
-        private readonly MainViewModel _mvm;
+        public IViewModel ViewModel
+        {
+            get => _viewModel;
+            set
+            {
+                _viewModel = value;
+            }
+        }
+
+        private readonly IAppManager _manager;
+        private IViewModel _viewModel;
 
 
         private CancellationTokenSource _cts;
@@ -77,37 +86,37 @@ namespace ImgViewer.Views
 
             public async Task LoadThumbAsync(CancellationToken token = default)
             {
-                try
-                {
-                    _localCts?.Cancel();
-                    _localCts?.Dispose();
-                }
-                catch { /* ignore */ }
+                //try
+                //{
+                //    _localCts?.Cancel();
+                //    _localCts?.Dispose();
+                //}
+                //catch { /* ignore */ }
 
-                _localCts = CancellationTokenSource.CreateLinkedTokenSource(_parentToken, token);
-                var ct = _localCts.Token;
+                //_localCts = CancellationTokenSource.CreateLinkedTokenSource(_parentToken, token);
+                //var ct = _localCts.Token;
 
-                await _semaphore.WaitAsync(ct).ConfigureAwait(false);
-                try
-                {
-                    if (ct.IsCancellationRequested)
-                        return;
-                    var bmp = await Task.Run(() => Explorer.Load<BitmapImage>(Path, 50), ct).ConfigureAwait(false);
-                    if (!ct.IsCancellationRequested && bmp != null)
-                    {
-                        await _dispatcher.InvokeAsync(() => Thumb = bmp).Task.ConfigureAwait(false);
-                    }
-                }
-                finally
-                {
-                    try { _semaphore.Release(); } catch { }
-                    try
-                    {
-                        _localCts?.Dispose();
-                    }
-                    catch { }
-                    _localCts = null;
-                }
+                //await _semaphore.WaitAsync(ct).ConfigureAwait(false);
+                //try
+                //{
+                //    if (ct.IsCancellationRequested)
+                //        return;
+                //    var bmp = await Task.Run(() => Explorer.Load<BitmapImage>(Path, 50), ct).ConfigureAwait(false);
+                //    if (!ct.IsCancellationRequested && bmp != null)
+                //    {
+                //        await _dispatcher.InvokeAsync(() => Thumb = bmp).Task.ConfigureAwait(false);
+                //    }
+                //}
+                //finally
+                //{
+                //    try { _semaphore.Release(); } catch { }
+                //    try
+                //    {
+                //        _localCts?.Dispose();
+                //    }
+                //    catch { }
+                //    _localCts = null;
+                //}
             }
 
 
@@ -125,28 +134,12 @@ namespace ImgViewer.Views
             InitializeComponent();
 
             _manager = new AppManager(this);
-            _mvm = new MainViewModel();
-            DataContext = _mvm;
+            DataContext = _viewModel;
             _cts = new CancellationTokenSource();
 
             ImgListBox.ItemsSource = Files;
-            IImageProcessorFactory factory = new ImageProcessorFactory();
-            _factory = factory;
-            //_processor = factory.CreateProcessor(ImageProcessorType.Leadtools);
-            _processor = factory.CreateProcessor(ImageProcessorType.OpenCV);
-            _processor.ImageUpdated += (stream) =>
-            {
-                var bitmap = streamToBitmapSource(stream);
-                Dispatcher.InvokeAsync(() => ImgBox.Source = bitmap);
-            };
-            _processor.ErrorOccured += (msg) =>
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    System.Windows.MessageBox.Show(this, msg, "Processor Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                });
-            };
-            _explorer = new FileExplorer(_cts.Token);
+
+            _explorer = new FileProcessor(_cts.Token);
             _explorer.ErrorOccured += (msg) =>
             {
                 Dispatcher.InvokeAsync(() =>
@@ -261,21 +254,21 @@ namespace ImgViewer.Views
         {
             if (ImgListBox.SelectedItem is Thumbnail item)
             {
-                try
-                {
-                    await SetImgBoxSourceAsync(item.Path);
-                    _processor.Load(item.Path);
-                }
-                catch (Exception ex)
-                {
-                    System.Windows.MessageBox.Show
-                    (
-                        $"Error loading image for preview: {ex.Message}",
-                        "Error",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error
-                    );
-                }
+                //try
+                //{
+                //    await SetImgBoxSourceAsync(item.Path);
+                //    _processor.Load(item.Path);
+                //}
+                //catch (Exception ex)
+                //{
+                //    System.Windows.MessageBox.Show
+                //    (
+                //        $"Error loading image for preview: {ex.Message}",
+                //        "Error",
+                //        MessageBoxButton.OK,
+                //        MessageBoxImage.Error
+                //    );
+                //}
             }
         }
 
@@ -308,56 +301,56 @@ namespace ImgViewer.Views
             }
         }
 
-        private async Task SetImgBoxSourceAsync(string filePath)
-        {
-            _currentLoadPreviewCts?.Cancel();
-            _currentLoadPreviewCts = new CancellationTokenSource();
-            var ctoken = _currentLoadPreviewCts.Token;
+        //private async Task SetImgBoxSourceAsync(string filePath)
+        //{
+        //    _currentLoadPreviewCts?.Cancel();
+        //    _currentLoadPreviewCts = new CancellationTokenSource();
+        //    var ctoken = _currentLoadPreviewCts.Token;
 
-            if (string.IsNullOrEmpty(filePath))
-            {
-                await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
-                return;
-            }
-            try
-            {
-                var bitmap = await Task.Run(() =>
-                {
-                    return _explorer.Load<BitmapImage>(filePath);
-                }, ctoken).ConfigureAwait(false);
+        //    if (string.IsNullOrEmpty(filePath))
+        //    {
+        //        await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
+        //        return;
+        //    }
+        //    try
+        //    {
+        //        var bitmap = await Task.Run(() =>
+        //        {
+        //            return _explorer.Load<BitmapSource>(filePath);
+        //        }, ctoken).ConfigureAwait(false);
 
-                ctoken.ThrowIfCancellationRequested();
+        //        ctoken.ThrowIfCancellationRequested();
 
-                if (bitmap == null)
-                {
-                    await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
-                }
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.LowQuality);
-                    ImgBox.Source = bitmap;
-                    Title = $"ImgViewer - {Path.GetFileName(filePath)}";
-                }, DispatcherPriority.Render).Task;
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.HighQuality);
-                }, DispatcherPriority.ContextIdle).Task;
-            }
-            catch (OperationCanceledException)
-            {
-                // Load was cancelled, do nothing
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show
-                (
-                    $"Error loading image for preview: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
-                );
-            }
-        }
+        //        if (bitmap == null)
+        //        {
+        //            await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
+        //        }
+        //        await Dispatcher.InvokeAsync(() =>
+        //        {
+        //            RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.LowQuality);
+        //            ImgBox.Source = bitmap;
+        //            Title = $"ImgViewer - {Path.GetFileName(filePath)}";
+        //        }, DispatcherPriority.Render).Task;
+        //        await Dispatcher.InvokeAsync(() =>
+        //        {
+        //            RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.HighQuality);
+        //        }, DispatcherPriority.ContextIdle).Task;
+        //    }
+        //    catch (OperationCanceledException)
+        //    {
+        //        // Load was cancelled, do nothing
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        System.Windows.MessageBox.Show
+        //        (
+        //            $"Error loading image for preview: {ex.Message}",
+        //            "Error",
+        //            MessageBoxButton.OK,
+        //            MessageBoxImage.Error
+        //        );
+        //    }
+        //}
 
         private async void OpenFile_Click(object sender, RoutedEventArgs e)
         {
@@ -368,9 +361,9 @@ namespace ImgViewer.Views
                 try
                 {
                     //await SetImgBoxSourceAsync(dlg.FileName);
-                    await _mvm.LoadImagAsync(dlg.FileName);
-                    _lastOpenedFolder = Path.GetDirectoryName(dlg.FileName);
-                    _processor.Load(dlg.FileName);
+                    //await _mvm.LoadImagAsync(dlg.FileName);
+                    await _manager.SetImageOnPreview(dlg.FileName);
+                    _viewModel.LastOpenedFolder = Path.GetDirectoryName(dlg.FileName);
                 }
                 catch (OperationCanceledException)
                 {
@@ -393,7 +386,7 @@ namespace ImgViewer.Views
 
         private void ApplyDeskew(object sender, RoutedEventArgs e)
         {
-            _processor.ApplyCommandToCurrent(ProcessorCommands.Deskew, new Dictionary<string, object>());
+            _manager.ApplyCommandToProcessingImage(ProcessorCommands.Deskew, new Dictionary<string, object>());
         }
 
         private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
@@ -410,12 +403,12 @@ namespace ImgViewer.Views
         private void ApplyBorderRemoveCommand_Click(object sender, RoutedEventArgs e)
         {
 
-            _processor.ApplyCommandToCurrent(ProcessorCommands.BorderRemove, new Dictionary<string, object>());
+            _manager.ApplyCommandToProcessingImage(ProcessorCommands.BorderRemove, new Dictionary<string, object>());
         }
 
         private void ApplyAutoBinarizeCommand(object sender, RoutedEventArgs e)
         {
-            _processor.ApplyCommandToCurrent(ProcessorCommands.Binarize, new Dictionary<string, object>());
+            _manager.ApplyCommandToProcessingImage(ProcessorCommands.Binarize, new Dictionary<string, object>());
         }
 
         private void ApplyLineRemoveCommand(object sender, RoutedEventArgs e)
@@ -480,11 +473,13 @@ namespace ImgViewer.Views
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.InitialDirectory = _lastOpenedFolder;
-            dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
+            //dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
+            dlg.Filter = "TIFF Image|*.tif;*.tiff";
 
             if (dlg.ShowDialog() == true)
             {
                 var path = dlg.FileName;
+                TiffCompression compression = TiffCompression.None;
                 var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
                 if (ext == ".tif" || ext == ".tiff")
                 {
@@ -493,7 +488,7 @@ namespace ImgViewer.Views
 
                     if (tiffOptionsWindow.ShowDialog() == true)
                     {
-                        var compression = tiffOptionsWindow.SelectedCompression;
+                        compression = tiffOptionsWindow.SelectedCompression;
                     }
                     else
                     {
@@ -501,8 +496,18 @@ namespace ImgViewer.Views
                         return;
                     }
                 }
-                //_processor.SaveCurrentImage(path);
+                _manager.SaveProcessedImage(path,
+                    ext switch
+                        {
+                            ".tif" or ".tiff" => ImageFormat.Tiff,
+                            ".png" => ImageFormat.Png,
+                            ".jpg" or ".jpeg" => ImageFormat.Jpeg,
+                            ".bmp" => ImageFormat.Bmp,
+                            _ => ImageFormat.Png
+                        },
+                    compression);
             }
+
         }
 
         private void ExitClick(object sender, RoutedEventArgs e)

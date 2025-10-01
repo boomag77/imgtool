@@ -1,21 +1,21 @@
-﻿using System.ComponentModel;
+﻿using ImgViewer.Interfaces;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Windows.Media.Imaging;
-using System.Windows;
+using System.Windows.Media;
 
 
 namespace ImgViewer.Models
 {
-    internal class MainViewModel : INotifyPropertyChanged
+    internal class MainViewModel : IViewModel, INotifyPropertyChanged
     {
-        private BitmapImage? _imageOnPreview;
+        private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
+        private string? _lastOpenedFolder;
         private int _progress;
         private string _status = "Ready";
-            
 
-        private readonly IFileProcessor _exlorer;
         private CancellationTokenSource? _cts;
+
 
         public string Status
         {
@@ -28,7 +28,7 @@ namespace ImgViewer.Models
             }
         }
 
-        public BitmapImage? ImageOnPreview
+        public ImageSource? ImageOnPreview
         {
             get => _imageOnPreview;
             set
@@ -49,12 +49,20 @@ namespace ImgViewer.Models
             }
         }
 
+        public string? LastOpenedFolder
+        {
+            get => _lastOpenedFolder;
+            set
+            {
+                if (_lastOpenedFolder == value) return;
+                _lastOpenedFolder = value;
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         public MainViewModel()
         {
-            _cts = new CancellationTokenSource();
-            _exlorer = new FileExplorer(_cts.Token);
         }
 
         private void OnPropertyChanged([CallerMemberName] string propertyName = "")
@@ -62,17 +70,7 @@ namespace ImgViewer.Models
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        public async Task LoadImagAsync(string path)
-        {
-            Status = $"Loading image preview...";
-            var bmp = await Task.Run(() => _exlorer.Load<BitmapImage>(path));
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                ImageOnPreview = bmp;
-                CurrentImagePath = path;
-                Status = $"Ready";
-            });
-        }
+
 
     }
 }

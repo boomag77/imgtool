@@ -1,11 +1,14 @@
 ﻿using System.IO;
 
-namespace ImgViewer.Models
+namespace ImgViewer.Interfaces
 {
     public interface IImageProcessor
     {
+
+        public byte[] BmpBytes { set; }
+
         void Load(string path);
-        
+
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
