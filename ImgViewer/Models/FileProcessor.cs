@@ -1,9 +1,13 @@
-﻿using ImageMagick;
-using System.IO;
-using System.Windows.Media.Imaging;
-using System.Windows.Media;
+﻿using BitMiracle.LibTiff.Classic;
+using ImageMagick;
+using ImageMagick.Formats;
 using ImgViewer.Interfaces;
+using OpenCvSharp;
 using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
@@ -265,107 +269,18 @@ namespace ImgViewer.Models
 
 
 
-        public void SaveTiff(Stream stream, string path, TiffCompression compression, bool overwrite = true)
+        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true)
         {
-            if (stream == null)
-            {
-                ErrorOccured?.Invoke("Empty data stream for saving TIFF.");
-                Debug.WriteLine("Empty data stream for saving TIFF.");
-                return;
-            }
-            if (!IsValidPath(path))
-            {
-                ErrorOccured?.Invoke($"Invalid file path for saving: {path}");
-                Debug.WriteLine($"Invalid file path for saving: {path}");
-                return;
-            }
-            MemoryStream ms = stream as MemoryStream;
-            Debug.WriteLine($"Input stream: CanSeek={stream.CanSeek}, Length={stream.Length}, Position={stream.Position}");
-            bool createdCopy = false;
-            if (ms == null || !ms.CanSeek)
-            {
-                ms = new MemoryStream();
-                try
-                {
-                    stream.CopyTo(ms);
-                    createdCopy = true;
-                }
-                catch (Exception ex)
-                {
-                    ErrorOccured?.Invoke($"Failed to read input stream: {ex.Message}");
-                    Debug.WriteLine($"Failed to read input stream: {ex.Message}");
-                    ms.Dispose();
-                    return;
-                }
-            }
-            ms.Position = 0;
-
-            var compdefine = compression switch
-            {
-                TiffCompression.None => "none",
-                TiffCompression.CCITTG3 => "group3",
-                TiffCompression.CCITTG4 => "group4",
-                TiffCompression.LZW => "lzw",
-                TiffCompression.Deflate => "zip",
-                TiffCompression.JPEG => "jpeg",
-                TiffCompression.PackBits => "packbits",
-                _ => null
-            };
-            Debug.WriteLine($"Saving TIFF to {path} with compression {compression} (define={compdefine})");
-            try
-            {
-                using var image = new MagickImage(stream);
-
-                bool requestedCcitt = (compression == TiffCompression.CCITTG3 || compression == TiffCompression.CCITTG4);
-                if (requestedCcitt)
-                {
-                    bool isBilevel = image.Depth == 1 || image.ColorType == ColorType.Bilevel;
-                    if (!isBilevel)
-                    {
-                        ErrorOccured?.Invoke($"Warning: CCITT requested but input image is not bilevel (Depth={image.Depth}, ColorType={image.ColorType}). " +
-                                             "Prefer to pass a 1-bit (bilevel) image when requesting CCITT compression.");
-                        Debug.WriteLine($"Warning: CCITT requested but input image is not bilevel (Depth={image.Depth}, ColorType={image.ColorType}). " +
-                                        "Prefer to pass a 1-bit (bilevel) image when requesting CCITT compression.");
-                        
-                        return;
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(compdefine))
-                {
-                    image.Settings.SetDefine("tiff:compression", compdefine);
-                }
-                image.Format = MagickFormat.Tiff;
-
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        File.Delete(path);
-                    }
-                    catch (Exception ex)
-                    {
-                        ErrorOccured?.Invoke($"Failed to overwrite existing file {path}: {ex.Message}");
-                        Debug.WriteLine($"Failed to overwrite existing file {path}: {ex.Message}");
-                        if (createdCopy) ms.Dispose();
-                        return;
-                    }
-                }
-
-                image.Write(path);
-            }
-            catch (Exception ex)
-            {
-                ErrorOccured?.Invoke($"Failed to save TIFF to {path}: {ex.Message}");
-                Debug.WriteLine($"Failed to save TIFF to {path}: {ex.Message}");
-            }
-            finally
-            {
-                if (createdCopy) ms.Dispose();
-            }
-
+            var tiffSaver = new TiffSaver();
+            tiffSaver.SaveTiff1(stream, path, compression, dpi, overwrite);
         }
 
+
+        private static void InvertBinary(byte[] bin)
+        {
+            for (int i = 0; i < bin.Length; i++)
+                bin[i] = (byte)(bin[i] == 0 ? 255 : 0);
+        }
         //public void Load(string path, Stream stream)
         //{
         //    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -430,5 +345,6 @@ namespace ImgViewer.Models
 
             return sourceFolder;
         }
+
     }
 }

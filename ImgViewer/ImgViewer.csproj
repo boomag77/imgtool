@@ -9,11 +9,13 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<StartupObject>ImgViewer.App</StartupObject>
-		<Platforms>AnyCPU;x64</Platforms>
+		<Platforms>AnyCPU</Platforms>
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <PackageReference Include="BitMiracle.LibTiff.NET" Version="2.4.660" />
 	  <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.8.2" />
+	  <PackageReference Include="Magick.NET.Core" Version="14.8.2" />
 	  <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />

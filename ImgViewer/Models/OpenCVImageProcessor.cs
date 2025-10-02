@@ -85,11 +85,14 @@ namespace ImgViewer.Models
                             if (_currentImage.Channels() != 1)
                             {
                                 // для G4 нужно 1-битное изображение
-                                using var gray = new Mat();
-                                Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
-                                using var bin = new Mat();
-                                Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-                                _currentImage = bin.Clone();
+                                //using var gray = new Mat();
+                                //Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
+                                //_currentImage = gray.Clone();
+                                //using var bin = new Mat();
+                                //Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                                //_currentImage = bin.Clone();
+                                //if (_currentImage.Type() != MatType.CV_8UC1)
+                                //    _currentImage.ConvertTo(_currentImage, MatType.CV_8UC1);
                             }
                             paramsList.Add((int)ImwriteFlags.TiffCompression);
                             paramsList.Add((int)TiffCompression.CCITTG4);
@@ -121,7 +124,8 @@ namespace ImgViewer.Models
                             break;
                     }
                     byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
-                    return new MemoryStream(tiffData);
+                    byte[] pngData = _currentImage.ImEncode(".png");
+                    return new MemoryStream(pngData);
                 }
                 else
                 {

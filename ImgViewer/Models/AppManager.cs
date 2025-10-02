@@ -68,7 +68,7 @@ namespace ImgViewer.Models
         {
             var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
             Debug.WriteLine($"Stream length: {stream.Length}");
-            _fileProcessor.SaveTiff(stream, outputPath, compression, true);
+            _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
         }
 
         public void Dispose()

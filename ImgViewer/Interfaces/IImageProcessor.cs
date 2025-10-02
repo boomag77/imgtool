@@ -51,16 +51,16 @@ namespace ImgViewer.Interfaces
         DotsRemove
     }
 
-    public enum TiffCompression
-    {
-        None = 0,
-        CCITTG4,  // G4
-        CCITTG3,  // G3
-        LZW,
-        Deflate,
-        JPEG,
-        PackBits
-    }
+    //public enum TiffCompression
+    //{
+    //    None = 0,
+    //    CCITTG4,  // G4
+    //    CCITTG3,  // G3
+    //    LZW,
+    //    Deflate,
+    //    JPEG,
+    //    PackBits
+    //}
 
 }
 
