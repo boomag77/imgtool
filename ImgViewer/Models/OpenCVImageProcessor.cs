@@ -3,7 +3,6 @@ using OpenCvSharp;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
@@ -33,7 +32,7 @@ namespace ImgViewer.Models
             //throw new NotImplementedException();
         }
 
-        
+
 
         public void Dispose()
         {
@@ -123,7 +122,7 @@ namespace ImgViewer.Models
                             paramsList.Add((int)TiffCompression.None);
                             break;
                     }
-                    byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
+                    //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
                     byte[] pngData = _currentImage.ImEncode(".png");
                     return new MemoryStream(pngData);
                 }
@@ -281,15 +280,16 @@ namespace ImgViewer.Models
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        //Binarize();
-                        BinarizeAdaptive();
+                        Binarize(200);
+                        //BinarizeAdaptive();
+                        //SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
                         Deskew();
                         break;
                     case ProcessorCommands.BorderRemove:
                         Debug.WriteLine("ApplyCommandToCurrent: BorderRemove");
-                        RemoveBordersByRowColWhite(threshFrac: 0.25, contrastThr: 50, centralSample: 0.50, maxRemoveFrac: 0.25);
+                        RemoveBordersByRowColWhite(threshFrac: 0.25, contrastThr: 20, centralSample: 0.50, maxRemoveFrac: 0.25);
                         break;
                     case ProcessorCommands.Despeckle:
                         //applyDespeckleCurrent();
@@ -314,7 +314,7 @@ namespace ImgViewer.Models
         {
             if (_currentImage != null)
             {
-               _appManager.SetBmpImageOnPreview(MatToBitmapSource(_currentImage));
+                _appManager.SetBmpImageOnPreview(MatToBitmapSource(_currentImage));
             }
         }
 
@@ -408,7 +408,7 @@ namespace ImgViewer.Models
             return src;
         }
 
-        private void BinarizeAdaptive(int? blockSize = null, double C = 7, bool useGaussian = true, bool invert = false)
+        private void BinarizeAdaptive(int? blockSize = null, double C = 7, bool useGaussian = false, bool invert = false)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
@@ -432,7 +432,7 @@ namespace ImgViewer.Models
             if ((bs & 1) == 0) bs++; // сделать нечётным
 
             using var blur = new Mat();
-            Cv2.GaussianBlur(gray, blur, new OpenCvSharp.Size(3, 3), 0);
+            Cv2.GaussianBlur(gray, blur, new OpenCvSharp.Size(1, 1), 0);
 
             using var bin = new Mat();
             var adaptiveType = useGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
@@ -440,8 +440,8 @@ namespace ImgViewer.Models
             Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, C);
 
             // 5) опционально: морфология небольшая (убрать шум/скрепить буквы) — можно раскомментировать при желании
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-            Cv2.MorphologyEx(bin, bin, MorphTypes.Close, kernel, iterations: 1);
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
+            Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: 3);
 
             using var color = new Mat();
             Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
@@ -459,7 +459,7 @@ namespace ImgViewer.Models
         }
 
 
-        private void Binarize(int threshold = 180)
+        private void Binarize(int threshold = 128)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
@@ -1570,6 +1570,141 @@ namespace ImgViewer.Models
 
             small.Dispose();
             return -bestAngle; // возвращаем знак для поворота (чтобы выпрямить)
+        }
+
+        // Sauvola локальная бинаризация (быстро через boxFilter)
+        // srcGray: CV_8UC1 grayscale
+        // windowSize: локальное окно (нечетное) — 15..51 (25 обычный старт)
+        // k: обычно 0.2..0.5 (0.34 хороший старт)
+        // R: динамический диапазон (обычно 128)
+
+        public static Mat Sauvola(Mat srcGray, int windowSize = 25, double k = 0.34, double R = 128.0)
+        {
+            if (srcGray.Empty()) throw new ArgumentException("srcGray is empty");
+            Mat gray = srcGray;
+            if (gray.Type() != MatType.CV_8UC1)
+            {
+                gray = new Mat();
+                Cv2.CvtColor(srcGray, gray, ColorConversionCodes.BGR2GRAY);
+            }
+
+            if (windowSize % 2 == 0) windowSize++; // ensure odd
+
+            // Convert to double for precision
+            Mat srcD = new Mat();
+            gray.ConvertTo(srcD, MatType.CV_64F);
+
+            // mean = boxFilter(src, ksize) normalized
+            Mat mean = new Mat();
+            Cv2.BoxFilter(srcD, mean, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
+
+            // meanSq: compute boxFilter(src*src)
+            Mat sq = new Mat();
+            Cv2.Multiply(srcD, srcD, sq);
+            Mat meanSq = new Mat();
+            Cv2.BoxFilter(sq, meanSq, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
+
+            // std = sqrt(meanSq - mean*mean)
+            Mat std = new Mat();
+            Cv2.Subtract(meanSq, mean.Mul(mean), std); // std now holds variance
+            Cv2.Max(std, 0.0, std); // clamp small negatives
+            Cv2.Sqrt(std, std);
+
+            // threshold = mean * (1 + k * (std/R - 1))
+            Mat thresh = new Mat();
+            Cv2.Divide(std, R, thresh);                 // thresh = std / R
+            Cv2.Subtract(thresh, 1.0, thresh);          // thresh = std/R - 1
+            Cv2.Multiply(thresh, k, thresh);            // thresh = k*(std/R -1)
+            Cv2.Add(thresh, 1.0, thresh);               // thresh = 1 + k*(std/R -1)
+            Cv2.Multiply(mean, thresh, thresh);         // thresh = mean * (...)
+
+            // binarize: srcD > thresh -> 255 else 0
+            Mat bin = new Mat();
+            Cv2.Compare(srcD, thresh, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
+            bin.ConvertTo(bin, MatType.CV_8UC1, 255.0);  // ensure 0/255
+
+            // Clean-up mats
+            srcD.Dispose(); mean.Dispose(); sq.Dispose(); meanSq.Dispose(); std.Dispose(); thresh.Dispose();
+
+            return bin;
+        }
+
+        private void SauvolaBinarize()
+        {
+            using var binMat = BinarizeForHandwritten(_currentImage);
+
+            Mat bin8;
+            if (binMat.Type() != MatType.CV_8UC1)
+            {
+                bin8 = new Mat();
+                binMat.ConvertTo(bin8, MatType.CV_8UC1);
+            }
+            else
+            {
+                bin8 = binMat.Clone(); // сделаем клон, чтобы безопасно Dispose оригинала ниже
+            }
+
+
+
+            var colorMat = new Mat();
+            Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
+
+
+
+            try
+            {
+                var old = _currentImage;
+                _currentImage = colorMat; // теперь _currentImage — CV_8UC3, готово для MatToBitmapSource
+                old?.Dispose();
+            }
+            finally
+            {
+                // освобождаем временные буферы
+                bin8.Dispose();
+                if (!ReferenceEquals(binMat, bin8)) binMat.Dispose(); // если binMat был клоном — уже освобождён, но safe-guard
+            }
+
+        }
+
+
+
+        public static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 3.0, OpenCvSharp.Size claheGrid = default,
+                                             int sauvolaWindow = 25, double sauvolaK = 0.34, int morphRadius = 1)
+        {
+            if (claheGrid == default) claheGrid = new OpenCvSharp.Size(8, 8);
+            Mat gray = src;
+            if (src.Type() != MatType.CV_8UC1)
+            {
+                gray = new Mat();
+                Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+            }
+            Mat pre = gray;
+            if (useClahe)
+            {
+                var clahe = Cv2.CreateCLAHE(claheClip, claheGrid);
+                pre = new Mat();
+                clahe.Apply(gray, pre);
+                clahe.Dispose();
+                if (!ReferenceEquals(gray, src)) gray.Dispose();
+            }
+
+            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, R: 128.0);
+
+            // optional morphological cleaning (open to remove small noise, close to fill holes)
+            if (morphRadius > 0)
+            {
+                var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * morphRadius + 1, 2 * morphRadius + 1));
+                var cleaned = new Mat();
+                Cv2.MorphologyEx(bin, cleaned, MorphTypes.Open, kernel);
+                Cv2.MorphologyEx(cleaned, bin, MorphTypes.Close, kernel);
+                kernel.Dispose();
+                cleaned.Dispose();
+            }
+
+            if (!ReferenceEquals(pre, gray) && pre != src) pre.Dispose();
+            if (gray != src && gray != pre) gray.Dispose();
+
+            return bin;
         }
     }
 }

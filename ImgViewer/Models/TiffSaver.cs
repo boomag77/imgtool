@@ -16,10 +16,16 @@ public enum TiffCompression
 
 namespace ImgViewer.Models
 {
-    public class TiffSaver
+    public class TiffSaver :IDisposable
     {
+
+
+        public void Dispose()
+        {
+            // nothing to dispose
+        }
         // public entry point
-        public void SaveTiff1(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true)
+        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
@@ -129,6 +135,13 @@ namespace ImgViewer.Models
                     }
                 }
 
+                //const byte threshold = 128; // можно выбрать другое значение или сделать параметром
+                //byte[] bin = new byte[width * height];
+                //for (int i = 0; i < bin.Length; i++)
+                //    bin[i] = (gray[i] > threshold) ? (byte)255 : (byte)0;
+
+                //return bin;
+
                 // compute Otsu threshold
                 byte thresh = ComputeOtsuThreshold(gray);
                 // binarize
@@ -142,6 +155,8 @@ namespace ImgViewer.Models
                 converted.UnlockBits(data);
             }
         }
+
+        
 
         // Otsu implementation
         private static byte ComputeOtsuThreshold(byte[] gray)
