@@ -1,10 +1,7 @@
-﻿
-using System.IO;
-
-namespace ImgViewer.Models
+﻿namespace ImgViewer.Models
 {
 
-    
+
 
     public class SourceImageFolder
     {

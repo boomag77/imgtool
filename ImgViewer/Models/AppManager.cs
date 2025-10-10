@@ -1,9 +1,6 @@
-﻿using OpenCvSharp.ML;
-using System.Windows.Media;
-using System.Windows;
-using ImgViewer.Interfaces;
-using System.Web.UI.WebControls.WebParts;
+﻿using ImgViewer.Interfaces;
 using System.Diagnostics;
+using System.Windows.Media;
 
 namespace ImgViewer.Models
 {
@@ -79,7 +76,7 @@ namespace ImgViewer.Models
             {
                 ProcessorCommands.Binarize,
             };
-            var workerPool = new ImgWorkerPool(_cts, commands, 1, _fileProcessor, sourceFolder, 0);
+            var workerPool = new ImgWorkerPool(_cts, commands, 0, sourceFolder, 0);
             try
             {
                 await workerPool.RunAsync();

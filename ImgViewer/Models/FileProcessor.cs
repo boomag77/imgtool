@@ -6,7 +6,7 @@ using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
-    internal class FileProcessor : IFileProcessor
+    internal class FileProcessor : IFileProcessor, IDisposable
     {
         private CancellationToken _token;
 
@@ -18,6 +18,10 @@ namespace ImgViewer.Models
             _token = token;
         }
 
+        public void Dispose()
+        {
+            // Dispose of unmanaged resources here if needed
+        }
 
         public byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null)
         {
@@ -89,7 +93,7 @@ namespace ImgViewer.Models
                 if (decodePixelWidth.HasValue)
                     settings.Width = decodePixelWidth.Value;
 
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan))
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
                 using (var image = new MagickImage(fs, settings))
                 {
                     image.AutoOrient();
@@ -104,26 +108,31 @@ namespace ImgViewer.Models
                                 uint stride = width * bytesPerPixel;
 
                                 PixelMapping pixelMapping = bytesPerPixel == 4 ? PixelMapping.BGRA : PixelMapping.BGR;
-                                byte[]? pixelData = image.GetPixels().ToByteArray(0, 0, width, height, pixelMapping);
-
-
-
-                                var bmpSource = BitmapSource.Create((int)width, (int)height, 96, 96,
-                                    bytesPerPixel == 4 ? System.Windows.Media.PixelFormats.Bgra32 : System.Windows.Media.PixelFormats.Bgr24,
-                                    null, pixelData, (int)stride);
-
-
-                                bmpSource.Freeze(); // чтобы можно было безопасно шарить BitmapImage между потоками
-                                byte[] bmpBytes;
-                                using (var ms = new MemoryStream())
+                                using (var pixels = image.GetPixels())
                                 {
-                                    BitmapEncoder encoder = new BmpBitmapEncoder();
-                                    encoder.Frames.Add(BitmapFrame.Create(bmpSource));
-                                    encoder.Save(ms);
-                                    bmpBytes = ms.ToArray();
-                                }
+                                    byte[]? pixelData = pixels.ToByteArray(0, 0, width, height, pixelMapping);
 
-                                return ((T)(object)bmpSource, bmpBytes);
+
+
+                                    var bmpSource = BitmapSource.Create((int)width, (int)height, 96, 96,
+                                        bytesPerPixel == 4 ? System.Windows.Media.PixelFormats.Bgra32 : System.Windows.Media.PixelFormats.Bgr24,
+                                        null, pixelData, (int)stride);
+
+
+                                    bmpSource.Freeze();
+
+                                    byte[] bmpBytes;
+                                    using (var ms = new MemoryStream())
+                                    {
+                                        BitmapEncoder encoder = new BmpBitmapEncoder();
+                                        encoder.Frames.Add(BitmapFrame.Create(bmpSource));
+                                        encoder.Save(ms);
+                                        bmpBytes = ms.ToArray();
+                                    }
+
+                                    return ((T)(object)bmpSource, bmpBytes);
+                                }
+                                    
                             }
 
                         default:
