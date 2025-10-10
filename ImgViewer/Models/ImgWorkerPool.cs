@@ -1,6 +1,10 @@
 ﻿using ImgViewer.Interfaces;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
+using System.Threading;
+using System.Windows.Media;
 
 namespace ImgViewer.Models
 {
@@ -8,7 +12,7 @@ namespace ImgViewer.Models
     {
         private readonly BlockingCollection<string> _filesQueue;
         private readonly CancellationTokenSource _cts;
-        private readonly IImageProcessorFactory _processorFactory;
+        private readonly IImageProcessor _imageProcessor;
         private readonly IFileProcessor _fileExplorer;
         private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
@@ -24,17 +28,15 @@ namespace ImgViewer.Models
         public ImgWorkerPool(CancellationTokenSource cts,
                              ProcessorCommands[] commandsQueue,
                              int maxWorkersCount,
-                             IImageProcessorFactory processorFactory,
                              IFileProcessor fileExplorer,
                              SourceImageFolder sourceFolder,
                              int maxFilesQueue = 0)
         {
             _cts = cts;
             _fileExplorer = fileExplorer;
-            _processorFactory = processorFactory;
             _sourceFolder = sourceFolder;
 
-            _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
+            _outputFolder = Path.Combine(_sourceFolder.Path, "Processed_1");
             Directory.CreateDirectory(_outputFolder);
             _commandsQueue = commandsQueue;
 
@@ -69,49 +71,87 @@ namespace ImgViewer.Models
         /// <summary>
         /// Один воркер: берёт файлы и обрабатывает
         /// </summary>
+        /// 
+
+        private ImageSource? LoadImage(string imagePath)
+        {
+            //var (bmpImage, _) = _fileExplorer.Load<ImageSource>(imagePath);
+            var bmpImage = _fileExplorer.LoadTemp(imagePath);
+            return bmpImage;
+        }
+
         private void Worker(IImageProcessor proc)
         {
-            foreach (var filePath in _filesQueue.GetConsumingEnumerable(_cts.Token))
+            try
             {
-                try
+                foreach (var filePath in _filesQueue.GetConsumingEnumerable(_cts.Token))
                 {
-                    if (_cts.IsCancellationRequested)
-                        break;
-
-                    // Загружаем картинку
-                    //using var inputStream = new MemoryStream();
-                    //_fileExplorer.Load(filePath, inputStream);
-
-
-                    // Устанавливаем картинку в процессор
-                    proc.Load(filePath);
-
-
-                    // Применяем команды
-                    foreach (var command in _commandsQueue)
+                    try
                     {
+                        if (_cts.IsCancellationRequested)
+                            break;
 
-                        proc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
+                        // Загружаем картинку
+                        //using var inputStream = new MemoryStream();
+                        //_fileExplorer.Load(filePath, inputStream);
+
+
+                        // Устанавливаем картинку в процессор
+                        proc.CurrentImage = LoadImage(filePath);
+
+
+
+
+                        // Применяем команды
+                        foreach (var command in _commandsQueue)
+                        {
+
+                            proc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
+                        }
+
+                        // Сохраняем результат
+                        //var outputDir = Path.Combine(_sourceFolder.Path, "Processed");
+                        //Directory.CreateDirectory(_outputFolder);
+
+                        var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
+                        var outputFilePath = Path.Combine(_outputFolder, fileName);
+                        //proc.SaveCurrentImage(outputFilePath);
+                        using (var outStream = proc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
+                        {
+                            using (var ms = new MemoryStream())
+                            {
+                                if (outStream.CanSeek) outStream.Position = 0;
+                                outStream.CopyTo(ms);
+                                ms.Position = 0;
+                                _fileExplorer.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true);
+                            }
+                        }
+
+                        //var ms = new MemoryStream();
+                        //outStream.CopyTo(ms);
+                        //Debug.WriteLine($"Stream length: {outStream.Length}");
+
+
+
+
+                        Interlocked.Increment(ref _processedCount);
+                        ProgressChanged?.Invoke(_processedCount, _totalCount);
+
+
+                    }
+                    catch (Exception ex)
+                    {
+                        ErrorOccured?.Invoke($"Error processing (Worker) {filePath}: {ex.Message}");
                     }
 
-                    // Сохраняем результат
-                    //var outputDir = Path.Combine(_sourceFolder.Path, "Processed");
-                    //Directory.CreateDirectory(_outputFolder);
-
-                    var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
-                    var outputFilePath = Path.Combine(_outputFolder, fileName);
-                    //proc.SaveCurrentImage(outputFilePath);
-
-                    Interlocked.Increment(ref _processedCount);
-                    ProgressChanged?.Invoke(_processedCount, _totalCount);
-
                 }
-                catch (Exception ex)
-                {
-                    ErrorOccured?.Invoke($"Error processing {filePath}: {ex.Message}");
-                }
-
             }
+            finally
+            {
+                if (proc is IDisposable disposableProc)
+                    disposableProc.Dispose();
+            }
+
         }
 
         /// <summary>
@@ -123,8 +163,7 @@ namespace ImgViewer.Models
 
             for (int i = 0; i < _workersCount; i++)
             {
-                //var proc = _processorFactory.CreateProcessor(ImageProcessorType.Leadtools);
-                var proc = _processorFactory.CreateProcessor(ImageProcessorType.OpenCV);
+                var proc = new OpenCVImageProcessor(null, _cts.Token);
                 tasks.Add(Task.Run(() => Worker(proc), _cts.Token));
             }
 

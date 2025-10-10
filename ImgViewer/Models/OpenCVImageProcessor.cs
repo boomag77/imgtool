@@ -1,37 +1,139 @@
 ﻿using ImgViewer.Interfaces;
 using OpenCvSharp;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
     public class OpenCVImageProcessor : IImageProcessor, IDisposable
     {
-        private byte[] _bmpBytes;
         private Mat _currentImage;
         private Scalar _pageColor;
         private Scalar _borderColor;
         private readonly IAppManager _appManager;
 
-        public byte[] BmpBytes
+        public ImageSource CurrentImage
         {
             set
-            {
-                if (value.Length == 0) return;
-                _bmpBytes = value;
-                using var ms = new MemoryStream(_bmpBytes);
-                _currentImage = Mat.FromStream(ms, ImreadModes.Color);
+                {
+                using var mat = BitmapSourceToMat((BitmapSource)value);
+                if (mat == null || mat.Empty()) return;
+                _currentImage = mat.Clone();
+
             }
         }
+
 
         public OpenCVImageProcessor(IAppManager appManager, CancellationToken token)
         {
             _appManager = appManager;
-            //throw new NotImplementedException();
         }
 
+        private Mat BitmapSourceToMat(BitmapSource src)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+
+            // Нормализуем формат: убираем premultiplied alpha и приводим к удобному формату
+            if (src.Format == PixelFormats.Pbgra32)
+                src = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+
+            PixelFormat copyFormat;
+            bool viewIsBGRA = false;
+
+            if (src.Format == PixelFormats.Bgr24)
+                copyFormat = PixelFormats.Bgr24;
+            else if (src.Format == PixelFormats.Bgra32)
+            {
+                copyFormat = PixelFormats.Bgra32;
+                viewIsBGRA = true;
+            }
+            else if (src.Format == PixelFormats.Gray8)
+                copyFormat = PixelFormats.Gray8;
+            else
+                copyFormat = PixelFormats.Bgr24; // fallback: WPF сделает конвертацию
+
+            if (src.Format != copyFormat)
+                src = new FormatConvertedBitmap(src, copyFormat, null, 0);
+
+            int w = src.PixelWidth;
+            int h = src.PixelHeight;
+            if (w == 0 || h == 0) return new Mat();
+
+            int stride = (w * copyFormat.BitsPerPixel + 7) / 8;
+            long total = (long)stride * h;
+            if (total > int.MaxValue) throw new NotSupportedException("Image too large");
+
+            int byteCount = (int)total;
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
+            GCHandle? handle = null;
+
+            try
+            {
+                src.CopyPixels(buffer, stride, 0);
+
+                // pin buffer short-lived, создать Mat view и совершить Clone/CvtColor
+                handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+                IntPtr ptr = handle.Value.AddrOfPinnedObject();
+
+                Mat result = CreateMatFromBuffer(buffer, w, h, stride, copyFormat);
+
+
+                return result;
+            }
+            finally
+            {
+                if (handle.HasValue && handle.Value.IsAllocated) handle.Value.Free();
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        private Mat CreateMatFromBuffer(byte[] buffer, int width, int height, int srcStride, PixelFormat copyFormat)
+        {
+            if (copyFormat == PixelFormats.Bgr24)
+            {
+                var mat = new Mat(height, width, MatType.CV_8UC3);
+                IntPtr dstPtr = mat.Data;
+                int dstStride = (int)mat.Step();
+                int copyRowBytes = Math.Min(width * 3, srcStride);
+                for (int r = 0; r < height; r++)
+                    Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
+                return mat;
+            }
+
+            if (copyFormat == PixelFormats.Bgra32)
+            {
+                using var mat4 = new Mat(height, width, MatType.CV_8UC4);
+                IntPtr dstPtr = mat4.Data;
+                int dstStride = (int)mat4.Step();
+                int copyRowBytes = Math.Min(width * 4, srcStride);
+                for (int r = 0; r < height; r++)
+                    Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
+
+                var result = new Mat();
+                Cv2.CvtColor(mat4, result, ColorConversionCodes.BGRA2BGR);
+                return result;
+            }
+
+            if (copyFormat == PixelFormats.Gray8)
+            {
+                using var mat1 = new Mat(height, width, MatType.CV_8UC1);
+                IntPtr dstPtr = mat1.Data;
+                int dstStride = (int)mat1.Step();
+                int copyRowBytes = Math.Min(width, srcStride);
+                for (int r = 0; r < height; r++)
+                    Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
+
+                var result = new Mat();
+                Cv2.CvtColor(mat1, result, ColorConversionCodes.GRAY2BGR);
+                return result;
+            }
+
+            throw new NotSupportedException("Unsupported PixelFormat");
+        }
 
 
         public void Dispose()
@@ -48,7 +150,8 @@ namespace ImgViewer.Models
             //throw new NotImplementedException();
             try
             {
-                _currentImage = Cv2.ImRead(path, ImreadModes.Color);
+                //_currentImage = Cv2.ImRead(path, ImreadModes.Color);
+                
                 //BitmapSource bmpSource = MatToBitmapSource(_currentImage);
                 //ImageUpdated?.Invoke(BitmapSourceToStream(bmpSource));
             }
@@ -61,10 +164,6 @@ namespace ImgViewer.Models
 
         }
 
-        public void SaveImageFax()
-        {
-
-        }
 
         public Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
@@ -280,9 +379,9 @@ namespace ImgViewer.Models
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        Binarize(200);
+                        //Binarize(200);
                         //BinarizeAdaptive();
-                        //SauvolaBinarize();
+                        SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
                         Deskew();
@@ -314,6 +413,7 @@ namespace ImgViewer.Models
         {
             if (_currentImage != null)
             {
+                if (_appManager == null) return;
                 _appManager.SetBmpImageOnPreview(MatToBitmapSource(_currentImage));
             }
         }
@@ -408,7 +508,7 @@ namespace ImgViewer.Models
             return src;
         }
 
-        private void BinarizeAdaptive(int? blockSize = null, double C = 7, bool useGaussian = false, bool invert = false)
+        private void BinarizeAdaptive(int? blockSize = null, double C = 5, bool useGaussian = true, bool invert = false)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
@@ -440,8 +540,8 @@ namespace ImgViewer.Models
             Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, C);
 
             // 5) опционально: морфология небольшая (убрать шум/скрепить буквы) — можно раскомментировать при желании
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
-            Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: 3);
+            //using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
+            //Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: 3);
 
             using var color = new Mat();
             Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
@@ -1668,8 +1768,8 @@ namespace ImgViewer.Models
 
 
 
-        public static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 3.0, OpenCvSharp.Size claheGrid = default,
-                                             int sauvolaWindow = 25, double sauvolaK = 0.34, int morphRadius = 1)
+        public static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, OpenCvSharp.Size claheGrid = default,
+                                             int sauvolaWindow = 35, double sauvolaK = 0.34, int morphRadius = 0)
         {
             if (claheGrid == default) claheGrid = new OpenCvSharp.Size(8, 8);
             Mat gray = src;
@@ -1688,7 +1788,7 @@ namespace ImgViewer.Models
                 if (!ReferenceEquals(gray, src)) gray.Dispose();
             }
 
-            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, R: 128.0);
+            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, R: 180.0);
 
             // optional morphological cleaning (open to remove small noise, close to fill holes)
             if (morphRadius > 0)

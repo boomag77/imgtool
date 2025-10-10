@@ -1,11 +1,6 @@
-﻿using BitMiracle.LibTiff.Classic;
-using ImageMagick;
-using ImageMagick.Formats;
+﻿using ImageMagick;
 using ImgViewer.Interfaces;
-using OpenCvSharp;
-using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -15,6 +10,7 @@ namespace ImgViewer.Models
     {
         private CancellationToken _token;
 
+
         public event Action<string> ErrorOccured;
 
         public FileProcessor(CancellationToken token)
@@ -22,121 +18,6 @@ namespace ImgViewer.Models
             _token = token;
         }
 
-        //public void Load(string path, Stream stream)
-        //{
-        //    try
-        //    {
-        //        using (var image = new MagickImage(path))
-        //        {
-        //            image.Format = MagickFormat.Png;
-        //            image.Write(stream);
-        //        }
-        //        if (stream.CanSeek)
-        //        {
-        //            stream.Position = 0;
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
-        //    }
-        //}
-
-        //public T? Load<T>(string path, uint? decodePixelWidth = null) where T : class
-        //{
-        //    try
-        //    {
-        //        if (_token.IsCancellationRequested)
-        //        {
-        //            return null;
-        //        }
-        //        MagickReadSettings settings = new MagickReadSettings();
-        //        if (decodePixelWidth.HasValue)
-        //            settings.Width = decodePixelWidth.Value;
-
-        //        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan))
-        //        using (var image = new MagickImage(fs, settings))
-        //        {
-        //            switch (typeof(T))
-        //            {
-        //                case Type type when type == typeof(BitmapImage):
-        //                    byte[] bmpBytes = image.ToByteArray(MagickFormat.Bmp);
-        //                    using (var ms = new MemoryStream(bmpBytes))
-        //                    {
-        //                        //if (decodePixelWidth.HasValue)
-        //                        //{
-        //                        //    //image.Quality = 50;
-        //                        //    image.Write(ms, MagickFormat.Png);
-        //                        //}
-        //                        //else
-        //                        //{
-        //                        //    image.Write(ms, MagickFormat.Png);
-        //                        //}
-
-        //                        ms.Position = 0;
-        //                        var bitmap = new BitmapImage();
-        //                        bitmap.BeginInit();
-        //                        if (decodePixelWidth.HasValue)
-        //                        {
-        //                            //bitmap.DecodePixelWidth = (int)decodePixelWidth.Value;
-        //                            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-        //                        }
-
-        //                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        //                        bitmap.StreamSource = ms;
-        //                        bitmap.EndInit();
-        //                        bitmap.Freeze(); // чтобы можно было безопасно шарить BitmapImage между потоками
-        //                        return (T)(object)bitmap;
-        //                    }
-
-        //                case Type type when type == typeof(byte[]):
-        //                    return (T)(object)image.ToByteArray(MagickFormat.Png);
-        //                default:
-        //                    ErrorOccured?.Invoke($"Unsupported type requested while loading image {path}: {typeof(T).FullName}");
-        //                    return null;
-        //            }
-        //        }
-        //    }
-        //    catch (Exception _)
-        //    {
-        //        // === Fallback через WIC ===
-        //        try
-        //        {
-        //            if (_token.IsCancellationRequested)
-        //            {
-        //                return null;
-        //            }
-        //            if (typeof(T) == typeof(BitmapImage))
-        //            {
-        //                var bitmap = new BitmapImage();
-        //                bitmap.BeginInit();
-        //                bitmap.UriSource = new Uri(path, UriKind.Absolute);
-        //                if (decodePixelWidth.HasValue)
-        //                {
-        //                    bitmap.DecodePixelWidth = (int)decodePixelWidth.Value;
-        //                    bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-        //                }
-
-        //                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-
-        //                bitmap.EndInit();
-        //                bitmap.Freeze();
-        //                return (T)(object)bitmap;
-        //            }
-        //            else
-        //            {
-        //                ErrorOccured?.Invoke($"Fallback WIC supports only BitmapImage, requested: {typeof(T).FullName}");
-        //                return null;
-        //            }
-        //        }
-        //        catch (Exception ex2)
-        //        {
-        //            ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
-        //            return null;
-        //        }
-        //    }
-
-        //}
 
         public byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null)
         {
@@ -163,8 +44,40 @@ namespace ImgViewer.Models
             }
         }
 
-        public (T?, byte[]?) Load<T>(string path, uint? decodePixelWidth = null) where T : class
+        public BitmapSource? LoadTemp(string path)
         {
+            try
+            {
+                if (_token.IsCancellationRequested)
+                {
+                    return null;
+                }
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+
+                bitmap.EndInit();
+                bitmap.Freeze();
+
+
+                return bitmap;
+            }
+            catch (Exception ex2)
+            {
+                ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
+                return null;
+            }
+        }
+
+
+        public (T?, byte[]) Load<T>(string path, uint? decodePixelWidth = null) where T : class
+        {
+
+            //_magickSemaphore.Wait(_token);
+
             try
             {
                 if (_token.IsCancellationRequested)
@@ -172,6 +85,7 @@ namespace ImgViewer.Models
                     return (null, null);
                 }
                 MagickReadSettings settings = new MagickReadSettings();
+                
                 if (decodePixelWidth.HasValue)
                     settings.Width = decodePixelWidth.Value;
 
@@ -182,7 +96,7 @@ namespace ImgViewer.Models
                     switch (typeof(T))
                     {
                         case Type type when type == typeof(ImageSource):
-                            byte[] bmpBytes = image.ToByteArray(MagickFormat.Bmp);
+                            //byte[] bmpBytes = image.ToByteArray(MagickFormat.Bmp);
                             {
                                 uint width = image.Width;
                                 uint height = image.Height;
@@ -192,7 +106,7 @@ namespace ImgViewer.Models
                                 PixelMapping pixelMapping = bytesPerPixel == 4 ? PixelMapping.BGRA : PixelMapping.BGR;
                                 byte[]? pixelData = image.GetPixels().ToByteArray(0, 0, width, height, pixelMapping);
 
-                                
+
 
                                 var bmpSource = BitmapSource.Create((int)width, (int)height, 96, 96,
                                     bytesPerPixel == 4 ? System.Windows.Media.PixelFormats.Bgra32 : System.Windows.Media.PixelFormats.Bgr24,
@@ -200,11 +114,18 @@ namespace ImgViewer.Models
 
 
                                 bmpSource.Freeze(); // чтобы можно было безопасно шарить BitmapImage между потоками
+                                byte[] bmpBytes;
+                                using (var ms = new MemoryStream())
+                                {
+                                    BitmapEncoder encoder = new BmpBitmapEncoder();
+                                    encoder.Frames.Add(BitmapFrame.Create(bmpSource));
+                                    encoder.Save(ms);
+                                    bmpBytes = ms.ToArray();
+                                }
+
                                 return ((T)(object)bmpSource, bmpBytes);
                             }
 
-                        case Type type when type == typeof(byte[]):
-                            return ((T)(object)image.ToByteArray(MagickFormat.Png), []);
                         default:
                             ErrorOccured?.Invoke($"Unsupported type requested while loading image {path}: {typeof(T).FullName}");
                             return (null, null);
@@ -214,6 +135,7 @@ namespace ImgViewer.Models
             catch (Exception _)
             {
                 // === Fallback через WIC ===
+
                 try
                 {
                     if (_token.IsCancellationRequested)
@@ -235,7 +157,9 @@ namespace ImgViewer.Models
 
                         bitmap.EndInit();
                         bitmap.Freeze();
-                        return ((T)(object)bitmap, null);
+
+
+                        return ((T)(object)bitmap, []);
                     }
                     else
                     {
@@ -274,7 +198,7 @@ namespace ImgViewer.Models
             {
                 return;
             }
-            using var tiffSaver = new TiffSaver();
+            using var tiffSaver = new TiffWriter();
             tiffSaver.SaveTiff(stream, path, compression, dpi, overwrite);
         }
 
@@ -284,17 +208,6 @@ namespace ImgViewer.Models
             for (int i = 0; i < bin.Length; i++)
                 bin[i] = (byte)(bin[i] == 0 ? 255 : 0);
         }
-        //public void Load(string path, Stream stream)
-        //{
-        //    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-        //    {
-        //        fs.CopyTo(stream);
-        //    }
-        //    if (stream.CanSeek)
-        //    {
-        //        stream.Position = 0;
-        //    }
-        //}
 
         public void Save(Stream stream, string path)
         {
@@ -341,7 +254,6 @@ namespace ImgViewer.Models
                                                 file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||   // если хочешь PNG тоже
                                                 file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
                                                 file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
-                                        .Take(100)
                                         .ToArray()
             };
 

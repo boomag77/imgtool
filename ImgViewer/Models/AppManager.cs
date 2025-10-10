@@ -33,9 +33,10 @@ namespace ImgViewer.Models
             Dispose();
         }
 
-        public async Task SetImageForProcessing(byte[] bmpBytes)
+        public async Task SetImageForProcessing(ImageSource bmp)
         {
-            _imageProcessor.BmpBytes = bmpBytes;
+
+            _imageProcessor.CurrentImage = bmp;
         }
 
         public async Task SetBmpImageOnPreview(ImageSource bmp)
@@ -51,9 +52,9 @@ namespace ImgViewer.Models
         {
             _mainViewModel.CurrentImagePath = imagePath;
             _mainViewModel.Status = $"Loading image preview...";
-            var (bmpImage, bmpBytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
+            var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
             await SetBmpImageOnPreview(bmpImage);
-            await SetImageForProcessing(bmpBytes);
+            await SetImageForProcessing(bmpImage);
             _mainViewModel.Status = $"Standby";
         }
 
@@ -69,6 +70,25 @@ namespace ImgViewer.Models
             var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
             Debug.WriteLine($"Stream length: {stream.Length}");
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
+        }
+
+        public async void ProcessFolder(string srcFolder)
+        {
+            var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
+            ProcessorCommands[] commands =
+            {
+                ProcessorCommands.Binarize,
+            };
+            var workerPool = new ImgWorkerPool(_cts, commands, 1, _fileProcessor, sourceFolder, 0);
+            try
+            {
+                await workerPool.RunAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                //StatusText.Text = "Cancelled";
+
+            }
         }
 
         public void Dispose()

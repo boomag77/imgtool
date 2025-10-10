@@ -1,11 +1,12 @@
 ﻿using System.IO;
+using System.Windows.Media;
 
 namespace ImgViewer.Interfaces
 {
     public interface IImageProcessor
     {
-
-        public byte[] BmpBytes { set; }
+        
+        public ImageSource CurrentImage { set; }
 
         void Load(string path);
 

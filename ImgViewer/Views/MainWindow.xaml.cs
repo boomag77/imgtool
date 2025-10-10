@@ -421,50 +421,50 @@ namespace ImgViewer.Views
             _processor.ApplyCommandToCurrent(ProcessorCommands.DotsRemove, new Dictionary<string, object>());
         }
 
-        private async void ProcessFolderClick(object sender, RoutedEventArgs e)
+        private void ProcessFolderClick(object sender, RoutedEventArgs e)
         {
-            //var dlg = new System.Windows.Forms.FolderBrowserDialog();
-            //if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            //{
-            //    string folderPath = dlg.SelectedPath;
-            //    ProcessorCommands[] commands =
-            //    {
-            //        ProcessorCommands.Binarize,
-            //        ProcessorCommands.Deskew,
+            var dlg = new System.Windows.Forms.FolderBrowserDialog();
+            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                string folderPath = dlg.SelectedPath;
+                ProcessorCommands[] commands =
+                {
+                    ProcessorCommands.Binarize,
+                };
+                var token = _cts.Token;
+                var fileExplorer = new FileProcessor(token);
+                var imgProcessor = new OpenCVImageProcessor(_manager, token);
+                var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
+                _manager.ProcessFolder(folderPath);
 
+                //var workerPool = new ImgWorkerPool(_cts, commands, 1, imgProcessor, fileExplorer, sourceFolder, 0);
+                //StatusText.Text = "Processing...";
+                //await Task.Yield();
+                //workerPool.ProgressChanged += (done, total) =>
+                //{
+                //    Dispatcher.InvokeAsync(() =>
+                //    {
+                //        MyProgressBar.Maximum = total;
+                //        MyProgressBar.Value = done;
+                //    });
+                //};
+                //workerPool.ErrorOccured += (msg) =>
+                //{
+                //    Dispatcher.InvokeAsync(() =>
+                //    {
+                //        System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                //    });
+                //};
+                //try
+                //{
+                //    await workerPool.RunAsync();
+                //}
+                //catch (OperationCanceledException)
+                //{
+                //    StatusText.Text = "Cancelled";
 
-            //        ProcessorCommands.DotsRemove
-            //    };
-            //    var fileExplorer = new FileExplorer(_cts.Token);
-            //    var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
-            //    var workerPool = new ImgWorkerPool(_cts, commands, 1, _factory, fileExplorer, sourceFolder, 0);
-            //    StatusText.Text = "Processing...";
-            //    await Task.Yield();
-            //    workerPool.ProgressChanged += (done, total) =>
-            //    {
-            //        Dispatcher.InvokeAsync(() =>
-            //        {
-            //            MyProgressBar.Maximum = total;
-            //            MyProgressBar.Value = done;
-            //        });
-            //    };
-            //    workerPool.ErrorOccured += (msg) =>
-            //    {
-            //        Dispatcher.InvokeAsync(() =>
-            //        {
-            //            System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            //        });
-            //    };
-            //    try
-            //    {
-            //        await workerPool.RunAsync();
-            //    }
-            //    catch (OperationCanceledException)
-            //    {
-            //        StatusText.Text = "Cancelled";
-
-            //    }
-            //}
+                //}
+            }
             //StatusText.Text = "Ready";
             //MyProgressBar.Value = 0;
         }

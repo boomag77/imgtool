@@ -16,7 +16,7 @@ public enum TiffCompression
 
 namespace ImgViewer.Models
 {
-    public class TiffSaver :IDisposable
+    public class TiffWriter :IDisposable
     {
 
 
