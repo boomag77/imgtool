@@ -1,22 +1,22 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using System.Diagnostics;
-using System.Windows.Controls.Primitives;
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
     internal class TiffReader
     {
-        public struct TiffImageInfo
+        private struct TiffImageInfo
         {
             public int Width;
             public int Height;
-            public int SamplesPerPixel;
-            public int BitsPerSample;
-            public int Compression;
-            public byte[] RasterData;
+            public int PhotoMetric;
+            public byte[] Data;
         }
 
-        public async Task<byte[]?> ReadTiff(string filePath)
+        private static async Task<TiffImageInfo?> ReadTiff(string filePath)
         {
             using (Tiff tiff = Tiff.Open(filePath, "r"))
             {
@@ -32,7 +32,7 @@ namespace ImgViewer.Models
                 int photoMetric = tiff.GetField(TiffTag.PHOTOMETRIC)[0].ToInt();
                 int fillOrder = tiff.GetField(TiffTag.FILLORDER)[0].ToInt();
                 int planarConfig = tiff.GetField(TiffTag.PLANARCONFIG)[0].ToInt();
-                int orientation = tiff.GetField(TiffTag.ORIENTATION)[0].ToInt();
+                //int? orientation = tiff.GetField(TiffTag.ORIENTATION)[0].ToInt();
                 int rowsPerStrip = tiff.GetField(TiffTag.ROWSPERSTRIP)[0].ToInt();
                 int resolutionUnit = tiff.GetField(TiffTag.RESOLUTIONUNIT)[0].ToInt();
                 float xResolution = tiff.GetField(TiffTag.XRESOLUTION)[0].ToFloat();
@@ -48,17 +48,24 @@ namespace ImgViewer.Models
                 switch (compression)
                 {
                     case (int)TiffCompression.None:
-                        await Task.Run(() =>
-                            raster = ExtractUncompressed(tiff, width, height));
-                        return raster;
+                        //await Task.Run(() =>
+                            //raster = ExtractUncompressed(tiff, width, height));
+                        break;
 
                     case (int)TiffCompression.CCITTG3:
                         Console.WriteLine("CCITT Group 3 compression");
                         break;
                     case (int)TiffCompression.CCITTG4:
                         {
-                            return await Task.Run(() =>
-                                raster = ExtractCcittRaw(tiff, width, height));
+                            var data = await Task.Run(() =>
+                                ExtractCcittRaw(tiff, width, height));
+                            return new TiffImageInfo
+                            {
+                                Width = width,
+                                Height = height,
+                                PhotoMetric = photoMetric,
+                                Data = data
+                            };
                         }
                     case (int)TiffCompression.JPEG:
 
@@ -78,15 +85,15 @@ namespace ImgViewer.Models
                         break;
                 }
 
-                
+
 
             }
             return null;
         }
 
-        private byte[] ExtractUncompressed(Tiff image, int width, int height)
+        private static byte[] ExtractUncompressed(Tiff image, int width, int height)
         {
-            
+
             return [];
         }
 
@@ -110,7 +117,7 @@ namespace ImgViewer.Models
             return ExtractUncompressed(image, width, height);
         }
 
-        private byte[] ExtractCcittRaw(Tiff image, int width, int height)
+        private static byte[] ExtractCcittRaw(Tiff image, int width, int height)
         {
 
             var stripsCount = image.NumberOfStrips();
@@ -134,9 +141,58 @@ namespace ImgViewer.Models
                 image.ReadRawStrip(i, buffer, offset, stripSize);
                 offset += stripSize;
             }
-            
+
             return buffer;
 
+        }
+
+        public static ImageSource? LoadImageSourceFromTiff(string filePath)
+        {
+            var tiffInfo = ReadTiff(filePath).Result;
+            if (tiffInfo == null)
+                return null;
+            var rawData = tiffInfo.Value.Data;
+            if (rawData.Length == 0)
+                return null;
+            return CcittRawToImageSource(rawData, tiffInfo.Value.Width, tiffInfo.Value.Height, tiffInfo.Value.PhotoMetric);
+
+        }
+
+        private static ImageSource CcittRawToImageSource(byte[] ccittData, int width, int height, int photoMetric)
+        {
+            MemoryStream resultStream;
+            using (var temp = new MemoryStream())
+            {
+                using (var output = Tiff.ClientOpen("in-memory", "w", temp, new TiffStream()))
+                {
+                    output.SetField(TiffTag.IMAGEWIDTH, width);
+                    output.SetField(TiffTag.IMAGELENGTH, height);
+                    output.SetField(TiffTag.COMPRESSION, Compression.CCITTFAX4);
+                    output.SetField(TiffTag.BITSPERSAMPLE, 1);
+                    output.SetField(TiffTag.SAMPLESPERPIXEL, 1);
+                    output.SetField(TiffTag.PHOTOMETRIC, photoMetric);
+                    output.SetField(TiffTag.FILLORDER, FillOrder.MSB2LSB);
+                    output.SetField(TiffTag.ROWSPERSTRIP, height);
+
+                    output.WriteRawStrip(0, ccittData, ccittData.Length);
+                    output.WriteDirectory();
+                }
+                resultStream = new MemoryStream(temp.ToArray());
+            }
+
+           
+
+            // теперь ms содержит полноценный TIFF
+            resultStream.Position = 0;
+
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.StreamSource = resultStream;
+            bmp.EndInit();
+            bmp.Freeze();
+
+            return bmp;
         }
     }
 }

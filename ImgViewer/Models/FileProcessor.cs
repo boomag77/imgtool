@@ -81,6 +81,18 @@ namespace ImgViewer.Models
         {
 
             //_magickSemaphore.Wait(_token);
+            //return ((T)(object)TiffReader.LoadImageSourceFromTiff(path), null);
+            string extension = Path.GetExtension(path).ToLowerInvariant();
+            if (extension == ".tif" || extension == ".tiff")
+            {
+                // Try to load TIFF via LibTiff
+                var bmp = TiffReader.LoadImageSourceFromTiff(path);
+                if (bmp != null)
+                {
+                    return ((T)(object)bmp, []);
+                }
+                // If failed, fallback to Magick.NET
+            }
 
             try
             {
