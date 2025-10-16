@@ -86,7 +86,7 @@ namespace ImgViewer.Models
             if (extension == ".tif" || extension == ".tiff")
             {
                 // Try to load TIFF via LibTiff
-                var bmp = TiffReader.LoadImageSourceFromTiff(path);
+                var bmp = TiffReader.LoadImageSourceFromTiff(path).GetAwaiter().GetResult();
                 if (bmp != null)
                 {
                     return ((T)(object)bmp, []);
