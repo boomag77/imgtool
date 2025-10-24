@@ -384,16 +384,25 @@ namespace ImgViewer.Models
                         SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
-                        Deskew();
+
+                        NewDeskew();
+                        //Deskew();
                         break;
                     case ProcessorCommands.BorderRemove:
-                        Debug.WriteLine("ApplyCommandToCurrent: BorderRemove");
-                        RemoveBordersByRowColWhite(threshFrac: 0.25, contrastThr: 20, centralSample: 0.50, maxRemoveFrac: 0.25);
+                        BordersDeskew();
+                        //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
+                        //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
+                        //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
+                        //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
+                        //либо используйте более устойчивую выборку(несколько областей).
+                        //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
+                        RemoveBordersByRowColWhite(threshFrac: 0.40, contrastThr: 12, centralSample: 0.10, maxRemoveFrac: 0.45);
                         break;
                     case ProcessorCommands.Despeckle:
                         //applyDespeckleCurrent();
                         break;
                     case ProcessorCommands.AutoCropRectangle:
+                        AutoCrop();
                         //applyAutoCropRectangleCurrent();
                         break;
                     case ProcessorCommands.LineRemove:
@@ -407,6 +416,19 @@ namespace ImgViewer.Models
                 }
                 updateImagePreview();
             }
+        }
+
+        private void AutoCrop()
+        {
+
+            //var cropped = Cropper.AutoCropMixedText(_currentImage);
+            string eastPath = Path.Combine(AppContext.BaseDirectory, "Models", "frozen_east_text_detection.pb");
+            string tessData = Path.Combine(AppContext.BaseDirectory, "tessdata");
+            string tessLang = "eng"; // или "eng"
+            var cropper = new TextAwareCropper(eastPath, tessData, tessLang);
+            var cropped = cropper.CropKeepingText(_currentImage);
+            _currentImage = cropped;
+            updateImagePreview();
         }
 
         private void updateImagePreview()
@@ -691,11 +713,20 @@ namespace ImgViewer.Models
 
             // Применяем заливку белым (in-place в новом Mat)
             Mat result = srcBgr.Clone();
-            Scalar white = new Scalar(255, 255, 255);
-            if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
-            if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
-            if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
-            if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
+            //Scalar white = new Scalar(255, 255, 255);
+            //if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
+            //if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
+            //if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
+            //if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
+
+            // trying to crop instead of fill
+            int row0 = top;
+            int row1 = h - bottom;
+            int col0 = left;
+            int col1 = w - right;
+            if (row1 <= row0 || col1 <= col0) return;
+            result = srcBgr.RowRange(row0, row1).ColRange(col0, col1).Clone();
+
 
             // Заменяем поле _currentImage на result (освобождая прежний Mat)
             var old = _currentImage;
@@ -741,23 +772,36 @@ namespace ImgViewer.Models
             return (list[mid - 1] + list[mid]) / 2;
         }
 
+        public void NewDeskew()
+        {
+            if (_currentImage == null || _currentImage.Empty()) return;
+            using var src = _currentImage.Clone();
+            _currentImage = Deskewer.Deskew(src);
+        }
 
+        private void BordersDeskew()
+        {
+            if (_currentImage == null || _currentImage.Empty()) return;
+            using var src = _currentImage.Clone();
+            _currentImage = Deskewer.Deskew(src, true);
+        }
 
         public void Deskew()
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
+            
 
-            // 1) Попробуем Hough — быстрее и хорошо работает если видны линии/контуры строк
+
             double angle = GetSkewAngleByHough(_currentImage, cannyThresh1: 50, cannyThresh2: 150, houghThreshold: 80, minLineLength: Math.Min(_currentImage.Width, 200), maxLineGap: 20);
             Debug.WriteLine($"Deskew: angle by Hough = {angle}");
-            // 2) Если Hough ничего надёжного не дал -> используем projection profile
+
             if (double.IsNaN(angle))
             {
                 angle = GetSkewAngleByProjection(_currentImage, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
             }
 
-            // 3) Если всё ещё NaN - выходим
+
             if (double.IsNaN(angle) || Math.Abs(angle) < 0.005) // если угол ~0 — не поворачивать
             {
                 Debug.WriteLine($"Deskew: angle is zero or NaN ({angle}), skipping rotation.");
@@ -765,7 +809,6 @@ namespace ImgViewer.Models
             }
 
 
-            // 4) Применяем поворот с учётом нового размера (чтобы не обрезать)
             using var src = _currentImage.Clone();
             double rotation = -angle;
             double rad = rotation * Math.PI / 180.0;
@@ -782,83 +825,9 @@ namespace ImgViewer.Models
             using var rotated = new Mat();
             Cv2.WarpAffine(src, rotated, M, new OpenCvSharp.Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
 
-            // 5) (опционально) Обрезаем вокруг содержимого, как в предыдущем примере.
-            //using var mask = PrecomputeDarkMask_Otsu(src);
-            //using (var mask = PrecomputeDarkMask_Otsu(rotated)) // считаем маску на rotated, а не на src
-            //{
-            //    // небольшая морфология чтобы закрыть дырки
-            //    int morphK = Math.Max(3, Math.Min(rotated.Width, rotated.Height) / 200);
-            //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(morphK, morphK));
-            //    Cv2.MorphologyEx(mask, mask, MorphTypes.Close, kernel, iterations: 1);
-
-            //    // find external contours, pick the largest by area
-            //    Cv2.FindContours(mask, out Point[][] contours, out HierarchyIndex[] hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
-            //    if (contours != null && contours.Length > 0)
-            //    {
-            //        int maxIdx = 0;
-            //        double maxArea = 0;
-            //        for (int i = 0; i < contours.Length; i++)
-            //        {
-            //            double a = Cv2.ContourArea(contours[i]);
-            //            if (a > maxArea) { maxArea = a; maxIdx = i; }
-            //        }
-
-            //        var bbox = Cv2.BoundingRect(contours[maxIdx]);
-
-            //        // add padding (feather) but keep inside image bounds
-            //        int pad = (int)(Math.Min(bbox.Width, bbox.Height) * 0.02) + 10; // 2% + 10px
-            //        int x0 = Math.Max(0, bbox.X - pad);
-            //        int y0 = Math.Max(0, bbox.Y - pad);
-            //        int x1 = Math.Min(rotated.Width, bbox.X + bbox.Width + pad);
-            //        int y1 = Math.Min(rotated.Height, bbox.Y + bbox.Height + pad);
-            //        var cropRect = new Rect(x0, y0, x1 - x0, y1 - y0);
-
-            //        if (cropRect.Width > 10 && cropRect.Height > 10)
-            //        {
-            //            using var cropped = new Mat(rotated, cropRect).Clone(); // .Clone чтобы не зависеть от rotated'а
-            //                                                                    // теперь можно применить FillBlackBorderAreas к cropped
-            //            var filledCropped = FillBlackBorderAreas(
-            //                cropped,
-            //                bgColor: null,
-            //                blackThreshold: 200,
-            //                minSpanFraction: 0.99,
-            //                minAreaPx: 10000,
-            //                solidityThreshold: 0.1
-            //            );
-
-            //            // заменим _currentImage на результат (освободим старый)
-            //            _currentImage?.Dispose();
-            //            _currentImage = filledCropped;
-            //            updateImagePreview();
-            //            return; // закончили Deskew
-            //        }
-            //    }
-            //}
-
-            //byte estimatedThr = EstimateBlackThreshold(src, marginPercent: 10, shiftFactor: 0.8);
-
-
-
-
-            //var filled = FillBlackBorderAreas(
-            //    rotated,
-            //    bgColor: null,
-            //    blackThreshold: 100,
-            //    minSpanFraction: 0.9,
-            //    minAreaPx: 2000,
-            //    solidityThreshold: 0.1
-            //);
-
-
-            // Здесь можно повторно бинаризовать rotated и обрезать по самому большому контуру.
-            // Для простоты сразу сохраняем rotated.
-            //_currentImage?.Dispose();
+            
             var result = rotated.Clone();
             _currentImage = result;
-
-            //_currentImage = cleaned;
-            //_currentImage = rotated.Clone();
-            updateImagePreview();
         }
 
 

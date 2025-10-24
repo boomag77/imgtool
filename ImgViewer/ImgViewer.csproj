@@ -21,10 +21,17 @@
 	  <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.11.0.20250507" />
 	  <PackageReference Include="System.Text.Json" Version="9.0.9" />
+	  <PackageReference Include="Tesseract" Version="5.2.0" />
 	</ItemGroup>
 
 	<ItemGroup>
+	  <None Update="Models\frozen_east_text_detection.pb">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="secret.json">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="tessdata\eng.traineddata">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	</ItemGroup>

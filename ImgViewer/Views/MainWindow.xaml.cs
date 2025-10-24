@@ -391,7 +391,7 @@ namespace ImgViewer.Views
 
         private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
         {
-            _processor.ApplyCommandToCurrent(ProcessorCommands.AutoCropRectangle, new Dictionary<string, object>());
+            _manager.ApplyCommandToProcessingImage(ProcessorCommands.AutoCropRectangle, new Dictionary<string, object>());
         }
 
         private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)

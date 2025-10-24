@@ -100,7 +100,8 @@ namespace ImgViewer.Models
                                 isRaw = true;
                                 break;
                             case (int)TiffCompression.LZW:
-                                data = ExtractDecodedPixels(tiff, width, height);
+                                //data = ExtractDecodedPixels(tiff, width, height);
+                                data = ExtractDecodedPixelsByStrip(tiff, width, height);
                                 break;
                             case (int)TiffCompression.Deflate:
                                 data = ExtractDecodedPixels(tiff, width, height);
