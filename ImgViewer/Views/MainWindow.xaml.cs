@@ -158,7 +158,7 @@ namespace ImgViewer.Views
 
 
 
-        public ObservableCollection<Thumbnail> Files { get; set; } = new ObservableCollection<Thumbnail>();
+        //public ObservableCollection<Thumbnail> Files { get; set; } = new ObservableCollection<Thumbnail>();
 
         public MainWindow()
         {
@@ -168,7 +168,7 @@ namespace ImgViewer.Views
             DataContext = _viewModel;
             _cts = new CancellationTokenSource();
 
-            ImgListBox.ItemsSource = Files;
+            //ImgListBox.ItemsSource = Files;
 
             _explorer = new FileProcessor(_cts.Token);
             _explorer.ErrorOccured += (msg) =>
@@ -195,7 +195,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Deskew",
-                "Apply Deskew",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Angle", "DeskewAngle", 0, -15, 15, 0.5),
@@ -205,7 +205,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Border Cleanup",
-                "Remove Borders",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Margin", "BorderMargin", 4, 0, 100, 1),
@@ -215,7 +215,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Auto Crop",
-                "Auto Crop",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
@@ -224,7 +224,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Despeckle",
-                "Run Despeckle",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Strength", "DespeckleStrength", 3, 1, 10, 1)
@@ -233,7 +233,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Auto Binarize",
-                "Auto Binarize",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Threshold", "BinarizeThreshold", 128, 0, 255, 5)
@@ -242,7 +242,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Line Removal",
-                "Lines Remove",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Width", "LineWidth", 2, 1, 10, 1)
@@ -251,7 +251,7 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Punch Removal",
-                "Remove Punches",
+                "Run",
                 new[]
                 {
                     new PipeLineParameter("Radius", "PunchRadius", 6, 1, 30, 1)
@@ -535,7 +535,7 @@ namespace ImgViewer.Views
         public void UpdatePreview(Stream stream)
         {
             var bitmap = streamToBitmapSource(stream);
-            Dispatcher.InvokeAsync(() => ImgBox.Source = bitmap);
+            Dispatcher.InvokeAsync(() => PreviewImgBox.Source = bitmap);
         }
 
 
@@ -566,122 +566,122 @@ namespace ImgViewer.Views
             return bitmap;
         }
 
-        private async Task LoadFolder(string folderPath)
-        {
-            _currentLoadThumbnailsCts?.Cancel();
-            _currentLoadThumbnailsCts = new CancellationTokenSource();
-            var ct = _currentLoadThumbnailsCts.Token;
+        //private async Task LoadFolder(string folderPath)
+        //{
+        //    _currentLoadThumbnailsCts?.Cancel();
+        //    _currentLoadThumbnailsCts = new CancellationTokenSource();
+        //    var ct = _currentLoadThumbnailsCts.Token;
 
 
-            await Dispatcher.InvokeAsync(() =>
-            {
-                foreach (var old in Files.OfType<IDisposable>().ToList())
-                {
-                    if (ct.IsCancellationRequested)
-                        return;
-                    old.Dispose();
-                }
+        //    await Dispatcher.InvokeAsync(() =>
+        //    {
+        //        foreach (var old in Files.OfType<IDisposable>().ToList())
+        //        {
+        //            if (ct.IsCancellationRequested)
+        //                return;
+        //            old.Dispose();
+        //        }
 
 
-                Files.Clear();
-            }, DispatcherPriority.Background).Task;
+        //        Files.Clear();
+        //    }, DispatcherPriority.Background).Task;
 
-            string[] filePaths = await Task.Run(() =>
-            {
-                if (!Directory.Exists(folderPath))
-                    throw new DirectoryNotFoundException($"Directory does not exist: {folderPath}");
-                return Directory.GetFiles(folderPath, "*.*")
-                         .Where(file =>
-                             file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                             file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                             file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-                             file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
-                         .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) // sort by name
-                         .ToArray();
-            }, ct);
-            if (ct.IsCancellationRequested)
-                return;
-            const int preLoadCount = 20;
-            const int batchSize = 10;
-            int filesCount = filePaths.Length;
-            for (int i = 0; i < filePaths.Length; i += batchSize)
-            {
-                if (ct.IsCancellationRequested)
-                    return;
-                int end = Math.Min(i + batchSize, filesCount);
-                var batch = new List<Thumbnail>(end - i);
-                for (int j = i; j < end; j++)
-                {
-                    if (ct.IsCancellationRequested)
-                        return;
-                    var item = filePaths[j];
-                    var thumb = new Thumbnail(ct, this.Dispatcher, _explorer, item, j < preLoadCount);
-                    batch.Add(thumb);
-                    Files.Add(thumb);
-                }
-                foreach (var t in batch)
-                {
-                    _ = t.LoadThumbAsync(ct); // ?? await, ????? LoadThumbAsync ??? ??????? ??????????
-                }
-                await Dispatcher.Yield(DispatcherPriority.Background);
-            }
-            await Dispatcher.InvokeAsync(() =>
-            {
-                if (Files.Count > 0)
-                    ImgListBox.SelectedIndex = 0;
-            }, DispatcherPriority.Background).Task;
-        }
+        //    string[] filePaths = await Task.Run(() =>
+        //    {
+        //        if (!Directory.Exists(folderPath))
+        //            throw new DirectoryNotFoundException($"Directory does not exist: {folderPath}");
+        //        return Directory.GetFiles(folderPath, "*.*")
+        //                 .Where(file =>
+        //                     file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+        //                     file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+        //                     file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+        //                     file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+        //                 .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) // sort by name
+        //                 .ToArray();
+        //    }, ct);
+        //    if (ct.IsCancellationRequested)
+        //        return;
+        //    const int preLoadCount = 20;
+        //    const int batchSize = 10;
+        //    int filesCount = filePaths.Length;
+        //    for (int i = 0; i < filePaths.Length; i += batchSize)
+        //    {
+        //        if (ct.IsCancellationRequested)
+        //            return;
+        //        int end = Math.Min(i + batchSize, filesCount);
+        //        var batch = new List<Thumbnail>(end - i);
+        //        for (int j = i; j < end; j++)
+        //        {
+        //            if (ct.IsCancellationRequested)
+        //                return;
+        //            var item = filePaths[j];
+        //            var thumb = new Thumbnail(ct, this.Dispatcher, _explorer, item, j < preLoadCount);
+        //            batch.Add(thumb);
+        //            Files.Add(thumb);
+        //        }
+        //        foreach (var t in batch)
+        //        {
+        //            _ = t.LoadThumbAsync(ct); // ?? await, ????? LoadThumbAsync ??? ??????? ??????????
+        //        }
+        //        await Dispatcher.Yield(DispatcherPriority.Background);
+        //    }
+        //    await Dispatcher.InvokeAsync(() =>
+        //    {
+        //        if (Files.Count > 0)
+        //            ImgListBox.SelectedIndex = 0;
+        //    }, DispatcherPriority.Background).Task;
+        //}
 
-        private async void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            if (ImgListBox.SelectedItem is Thumbnail item)
-            {
-                //try
-                //{
-                //    await SetImgBoxSourceAsync(item.Path);
-                //    _processor.Load(item.Path);
-                //}
-                //catch (Exception ex)
-                //{
-                //    System.Windows.MessageBox.Show
-                //    (
-                //        $"Error loading image for preview: {ex.Message}",
-                //        "Error",
-                //        MessageBoxButton.OK,
-                //        MessageBoxImage.Error
-                //    );
-                //}
-            }
-        }
+        //private async void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        //{
+        //    if (ImgListBox.SelectedItem is Thumbnail item)
+        //    {
+        //        //try
+        //        //{
+        //        //    await SetImgBoxSourceAsync(item.Path);
+        //        //    _processor.Load(item.Path);
+        //        //}
+        //        //catch (Exception ex)
+        //        //{
+        //        //    System.Windows.MessageBox.Show
+        //        //    (
+        //        //        $"Error loading image for preview: {ex.Message}",
+        //        //        "Error",
+        //        //        MessageBoxButton.OK,
+        //        //        MessageBoxImage.Error
+        //        //    );
+        //        //}
+        //    }
+        //}
 
-        private async void OpenFolder_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new System.Windows.Forms.FolderBrowserDialog();
+        //private async void OpenFolder_Click(object sender, RoutedEventArgs e)
+        //{
+        //    var dlg = new System.Windows.Forms.FolderBrowserDialog();
 
-            if (!string.IsNullOrEmpty(_lastOpenedFolder) && Directory.Exists(_lastOpenedFolder))
-                dlg.SelectedPath = _lastOpenedFolder;
-            else if (Directory.Exists("G:\\My Drive\\LEAD"))
-                dlg.SelectedPath = "G:\\My Drive\\LEAD";
+        //    if (!string.IsNullOrEmpty(_lastOpenedFolder) && Directory.Exists(_lastOpenedFolder))
+        //        dlg.SelectedPath = _lastOpenedFolder;
+        //    else if (Directory.Exists("G:\\My Drive\\LEAD"))
+        //        dlg.SelectedPath = "G:\\My Drive\\LEAD";
 
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            {
-                string folderPath = dlg.SelectedPath;
+        //    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        //    {
+        //        string folderPath = dlg.SelectedPath;
 
-                try
-                {
-                    await LoadFolder(dlg.SelectedPath);
-                    _lastOpenedFolder = dlg.SelectedPath;
-                    Title = $"ImgViewer - {dlg.SelectedPath}";
+        //        try
+        //        {
+        //            await LoadFolder(dlg.SelectedPath);
+        //            _lastOpenedFolder = dlg.SelectedPath;
+        //            Title = $"ImgViewer - {dlg.SelectedPath}";
 
-                    if (Files.Count > 0)
-                        ImgListBox.SelectedIndex = 0;
-                }
-                catch (OperationCanceledException)
-                {
-                    Console.WriteLine("???????? ????????.");
-                }
-            }
-        }
+        //            if (Files.Count > 0)
+        //                ImgListBox.SelectedIndex = 0;
+        //        }
+        //        catch (OperationCanceledException)
+        //        {
+        //            Console.WriteLine("???????? ????????.");
+        //        }
+        //    }
+        //}
 
         //private async Task SetImgBoxSourceAsync(string filePath)
         //{
@@ -744,8 +744,9 @@ namespace ImgViewer.Views
                 {
                     //await SetImgBoxSourceAsync(dlg.FileName);
                     //await _mvm.LoadImagAsync(dlg.FileName);
-                    await _manager.SetImageOnPreview(dlg.FileName);
-                    _viewModel.LastOpenedFolder = Path.GetDirectoryName(dlg.FileName);
+                    var fileName = dlg.FileName;
+                    await _manager.SetImageOnPreview(fileName);
+                    _viewModel.LastOpenedFolder = Path.GetDirectoryName(fileName);
                 }
                 catch (OperationCanceledException)
                 {

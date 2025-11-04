@@ -45,12 +45,23 @@ namespace ImgViewer.Models
             }, System.Windows.Threading.DispatcherPriority.Render);
         }
 
+        public async Task SetBmpImageAsOriginal(ImageSource bmp)
+        {
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                _mainViewModel.OriginalImage = bmp;
+                _mainViewModel.Status = $"Ready";
+            }, System.Windows.Threading.DispatcherPriority.Render);
+        }
+
         public async Task SetImageOnPreview(string imagePath)
         {
             _mainViewModel.CurrentImagePath = imagePath;
             _mainViewModel.Status = $"Loading image preview...";
             var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
+            await SetBmpImageAsOriginal(bmpImage);
             await SetBmpImageOnPreview(bmpImage);
+
             await SetImageForProcessing(bmpImage);
             _mainViewModel.Status = $"Standby";
         }

@@ -8,6 +8,7 @@ namespace ImgViewer.Models
 {
     internal class MainViewModel : IViewModel, INotifyPropertyChanged
     {
+        private ImageSource? _originalImage;
         private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
         private string? _lastOpenedFolder;
@@ -39,7 +40,16 @@ namespace ImgViewer.Models
             }
         }
 
-        
+        public ImageSource? OriginalImage
+        {
+            get => _originalImage;
+            set
+            {
+                if (_originalImage == value) return;
+                _originalImage = value;
+                OnPropertyChanged();
+            }
+        }
 
         public string? CurrentImagePath
         {
