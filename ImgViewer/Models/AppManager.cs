@@ -74,8 +74,9 @@ namespace ImgViewer.Models
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
             ProcessorCommands[] commands =
             {
-                //ProcessorCommands.Deskew,
+                ProcessorCommands.Deskew,
                 ProcessorCommands.BorderRemove,
+                //ProcessorCommands.AutoCropRectangle,
                 ProcessorCommands.Binarize,
             };
             var workerPool = new ImgWorkerPool(_cts, commands, 0, sourceFolder, 0);

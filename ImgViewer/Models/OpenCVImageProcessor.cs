@@ -379,9 +379,9 @@ namespace ImgViewer.Models
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        //Binarize(200);
-                        //BinarizeAdaptive();
-                        SauvolaBinarize();
+                        //Binarize(140);
+                        BinarizeAdaptive();
+                        //SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
 
@@ -396,7 +396,7 @@ namespace ImgViewer.Models
                         //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
                         //либо используйте более устойчивую выборку(несколько областей).
                         //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
-                        RemoveBordersByRowColWhite(threshFrac: 0.40, contrastThr: 12, centralSample: 0.10, maxRemoveFrac: 0.45);
+                        RemoveBordersByRowColWhite(threshFrac: 0.40, contrastThr: 50, centralSample: 0.10, maxRemoveFrac: 0.45);
                         break;
                     case ProcessorCommands.Despeckle:
                         //applyDespeckleCurrent();
@@ -426,7 +426,8 @@ namespace ImgViewer.Models
             string tessData = Path.Combine(AppContext.BaseDirectory, "tessdata");
             string tessLang = "eng"; // или "eng"
             var cropper = new TextAwareCropper(eastPath, tessData, tessLang);
-            var cropped = cropper.CropKeepingText(_currentImage);
+            //var cropped = cropper.CropKeepingText(_currentImage);
+            var cropped = cropper.ShowDetectedAreas(_currentImage);
             _currentImage = cropped;
             updateImagePreview();
         }
@@ -530,7 +531,7 @@ namespace ImgViewer.Models
             return src;
         }
 
-        private void BinarizeAdaptive(int? blockSize = null, double C = 5, bool useGaussian = true, bool invert = false)
+        private void BinarizeAdaptive(int? blockSize = null, double C = 14, bool useGaussian = false, bool invert = false)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 

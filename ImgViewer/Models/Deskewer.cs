@@ -118,7 +118,7 @@ namespace ImgViewer.Models
         }
 
 
-        public static Mat Deskew(Mat orig, bool byBorders = false)
+        public static Mat Deskew(Mat orig, bool byBorders = true)
         {
             if (orig == null || orig.Empty()) return orig;
 
