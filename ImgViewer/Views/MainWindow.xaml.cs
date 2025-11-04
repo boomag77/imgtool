@@ -852,6 +852,15 @@ namespace ImgViewer.Views
             //MyProgressBar.Value = 0;
         }
 
+        private void ResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewModel.OriginalImage == null) return;
+            var originalImage = _viewModel.OriginalImage;
+
+            _viewModel.ImageOnPreview = originalImage;
+            _manager.SetImageForProcessing(originalImage);
+        }
+
         private void SaveAsClick(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
