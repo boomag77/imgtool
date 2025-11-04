@@ -43,6 +43,88 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="RoundedButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#2F3136"/>
+            <Setter Property="BorderBrush" Value="#2F3136"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="10"
+                            SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF1E66E0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF1553C0"/>
+                                <Setter TargetName="border" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="1"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ElevatedRoundedButton" TargetType="Button">
+            <Setter Property="Background" Value="#2F3136"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <!-- shadow -->
+                            <Border CornerRadius="6" Background="Transparent" Margin="0,2,0,0">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.2"/>
+                                </Border.Effect>
+                            </Border>
+
+                            <!-- main -->
+                            <Border x:Name="bd"
+                            CornerRadius="4"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                            </Border>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.99" ScaleY="0.99"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     
     <Grid>
@@ -106,37 +188,29 @@
         </Border>
 
         <Border Grid.Row="1" Grid.Column="2">
-            <Button x:Name="ResetButton"
-                    Content="Reset"
-                    Margin="0,5,0,5"
+            <Button Style="{StaticResource ElevatedRoundedButton}"
+                 Margin="5,5,5,5"
                     Visibility="{Binding IsProcessingImageOnPreview}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Padding="12,4"
-                    MinWidth="120"
-                    Click="ResetButton_Click"/>       
+                 MinWidth="120"
+                 Click="ResetButton_Click">Reset Image</Button>
+               
         </Border>
 
         <Border Grid.Row="1" Grid.Column="0">
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center">
-                <Button x:Name="OpenFile"
-                    Content="Open Image"
-                    Margin="5,5,5,5"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Padding="12,4"
-                    MinWidth="120"
-                    Click="OpenFile_Click"/>
-                <Button x:Name="SaveFileAs"
-                    Content="Save Image As..."
-                    Margin="5,5,5,5"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Padding="12,4"
-                    MinWidth="120"
-                    Click="SaveAs_Click"/>
+                <Button Style="{StaticResource ElevatedRoundedButton}"
+                        Margin="5,5,5,5"
+                        MinWidth="120"
+                        Click="OpenFile_Click">Open Image</Button>
+                <Button Style="{StaticResource ElevatedRoundedButton}"
+                        Margin="5,5,5,5"
+                        MinWidth="120"
+                        Click="SaveAs_Click">Save Image As...</Button>
+                
             </StackPanel>
              
         </Border>
