@@ -1,6 +1,7 @@
 ﻿using ImgViewer.Interfaces;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Media;
 
 
@@ -29,6 +30,11 @@ namespace ImgViewer.Models
             }
         }
 
+        public Visibility IsProcessingImageOnPreview
+        {
+            get => _imageOnPreview != null ? Visibility.Visible : Visibility.Hidden;
+        }
+
         public ImageSource? ImageOnPreview
         {
             get => _imageOnPreview;
@@ -37,6 +43,7 @@ namespace ImgViewer.Models
                 if (_imageOnPreview == value) return;
                 _imageOnPreview = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(IsProcessingImageOnPreview));
             }
         }
 
