@@ -4,8 +4,47 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ImgViewer"
+        xmlns:views="clr-namespace:ImgViewer.Views"
         mc:Ignorable="d"
         Title="MainWindow" Height="600" Width="800">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PipelineCardBackgroundBrush" Color="#2F3136"/>
+        <SolidColorBrush x:Key="PipelineCardBorderBrush" Color="#464A52"/>
+        <SolidColorBrush x:Key="PipelineTextBrush" Color="#E5E7EA"/>
+        <SolidColorBrush x:Key="PipelineTextboxBackgroundBrush" Color="#1E2024"/>
+        <Style x:Key="SpinnerRepeatButtonStyle" TargetType="RepeatButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PipelineCardListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Background="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -86,22 +125,129 @@
             
                 
         </Border>
-        <!--Controls -->
-        <StackPanel Grid.Row="1" Grid.Column="2" Margin="5">
-            <TextBlock Text="Controls" FontWeight="Bold" FontSize="16" Margin="5"/>
-            <Separator Margin="5"/>
-            <Button Content="Open" Click="OpenFile_Click" Margin="5"/>
-            <Button Content="Apply Deskew" Click="ApplyDeskew" Margin="5"/>
-            <Button Content="Remove borders" Click="ApplyBorderRemoveCommand_Click" Margin="5"/>
-            <Button Content="Auto crop" Click="ApplyAutoCropRectangleCurrentCommand" Margin="5"/>
-            <Button Content="Run Despeckle" Click="ApplyDespeckleCommand" Margin="5"/>
-            <Button Content="AutoBinarize" Click="ApplyAutoBinarizeCommand" Margin="5"/>
-            <Button Content="Lines remove" Click="ApplyLineRemoveCommand" Margin="5"/>
-            <Button Content="Remove Punches" Click="ApplyPunchesRemoveCommand" Margin="5"/>
-            <Button Content="Process Folder" Click="ProcessFolderClick" Margin="5"/>
-            <Separator Margin="10"/>
-            <Button Content="Save As..." Click="SaveAsClick" Margin="5"/>
-        </StackPanel>
+        <!--Controls/Pipeline -->
+        <ListBox x:Name="PipelineListBox"
+                 Grid.Row="1"
+                 Grid.Column="2"
+                 Margin="5"
+                 ItemsSource="{Binding PipeLineOperations, RelativeSource={RelativeSource AncestorType=Window}}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 AllowDrop="True"
+                 HorizontalContentAlignment="Stretch"
+                 ItemContainerStyle="{StaticResource PipelineCardListBoxItemStyle}"
+                 PreviewMouseLeftButtonDown="PipelineListBox_PreviewMouseLeftButtonDown"
+                 PreviewMouseMove="PipelineListBox_PreviewMouseMove"
+                 DragEnter="PipelineListBox_DragEnter"
+                 DragOver="PipelineListBox_DragOver"
+                 DragLeave="PipelineListBox_DragLeave"
+                 Drop="PipelineListBox_Drop"
+                 GiveFeedback="PipelineListBox_GiveFeedback">
+            <ListBox.Resources>
+                <Style TargetType="ScrollViewer">
+                    <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+                    <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+                </Style>
+            </ListBox.Resources>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type views:PipeLineOperation}">
+                    <Border Background="{StaticResource PipelineCardBackgroundBrush}"
+                            BorderBrush="{StaticResource PipelineCardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12"
+                            SnapsToDevicePixels="True">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontWeight="Bold"
+                                       FontSize="16"
+                                       Foreground="{StaticResource PipelineTextBrush}"
+                                       Margin="0,0,0,8"/>
+                            <ItemsControl ItemsSource="{Binding Parameters}">
+                                <ItemsControl.Style>
+                                    <Style TargetType="ItemsControl">
+                                        <Setter Property="Margin" Value="0,0,0,4"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="HasItems" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ItemsControl.Style>
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type views:PipeLineParameter}">
+                                        <StackPanel Orientation="Horizontal"
+                                                    Margin="0,0,12,8"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource PipelineTextBrush}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                            <Border Background="{StaticResource PipelineTextboxBackgroundBrush}"
+                                                    BorderBrush="{StaticResource PipelineCardBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="3">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="18"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}"
+                                                             Grid.Column="0"
+                                                             Background="Transparent"
+                                                             Foreground="{StaticResource PipelineTextBrush}"
+                                                             BorderThickness="0"
+                                                             Padding="6,2"
+                                                             HorizontalContentAlignment="Right"
+                                                             VerticalContentAlignment="Center"
+                                                             MinWidth="70"
+                                                             MaxWidth="140"
+                                                             FontSize="13"/>
+                                                    <Grid Grid.Column="1">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition/>
+                                                            <RowDefinition/>
+                                                        </Grid.RowDefinitions>
+                                                        <RepeatButton Grid.Row="0"
+                                                                      Click="SpinnerUp_Click"
+                                                                      Style="{StaticResource SpinnerRepeatButtonStyle}">
+                                                            <Viewbox Width="8" Height="5">
+                                                                <Path Data="M0,4 L4,0 8,4 Z"
+                                                                      Fill="{StaticResource PipelineTextBrush}"/>
+                                                            </Viewbox>
+                                                        </RepeatButton>
+                                                        <RepeatButton Grid.Row="1"
+                                                                      Click="SpinnerDown_Click"
+                                                                      Style="{StaticResource SpinnerRepeatButtonStyle}">
+                                                            <Viewbox Width="8" Height="5">
+                                                                <Path Data="M0,0 L4,4 8,0 Z"
+                                                                      Fill="{StaticResource PipelineTextBrush}"/>
+                                                            </Viewbox>
+                                                        </RepeatButton>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Content="{Binding ActionLabel}"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Right"
+                                    Padding="12,4"
+                                    MinWidth="120"
+                                    Click="PipelineRunButton_Click"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
 
     </Grid>
     

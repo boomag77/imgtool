@@ -39,6 +39,8 @@ namespace ImgViewer.Models
             }
         }
 
+        
+
         public string? CurrentImagePath
         {
             get => _imageOnPreviewPath;
