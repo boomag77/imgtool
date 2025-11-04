@@ -117,6 +117,30 @@
                     Click="ResetButton_Click"/>       
         </Border>
 
+        <Border Grid.Row="1" Grid.Column="0">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <Button x:Name="OpenFile"
+                    Content="Open Image"
+                    Margin="5,5,5,5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="12,4"
+                    MinWidth="120"
+                    Click="OpenFile_Click"/>
+                <Button x:Name="SaveFileAs"
+                    Content="Save Image As..."
+                    Margin="5,5,5,5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="12,4"
+                    MinWidth="120"
+                    Click="SaveAs_Click"/>
+            </StackPanel>
+             
+        </Border>
+
 
 
         <!--Pipeline -->

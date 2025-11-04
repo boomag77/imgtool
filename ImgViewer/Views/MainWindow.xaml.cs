@@ -187,11 +187,7 @@ namespace ImgViewer.Views
         {
             _pipeLineOperations.Clear();
 
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Open Image",
-                "Open",
-                Array.Empty<PipeLineParameter>(),
-                (window, operation) => window.OpenFile_Click(window, new RoutedEventArgs())));
+            
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Deskew",
@@ -266,15 +262,6 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Parallel", "Parallelism", 1, 1, Environment.ProcessorCount, 1)
                 },
                 (window, operation) => window.ProcessFolderClick(window, new RoutedEventArgs())));
-
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Save Output",
-                "Save As...",
-                new[]
-                {
-                    new PipeLineParameter("Compression", "CompressionLevel", 0, 0, 10, 1)
-                },
-                (window, operation) => window.SaveAsClick(window, new RoutedEventArgs())));
         }
 
         private void PipelineRunButton_Click(object sender, RoutedEventArgs e)
@@ -861,7 +848,7 @@ namespace ImgViewer.Views
             _manager.SetImageForProcessing(originalImage);
         }
 
-        private void SaveAsClick(object sender, RoutedEventArgs e)
+        private void SaveAs_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.InitialDirectory = _lastOpenedFolder;
