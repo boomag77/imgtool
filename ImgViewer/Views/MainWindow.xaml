@@ -160,7 +160,7 @@
         </Menu>
         
         <!-- Status bar -->
-        <StatusBar Grid.Row="2" Grid.ColumnSpan="3" VerticalAlignment="Bottom">
+        <StatusBar Grid.Row="4" Grid.ColumnSpan="3" VerticalAlignment="Bottom">
             <StatusBarItem>
                 <TextBlock x:Name="StatusText" Text="{Binding Status}" />
             </StatusBarItem>
@@ -222,7 +222,7 @@
                  Grid.Row="2"
                  Grid.Column="1"
                  Margin="0"
-                 Padding="5"
+                 Padding="5,0,0,5"
                  ItemsSource="{Binding PipeLineOperations, RelativeSource={RelativeSource AncestorType=Window}}"
                  Background="Transparent"
                  BorderThickness="0"
