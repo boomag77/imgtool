@@ -397,6 +397,9 @@ namespace ImgViewer.Models
                         //либо используйте более устойчивую выборку(несколько областей).
                         //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
                         RemoveBordersByRowColWhite(threshFrac: 0.40, contrastThr: 50, centralSample: 0.10, maxRemoveFrac: 0.45);
+                        //var thr = EstimateBlackThreshold(_currentImage);
+                        //RemoveBorderArtifactsGeneric_Safe(_currentImage, 255);
+                        //RemoveBordersByRowColWhite(threshFrac: 0.70, contrastThr: 30, centralSample: 0.10, maxRemoveFrac: 0.45);
                         break;
                     case ProcessorCommands.Despeckle:
                         //applyDespeckleCurrent();
