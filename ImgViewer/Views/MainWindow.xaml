@@ -5,11 +5,15 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ImgViewer"
         xmlns:views="clr-namespace:ImgViewer.Views"
+        xmlns:conv="clr-namespace:ImgViewer.Converters"
         mc:Ignorable="d"
         Title="CCS Image Tool" Height="600" Width="800"
         Background="LightGray">
     <Window.Resources>
-        
+
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:InverseBooleanToVisibilityConverter x:Key="InvBoolToVis"/>
+
         <SolidColorBrush x:Key="PipelineCardBackgroundBrush" Color="#2F3136"/>
         <SolidColorBrush x:Key="PipelineCardBorderBrush" Color="#464A52"/>
         <SolidColorBrush x:Key="PipelineTextBrush" Color="#E5E7EA"/>
@@ -127,6 +131,124 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Pipeline-styled ComboBox (paste inside Window.Resources) -->
+        <Style x:Key="PipelineComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}" />
+            <Setter Property="Background" Value="{StaticResource PipelineTextboxBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PipelineCardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="MinWidth" Value="50" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3"
+                            SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- content goes in column 0 and fills available space -->
+                                    <ContentPresenter x:Name="ContentSite"
+                                                      Grid.Column="0"
+                                                      Margin="{TemplateBinding Padding}"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Right"   
+                                                                        Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      RecognizesAccessKey="True" /> 
+
+                                    <!-- toggle sits in column 1 with fixed width and won't stretch -->
+                                        <ToggleButton x:Name="Toggle"
+                                                      Grid.Column="1"
+                                                      Width="20"
+                                                      Focusable="False"
+                                                      IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                      Background="Transparent"
+                                                      BorderBrush="Transparent"
+                                                      BorderThickness="0"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Right"
+                                                      Margin="4,0,0,0">
+                                            <!-- small outer padding -->
+                                            <Viewbox Width="10" Height="10">
+                                                <Path Data="M0,0 L4,4 8,0 Z" Fill="{StaticResource PipelineTextBrush}"/>
+                                            </Viewbox>
+                                        </ToggleButton>
+                                </Grid>
+                            </Border>
+
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{Binding Path=IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border Background="{StaticResource PipelineCardBackgroundBrush}"
+                                        BorderBrush="{StaticResource PipelineCardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Margin="0,6,0,0"
+                                        SnapsToDevicePixels="True">
+                                    <ScrollViewer CanContentScroll="True"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  MaxHeight="280"
+                                                  Padding="2">  
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ComboBoxItem style (list items in popup) -->
+        <Style x:Key="PipelineComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PipelineCardBorderBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF1E66E0"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+
     </Window.Resources>
     
     <Grid>
@@ -299,40 +421,66 @@
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource PipelineTextBrush}"
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,6,0"/>
+                                                       Margin="0,0,6,0"/>               
+
+                                            <!-- Outer border kept same -->
                                             <Border Background="{StaticResource PipelineTextboxBackgroundBrush}"
                                                     BorderBrush="{StaticResource PipelineCardBorderBrush}"
                                                     BorderThickness="1"
-                                                    CornerRadius="3">
+                                                    CornerRadius="3">   
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="18"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}"
-                                                             Grid.Column="0"
-                                                             Background="Transparent"
-                                                             Foreground="{StaticResource PipelineTextBrush}"
-                                                             BorderThickness="0"
-                                                             Padding="6,2"
-                                                             HorizontalContentAlignment="Right"
-                                                             VerticalContentAlignment="Center"
-                                                             MinWidth="70"
-                                                             MaxWidth="140"
-                                                             FontSize="13"/>
-                                                    <Grid Grid.Column="1">
+
+                                                    <!-- ComboBox: visible when IsCombo == true -->
+                                                    <ComboBox Grid.Column="0"
+                                                              MinWidth="50"
+                                                              MaxWidth="140"
+                                                              ItemsSource="{Binding Options}"
+                                                              SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                                              Visibility="{Binding IsCombo, Converter={StaticResource BoolToVis}}"
+                                                              Style="{StaticResource PipelineComboBoxStyle}"
+                                                              ItemContainerStyle="{StaticResource PipelineComboBoxItemStyle}"
+                                                              Background="Transparent"
+                                                              Foreground="{StaticResource PipelineTextBrush}"
+                                                              BorderThickness="0"
+                                                              HorizontalContentAlignment="Right"
+                                                              VerticalContentAlignment="Center"
+                                                              FontSize="13"/>   
+
+
+                                                    <!-- Numeric area: visible when IsCombo == false -->
+                                                    <Grid Grid.Column="0" Visibility="{Binding IsCombo, Converter={StaticResource InvBoolToVis}}">
+                                                        <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}"
+                                                                 Background="Transparent"
+                                                                 Foreground="{StaticResource PipelineTextBrush}"
+                                                                 BorderThickness="0"
+                                                                 Padding="6,2"
+                                                                 HorizontalContentAlignment="Right"
+                                                                 VerticalContentAlignment="Center"
+                                                                 MinWidth="50"
+                                                                 MaxWidth="140"
+                                                                 FontSize="13"/>    
+                                                    </Grid>
+
+                                                    <!-- Spinners: keep them in Column=1 but only visible for numeric -->
+                                                    <Grid Grid.Column="1" Visibility="{Binding IsCombo, Converter={StaticResource InvBoolToVis}}">
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition/>
                                                             <RowDefinition/>
                                                         </Grid.RowDefinitions>
+
                                                         <RepeatButton Grid.Row="0"
                                                                       Click="SpinnerUp_Click"
-                                                                      Style="{StaticResource SpinnerRepeatButtonStyle}">
+                                                                      Style="{StaticResource SpinnerRepeatButtonStyle}">    
                                                             <Viewbox Width="8" Height="5">
                                                                 <Path Data="M0,4 L4,0 8,4 Z"
                                                                       Fill="{StaticResource PipelineTextBrush}"/>
                                                             </Viewbox>
                                                         </RepeatButton>
+
                                                         <RepeatButton Grid.Row="1"
                                                                       Click="SpinnerDown_Click"
                                                                       Style="{StaticResource SpinnerRepeatButtonStyle}">
@@ -346,6 +494,7 @@
                                             </Border>
                                         </StackPanel>
                                     </DataTemplate>
+
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <Button Content="{Binding ActionLabel}"

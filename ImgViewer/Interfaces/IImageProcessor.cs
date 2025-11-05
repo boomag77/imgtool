@@ -8,6 +8,8 @@ namespace ImgViewer.Interfaces
         
         public ImageSource CurrentImage { set; }
 
+
+
         void Load(string path);
 
         Stream? LoadAsPNGStream(string path, int targetBPP);

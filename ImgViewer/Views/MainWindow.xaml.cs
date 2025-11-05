@@ -100,13 +100,18 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Deskew",
-                "Run",
+                "Preview",
                 new[]
                 {
-                    new PipeLineParameter("Angle", "DeskewAngle", 0, -15, 15, 0.5),
-                    new PipeLineParameter("Threshold", "DeskewThreshold", 0.15, 0, 1, 0.05)
+                    new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] {"Auto", "ByBorders", "Hough", "Projection", "PCA" }, 0),
+                    new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
+                    new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
+                    new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
+                    new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
+                    new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1)
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Deskew, operation.CreateParameterDictionary())));
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Deskew, operation.CreateParameterDictionary()))
+                );
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Border Removal",
@@ -438,173 +443,6 @@ namespace ImgViewer.Views
             return bitmap;
         }
 
-        //private async Task LoadFolder(string folderPath)
-        //{
-        //    _currentLoadThumbnailsCts?.Cancel();
-        //    _currentLoadThumbnailsCts = new CancellationTokenSource();
-        //    var ct = _currentLoadThumbnailsCts.Token;
-
-
-        //    await Dispatcher.InvokeAsync(() =>
-        //    {
-        //        foreach (var old in Files.OfType<IDisposable>().ToList())
-        //        {
-        //            if (ct.IsCancellationRequested)
-        //                return;
-        //            old.Dispose();
-        //        }
-
-
-        //        Files.Clear();
-        //    }, DispatcherPriority.Background).Task;
-
-        //    string[] filePaths = await Task.Run(() =>
-        //    {
-        //        if (!Directory.Exists(folderPath))
-        //            throw new DirectoryNotFoundException($"Directory does not exist: {folderPath}");
-        //        return Directory.GetFiles(folderPath, "*.*")
-        //                 .Where(file =>
-        //                     file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-        //                     file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-        //                     file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-        //                     file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
-        //                 .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) // sort by name
-        //                 .ToArray();
-        //    }, ct);
-        //    if (ct.IsCancellationRequested)
-        //        return;
-        //    const int preLoadCount = 20;
-        //    const int batchSize = 10;
-        //    int filesCount = filePaths.Length;
-        //    for (int i = 0; i < filePaths.Length; i += batchSize)
-        //    {
-        //        if (ct.IsCancellationRequested)
-        //            return;
-        //        int end = Math.Min(i + batchSize, filesCount);
-        //        var batch = new List<Thumbnail>(end - i);
-        //        for (int j = i; j < end; j++)
-        //        {
-        //            if (ct.IsCancellationRequested)
-        //                return;
-        //            var item = filePaths[j];
-        //            var thumb = new Thumbnail(ct, this.Dispatcher, _explorer, item, j < preLoadCount);
-        //            batch.Add(thumb);
-        //            Files.Add(thumb);
-        //        }
-        //        foreach (var t in batch)
-        //        {
-        //            _ = t.LoadThumbAsync(ct); // ?? await, ????? LoadThumbAsync ??? ??????? ??????????
-        //        }
-        //        await Dispatcher.Yield(DispatcherPriority.Background);
-        //    }
-        //    await Dispatcher.InvokeAsync(() =>
-        //    {
-        //        if (Files.Count > 0)
-        //            ImgListBox.SelectedIndex = 0;
-        //    }, DispatcherPriority.Background).Task;
-        //}
-
-        //private async void ImgList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        //{
-        //    if (ImgListBox.SelectedItem is Thumbnail item)
-        //    {
-        //        //try
-        //        //{
-        //        //    await SetImgBoxSourceAsync(item.Path);
-        //        //    _processor.Load(item.Path);
-        //        //}
-        //        //catch (Exception ex)
-        //        //{
-        //        //    System.Windows.MessageBox.Show
-        //        //    (
-        //        //        $"Error loading image for preview: {ex.Message}",
-        //        //        "Error",
-        //        //        MessageBoxButton.OK,
-        //        //        MessageBoxImage.Error
-        //        //    );
-        //        //}
-        //    }
-        //}
-
-        //private async void OpenFolder_Click(object sender, RoutedEventArgs e)
-        //{
-        //    var dlg = new System.Windows.Forms.FolderBrowserDialog();
-
-        //    if (!string.IsNullOrEmpty(_lastOpenedFolder) && Directory.Exists(_lastOpenedFolder))
-        //        dlg.SelectedPath = _lastOpenedFolder;
-        //    else if (Directory.Exists("G:\\My Drive\\LEAD"))
-        //        dlg.SelectedPath = "G:\\My Drive\\LEAD";
-
-        //    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-        //    {
-        //        string folderPath = dlg.SelectedPath;
-
-        //        try
-        //        {
-        //            await LoadFolder(dlg.SelectedPath);
-        //            _lastOpenedFolder = dlg.SelectedPath;
-        //            Title = $"ImgViewer - {dlg.SelectedPath}";
-
-        //            if (Files.Count > 0)
-        //                ImgListBox.SelectedIndex = 0;
-        //        }
-        //        catch (OperationCanceledException)
-        //        {
-        //            Console.WriteLine("???????? ????????.");
-        //        }
-        //    }
-        //}
-
-        //private async Task SetImgBoxSourceAsync(string filePath)
-        //{
-        //    _currentLoadPreviewCts?.Cancel();
-        //    _currentLoadPreviewCts = new CancellationTokenSource();
-        //    var ctoken = _currentLoadPreviewCts.Token;
-
-        //    if (string.IsNullOrEmpty(filePath))
-        //    {
-        //        await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
-        //        return;
-        //    }
-        //    try
-        //    {
-        //        var bitmap = await Task.Run(() =>
-        //        {
-        //            return _explorer.Load<BitmapSource>(filePath);
-        //        }, ctoken).ConfigureAwait(false);
-
-        //        ctoken.ThrowIfCancellationRequested();
-
-        //        if (bitmap == null)
-        //        {
-        //            await Dispatcher.InvokeAsync(() => ImgBox.Source = null).Task;
-        //        }
-        //        await Dispatcher.InvokeAsync(() =>
-        //        {
-        //            RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.LowQuality);
-        //            ImgBox.Source = bitmap;
-        //            Title = $"ImgViewer - {Path.GetFileName(filePath)}";
-        //        }, DispatcherPriority.Render).Task;
-        //        await Dispatcher.InvokeAsync(() =>
-        //        {
-        //            RenderOptions.SetBitmapScalingMode(ImgBox, BitmapScalingMode.HighQuality);
-        //        }, DispatcherPriority.ContextIdle).Task;
-        //    }
-        //    catch (OperationCanceledException)
-        //    {
-        //        // Load was cancelled, do nothing
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        System.Windows.MessageBox.Show
-        //        (
-        //            $"Error loading image for preview: {ex.Message}",
-        //            "Error",
-        //            MessageBoxButton.OK,
-        //            MessageBoxImage.Error
-        //        );
-        //    }
-        //}
 
         private async void OpenFile_Click(object sender, RoutedEventArgs e)
         {
@@ -997,7 +835,10 @@ namespace ImgViewer.Views
 
         public Dictionary<string, object> CreateParameterDictionary()
         {
-            return _parameters.ToDictionary(parameter => parameter.Key, parameter => (object)parameter.Value);
+            return _parameters.ToDictionary(
+                parameter => parameter.Key,
+                parameter => (object)(parameter.IsCombo ? (object?)parameter.SelectedOption ?? string.Empty : parameter.Value)
+            );
         }
     }
 
@@ -1007,6 +848,9 @@ namespace ImgViewer.Views
         private readonly double _max;
         private double _value;
 
+        private IList<string>? _options;
+        private int _selectedIndex;
+
         public PipeLineParameter(string label, string key, double value, double min, double max, double step)
         {
             Label = label;
@@ -1015,6 +859,22 @@ namespace ImgViewer.Views
             _max = max;
             Step = step <= 0 ? 1 : step;
             _value = Clamp(value);
+            _options = null;
+            _selectedIndex = -1;
+        }
+
+        // constructor for ComboBox parameter
+        public PipeLineParameter(string label, string key, IEnumerable<string> options, int selectedIndex = 0)
+        {
+            Label = label;
+            Key = key;
+            Step = 1;
+            _min = double.NaN;
+            _max = double.NaN;
+            _value = double.NaN;
+
+            _options = options?.ToList() ?? new List<string>();
+            SelectedIndex = Math.Max(0, Math.Min(_options.Count - 1, selectedIndex));
         }
 
         public string Label { get; }
@@ -1047,6 +907,46 @@ namespace ImgViewer.Views
             Value -= Step;
         }
 
+        // --- Combo properties ---
+        public IList<string>? Options
+        {
+            get => _options;
+            // rarely changed at runtime; if you set it, update IsCombo
+            set
+            {
+                _options = value;
+                OnPropertyChanged(nameof(Options));
+                OnPropertyChanged(nameof(IsCombo));
+            }
+        }
+
+        public int SelectedIndex
+        {
+            get => _selectedIndex;
+            set
+            {
+                if (_options == null || _options.Count == 0)
+                {
+                    _selectedIndex = -1;
+                }
+                else
+                {
+                    int idx = Math.Max(0, Math.Min(_options.Count - 1, value));
+                    if (_selectedIndex != idx)
+                    {
+                        _selectedIndex = idx;
+                        OnPropertyChanged();
+                        OnPropertyChanged(nameof(SelectedOption));
+                    }
+                }
+            }
+        }
+
+        public string? SelectedOption => (Options != null && SelectedIndex >= 0 && SelectedIndex < Options.Count) ? Options[SelectedIndex] : null;
+
+        // convenience flag for XAML
+        public bool IsCombo => Options != null && Options.Count > 0;
+
         private double Clamp(double value)
         {
             if (!double.IsNaN(_min))
@@ -1061,6 +961,8 @@ namespace ImgViewer.Views
 
             return value;
         }
+
+
 
         private static bool AreClose(double value1, double value2)
         {

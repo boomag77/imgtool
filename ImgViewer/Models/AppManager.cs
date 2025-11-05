@@ -70,6 +70,12 @@ namespace ImgViewer.Models
         public void ApplyCommandToProcessingImage(ProcessorCommands command, Dictionary<string, object> parameters)
         {
             _mainViewModel.Status = $"Processing image...";
+            foreach (var kv in parameters)
+            {
+                Debug.WriteLine(kv.Key.ToString());
+                Debug.WriteLine(kv.Value.ToString());
+
+            }
             _imageProcessor.ApplyCommandToCurrent(command, parameters);
             _mainViewModel.Status = $"Standby";
         }
@@ -83,6 +89,7 @@ namespace ImgViewer.Models
 
         public async void ProcessFolder(string srcFolder)
         {
+            _mainViewModel.Status = $"Processing folder...";
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
             ProcessorCommands[] commands =
             {
@@ -101,6 +108,7 @@ namespace ImgViewer.Models
                 //StatusText.Text = "Cancelled";
 
             }
+            _mainViewModel.Status = $"Standby";
         }
 
         public void Dispose()

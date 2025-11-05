@@ -384,6 +384,7 @@ namespace ImgViewer.Models
                         //SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
+                        Deskewer.Parameters p = new Deskewer.Parameters();
 
                         NewDeskew();
                         //Deskew();
