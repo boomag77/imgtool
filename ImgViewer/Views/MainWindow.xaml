@@ -249,6 +249,67 @@
         </Style>
 
 
+        <!-- Put this inside <Window.Resources> (replace any previous PipelineCheckBoxStyle) -->
+        <Style x:Key="PipelineCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <!-- Box -->
+                            <Border x:Name="Box"
+                            Width="18" Height="18"
+                            CornerRadius="3"
+                            Background="{StaticResource PipelineTextboxBackgroundBrush}"
+                            BorderBrush="{StaticResource PipelineCardBorderBrush}"
+                            BorderThickness="1"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Left"/>
+
+                            <!-- Vector check mark - stroke binds to Foreground so it matches text -->
+                            <Path x:Name="CheckMark"
+                          Data="M3,9 L7,13 L15,4"
+                          Stroke="{TemplateBinding Foreground}"
+                          StrokeThickness="2.0"
+                          StrokeLineJoin="Round"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Visibility="Collapsed"
+                          HorizontalAlignment="Left"
+                          VerticalAlignment="Center"
+                          Margin="0,0,0,0"/>
+
+                            <!-- Label: use TextElement.Foreground to color text correctly -->
+                            <ContentPresenter x:Name="content"
+                                      ContentSource="Content"
+                                      Margin="24,0,0,0"
+                                      VerticalAlignment="Center"
+                                      RecognizesAccessKey="True"
+                                      TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <!-- show check when checked -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <!-- optional: change box background on checked -->
+                                <Setter TargetName="Box" Property="Background" Value="{StaticResource PipelineCardBorderBrush}"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+
+
+
     </Window.Resources>
     
     <Grid>
@@ -391,11 +452,28 @@
                             Padding="12"
                             SnapsToDevicePixels="True">
                         <StackPanel>
-                            <TextBlock Text="{Binding DisplayName}"
-                                       FontWeight="Bold"
-                                       FontSize="16"
-                                       Foreground="{StaticResource PipelineTextBrush}"
-                                       Margin="0,0,0,8"/>
+                            <!-- header: title left, "In pipeline" checkbox right -->
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding DisplayName}"
+                                           FontWeight="Bold"
+                                           FontSize="16"
+                                           Foreground="{StaticResource PipelineTextBrush}"
+                                           VerticalAlignment="Center"/>
+
+                                <CheckBox Grid.Column="1"
+                                          Content="In pipeline"
+                                          IsChecked="{Binding InPipeline, Mode=TwoWay}"
+                                          Style="{StaticResource PipelineCheckBoxStyle}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0"/>   
+
+                            </Grid>
                             <ItemsControl ItemsSource="{Binding Parameters}">
                                 <ItemsControl.Style>
                                     <Style TargetType="ItemsControl">

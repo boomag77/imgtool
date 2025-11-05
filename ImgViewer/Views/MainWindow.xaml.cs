@@ -813,6 +813,7 @@ namespace ImgViewer.Views
     {
         private readonly ObservableCollection<PipeLineParameter> _parameters;
         private readonly Action<MainWindow, PipeLineOperation>? _execute;
+        private bool _inPipeline = false;
 
         public PipeLineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<MainWindow, PipeLineOperation> execute)
         {
@@ -820,6 +821,7 @@ namespace ImgViewer.Views
             ActionLabel = actionLabel;
             _parameters = new ObservableCollection<PipeLineParameter>(parameters ?? Enumerable.Empty<PipeLineParameter>());
             _execute = execute;
+            _inPipeline = false;
         }
 
         public string DisplayName { get; }
@@ -827,6 +829,19 @@ namespace ImgViewer.Views
         public string ActionLabel { get; }
 
         public ObservableCollection<PipeLineParameter> Parameters => _parameters;
+
+        public bool InPipeline
+        {
+            get => _inPipeline;
+            set
+            {
+                if (_inPipeline != value)
+                {
+                    _inPipeline = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public void Execute(MainWindow window)
         {
@@ -840,6 +855,10 @@ namespace ImgViewer.Views
                 parameter => (object)(parameter.IsCombo ? (object?)parameter.SelectedOption ?? string.Empty : parameter.Value)
             );
         }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
     public class PipeLineParameter : INotifyPropertyChanged
