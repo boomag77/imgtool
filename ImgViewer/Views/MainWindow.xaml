@@ -6,8 +6,10 @@
         xmlns:local="clr-namespace:ImgViewer"
         xmlns:views="clr-namespace:ImgViewer.Views"
         mc:Ignorable="d"
-        Title="MainWindow" Height="600" Width="800">
+        Title="CCS Image Tool" Height="600" Width="800"
+        Background="LightGray">
     <Window.Resources>
+        
         <SolidColorBrush x:Key="PipelineCardBackgroundBrush" Color="#2F3136"/>
         <SolidColorBrush x:Key="PipelineCardBorderBrush" Color="#464A52"/>
         <SolidColorBrush x:Key="PipelineTextBrush" Color="#E5E7EA"/>
@@ -176,6 +178,7 @@
         BorderBrush="#FFBDBDBD"
         Margin="5"
         Padding="5"
+        
         HorizontalAlignment="Center"
         VerticalAlignment="Center"
         SnapsToDevicePixels="True">

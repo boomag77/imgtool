@@ -1,4 +1,5 @@
 ﻿using OpenCvSharp;
+
 using System.Diagnostics;
 
 namespace ImgViewer.Models
@@ -196,14 +197,21 @@ namespace ImgViewer.Models
             int bigH = (int)Math.Round(src.Width * absSin + src.Height * absCos);
             var centerBig = new Point2f(bigW / 2f, bigH / 2f);
 
-            using var big = new Mat(new OpenCvSharp.Size(bigW, bigH), MatType.CV_8UC3, Scalar.All(byBorders ? 0 : 255));
+            var borderRgb = GetBorderColor(src);
+            byte rb = (byte)((borderRgb >> 16) & 0xFF);
+            byte gb = (byte)((borderRgb >> 8) & 0xFF);
+            byte bb = (byte)(borderRgb & 0xFF);
+            var bgScalar = new Scalar(bb, gb, rb); // OpenCV uses BGR order
+
+            using var big = new Mat(new OpenCvSharp.Size(bigW, bigH), MatType.CV_8UC3, bgScalar);
             int offX = (bigW - src.Width) / 2;
             int offY = (bigH - src.Height) / 2;
             src.CopyTo(new Mat(big, new Rect(offX, offY, src.Width, src.Height)));
 
             var M = Cv2.GetRotationMatrix2D(centerBig, rotation, 1.0);
             using var rotatedBig = new Mat();
-            Cv2.WarpAffine(big, rotatedBig, M, new OpenCvSharp.Size(bigW, bigH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(byBorders ? 0 : 255));
+           
+            Cv2.WarpAffine(big, rotatedBig, M, new OpenCvSharp.Size(bigW, bigH), InterpolationFlags.Linear, BorderTypes.Constant, bgScalar);
 
             // вычисляем маску на rotatedBig (CV_8UC1)
             using var mask = BinarizeToMask(rotatedBig);
@@ -463,6 +471,125 @@ namespace ImgViewer.Models
             if (angle > 90) angle -= 180;
             if (angle <= -90) angle += 180;
             return angle;
+        }
+
+        private static int GetBorderColor(Mat src)
+        {
+            if (src == null || src.Empty())
+                return 0xFFFFFF; // default white
+
+            // Ensure BGR (we'll work with a copy to be safe)
+            using var img = EnsureBgr(src);
+            if (img == null || img.Empty()) return 0xFFFFFF;
+
+            int h = img.Rows, w = img.Cols;
+            if (h == 0 || w == 0) return 0xFFFFFF;
+
+            // border thickness as percent of smaller side (3%)
+            int thickness = Math.Max(1, (int)Math.Round(Math.Min(h, w) * 0.01));
+            const int maxSamples = 12000;
+
+            // estimate border pixels and choose step to limit samples
+            long approxBorderPixels = 2L * thickness * w + 2L * thickness * h;
+            int step = 1;
+            if (approxBorderPixels > maxSamples)
+            {
+                step = Math.Max(1, (int)Math.Ceiling(Math.Sqrt((double)approxBorderPixels / maxSamples)));
+            }
+
+            // collect B,G,R floats sequentially
+            var samples = new List<float>();
+            for (int y = 0; y < h; y += step)
+            {
+                for (int x = 0; x < w; x += step)
+                {
+                    if (x < thickness || x >= w - thickness || y < thickness || y >= h - thickness)
+                    {
+                        var v = img.At<Vec3b>(y, x);
+                        samples.Add(v.Item0); // B
+                        samples.Add(v.Item1); // G
+                        samples.Add(v.Item2); // R
+                        if (samples.Count / 3 >= maxSamples) goto SamplesCollected;
+                    }
+                }
+            }
+        SamplesCollected:
+            int n = samples.Count / 3;
+            if (n == 0) return 0xFFFFFF;
+
+            // compute per-channel mean & stddev
+            double sumB = 0, sumG = 0, sumR = 0;
+            for (int i = 0; i < n; i++)
+            {
+                sumB += samples[i * 3 + 0];
+                sumG += samples[i * 3 + 1];
+                sumR += samples[i * 3 + 2];
+            }
+            double meanB = sumB / n, meanG = sumG / n, meanR = sumR / n;
+
+            double varB = 0, varG = 0, varR = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double b = samples[i * 3 + 0] - meanB;
+                double g = samples[i * 3 + 1] - meanG;
+                double r = samples[i * 3 + 2] - meanR;
+                varB += b * b;
+                varG += g * g;
+                varR += r * r;
+            }
+            double stdB = Math.Sqrt(varB / n);
+            double stdG = Math.Sqrt(varG / n);
+            double stdR = Math.Sqrt(varR / n);
+            double avgStd = (stdB + stdG + stdR) / 3.0;
+
+            // If border fairly uniform or too few samples -> return mean
+            const double uniformThreshold = 10.0; // tweakable
+            if (avgStd < uniformThreshold || n < 50)
+            {
+                int r = ClampToByte((int)Math.Round(meanR));
+                int g = ClampToByte((int)Math.Round(meanG));
+                int b = ClampToByte((int)Math.Round(meanB));
+                return PackRgb(r, g, b);
+            }
+
+            // Otherwise use KMeans (k=2) to find dominant border color
+            using (var samplesMat = new Mat(n, 3, MatType.CV_32F))
+            using (var labels = new Mat())
+            using (var centers = new Mat())
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    samplesMat.Set(i, 0, samples[i * 3 + 0]);
+                    samplesMat.Set(i, 1, samples[i * 3 + 1]);
+                    samplesMat.Set(i, 2, samples[i * 3 + 2]);
+                }
+
+                var criteria = TermCriteria.Both(10, 1.0);
+                //var criteria = new TermCriteria(OpenCvSharp.CriteriaType.Eps | OpenCvSharp.CriteriaType.MaxIter, 10, 1.0);
+                Cv2.Kmeans(samplesMat, 2, labels, criteria, attempts: 3, flags: KMeansFlags.RandomCenters, centers: centers);
+
+                // count labels
+                int[] counts = new int[2];
+                for (int i = 0; i < labels.Rows; i++)
+                {
+                    int lbl = labels.At<int>(i, 0);
+                    if (lbl >= 0 && lbl < counts.Length) counts[lbl]++;
+                }
+
+                int bestIdx = counts[0] >= counts[1] ? 0 : 1;
+                float centerB = centers.At<float>(bestIdx, 0);
+                float centerG = centers.At<float>(bestIdx, 1);
+                float centerR = centers.At<float>(bestIdx, 2);
+
+                int rb = ClampToByte((int)Math.Round(centerR));
+                int gb = ClampToByte((int)Math.Round(centerG));
+                int bb = ClampToByte((int)Math.Round(centerB));
+                return PackRgb(rb, gb, bb);
+            }
+
+            // local helpers
+            static int ClampToByte(int v) => v < 0 ? 0 : (v > 255 ? 255 : v);
+            static int PackRgb(int r, int g, int b) => (r << 16) | (g << 8) | b;
         }
 
     }
