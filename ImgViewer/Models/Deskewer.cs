@@ -1,16 +1,12 @@
 ﻿using OpenCvSharp;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ImgViewer.Models
 {
     internal class Deskewer
     {
+
+
         private static double GetSkewAngleByBorders(Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150,
                                    int morphKernel = 5, double minAreaFraction = 0.2)
         {
@@ -117,8 +113,26 @@ namespace ImgViewer.Models
             return angle;
         }
 
+        public struct Parameters
+        {
+            public bool byBorders { get; set; }
+            public int cannyTresh1 { get; set; }
+            public int cannyTresh2 { get; set; }
+            public int morphKernel { get; set; }
+            public double minAreaFraction { get; set; }
 
-        public static Mat Deskew(Mat orig, bool byBorders = true)
+            public int houghTreshold { get; set; }
+            public int minLineLength { get; set; }
+            public int minAngle { get; set; }
+            public int maxAngle { get; set; }
+            public double coarseStep { get; set; }
+            public double refineStep { get; set; }
+            public int maxLineGap { get; set; }
+
+        }
+
+
+        public static Mat Deskew(Mat orig, bool byBorders = false)
         {
             if (orig == null || orig.Empty()) return orig;
 
@@ -130,13 +144,18 @@ namespace ImgViewer.Models
             double finalAngle = double.NaN;
             if (byBorders)
             {
-                double borderAngle = GetSkewAngleByBorders(src, cannyThresh1: 50, cannyThresh2: 150,
-                                                          morphKernel: 5, minAreaFraction: 0.2);
+                double borderAngle = GetSkewAngleByBorders(src,
+                    cannyThresh1: 50,
+                    cannyThresh2: 150,
+                    morphKernel: 5,
+                    minAreaFraction: 0.2);
+
                 Debug.WriteLine($"Deskew: angle by Borders = {borderAngle:F3}");
+
                 finalAngle = borderAngle;
                 if (double.IsNaN(borderAngle))
                 {
-                   return src.Clone();
+                    return src.Clone();
                 }
             }
             else
@@ -163,7 +182,7 @@ namespace ImgViewer.Models
                 }
             }
 
-               
+
 
             if (finalAngle > 45) finalAngle -= 90;
             if (finalAngle < -45) finalAngle += 90;
@@ -294,7 +313,7 @@ namespace ImgViewer.Models
             return new Mat(bigImg, roi).Clone();
         }
 
-        private static  double GetSkewAngleByHough(Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150, int houghThreshold = 80, int minLineLength = 100, int maxLineGap = 20)
+        private static double GetSkewAngleByHough(Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150, int houghThreshold = 80, int minLineLength = 100, int maxLineGap = 20)
         {
             using var gray = new Mat();
             if (src.Channels() == 3)
@@ -364,7 +383,7 @@ namespace ImgViewer.Models
             return best;
         }
 
-        private static  double ProjectionScore(Mat mask, double angle)
+        private static double ProjectionScore(Mat mask, double angle)
         {
             double rotation = -angle;
             double rad = rotation * Math.PI / 180.0;

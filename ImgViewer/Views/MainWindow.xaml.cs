@@ -1,4 +1,4 @@
-using ImgViewer.Interfaces;
+﻿using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -69,97 +69,6 @@ namespace ImgViewer.Views
 
 
 
-        public class Thumbnail : INotifyPropertyChanged, IDisposable
-        {
-            private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(Math.Max(1, Environment.ProcessorCount / 2));
-            private IFileProcessor Explorer { get; }
-            private readonly Dispatcher _dispatcher;
-            private readonly CancellationToken _parentToken;
-            private CancellationTokenSource? _localCts;
-            public string Name { get; }
-            public string Path { get; }
-            private BitmapImage? _thumb;
-            public BitmapImage Thumb
-            {
-                get => _thumb;
-                private set
-                {
-                    _thumb = value;
-                    OnPropertyChanged();
-                }
-            }
-            public Thumbnail(CancellationToken parentToken, Dispatcher dispatcher, IFileProcessor explorer, string path, bool preload = false)
-            {
-                _parentToken = parentToken;
-                Explorer = explorer;
-                _dispatcher = dispatcher;
-                Name = System.IO.Path.GetFileName(path);
-                Path = path;
-
-                if (preload)
-                {
-                    _ = LoadThumbAsync(_parentToken);
-                }
-
-            }
-            public void Dispose()
-            {
-                try
-                {
-                    _localCts?.Cancel();
-                    _localCts?.Dispose();
-                    _localCts = null;
-                }
-                catch { }
-
-                Thumb = null;
-            }
-
-            public async Task LoadThumbAsync(CancellationToken token = default)
-            {
-                //try
-                //{
-                //    _localCts?.Cancel();
-                //    _localCts?.Dispose();
-                //}
-                //catch { /* ignore */ }
-
-                //_localCts = CancellationTokenSource.CreateLinkedTokenSource(_parentToken, token);
-                //var ct = _localCts.Token;
-
-                //await _semaphore.WaitAsync(ct).ConfigureAwait(false);
-                //try
-                //{
-                //    if (ct.IsCancellationRequested)
-                //        return;
-                //    var bmp = await Task.Run(() => Explorer.Load<BitmapImage>(Path, 50), ct).ConfigureAwait(false);
-                //    if (!ct.IsCancellationRequested && bmp != null)
-                //    {
-                //        await _dispatcher.InvokeAsync(() => Thumb = bmp).Task.ConfigureAwait(false);
-                //    }
-                //}
-                //finally
-                //{
-                //    try { _semaphore.Release(); } catch { }
-                //    try
-                //    {
-                //        _localCts?.Dispose();
-                //    }
-                //    catch { }
-                //    _localCts = null;
-                //}
-            }
-
-
-            public event PropertyChangedEventHandler? PropertyChanged;
-            protected void OnPropertyChanged([CallerMemberName] string name = null) =>
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        }
-
-
-
-        //public ObservableCollection<Thumbnail> Files { get; set; } = new ObservableCollection<Thumbnail>();
-
         public MainWindow()
         {
             InitializeComponent();
@@ -200,7 +109,7 @@ namespace ImgViewer.Views
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Deskew, operation.CreateParameterDictionary())));
 
             _pipeLineOperations.Add(new PipeLineOperation(
-                "Border Cleanup",
+                "Border Removal",
                 "Run",
                 new[]
                 {
@@ -218,14 +127,7 @@ namespace ImgViewer.Views
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary())));
 
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Despeckle",
-                "Run",
-                new[]
-                {
-                    new PipeLineParameter("Strength", "DespeckleStrength", 3, 1, 10, 1)
-                },
-                (window, operation) => window.ExecuteProcessorCommand(ProcessorCommands.Despeckle, operation.CreateParameterDictionary())));
+            
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Auto Binarize",
@@ -236,23 +138,6 @@ namespace ImgViewer.Views
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary())));
 
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Line Removal",
-                "Run",
-                new[]
-                {
-                    new PipeLineParameter("Width", "LineWidth", 2, 1, 10, 1)
-                },
-                (window, operation) => window.ExecuteProcessorCommand(ProcessorCommands.LineRemove, operation.CreateParameterDictionary())));
-
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Punch Removal",
-                "Run",
-                new[]
-                {
-                    new PipeLineParameter("Radius", "PunchRadius", 6, 1, 30, 1)
-                },
-                (window, operation) => window.ExecuteProcessorCommand(ProcessorCommands.DotsRemove, operation.CreateParameterDictionary())));
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Batch Processing",
@@ -733,6 +618,7 @@ namespace ImgViewer.Views
                     //await _mvm.LoadImagAsync(dlg.FileName);
                     var fileName = dlg.FileName;
                     await _manager.SetImageOnPreview(fileName);
+                    _viewModel.CurrentImagePath = fileName;
                     _viewModel.LastOpenedFolder = Path.GetDirectoryName(fileName);
                 }
                 catch (OperationCanceledException)
@@ -752,7 +638,59 @@ namespace ImgViewer.Views
             }
         }
 
+        private async void OpenNextFile_Click(object sender, RoutedEventArgs e)
+        {
+            await OpenSiblingFileAsync(true);
+        }
 
+        private async void OpenPrevFile_Click(object sender, RoutedEventArgs e)
+        {
+            await OpenSiblingFileAsync(false);
+        }
+
+        private async Task OpenSiblingFileAsync(bool next)
+        {
+            string[] _imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
+            try
+            {
+                // проверим папку
+                var folder = _viewModel.LastOpenedFolder;
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                {
+                    System.Windows.MessageBox.Show("Folder unknown or doesn't exist. Open a file first.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // собрать файлы с нужными расширениями
+                var files = Directory.GetFiles(folder)
+                                     .Where(f => _imageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                                     .ToArray();
+
+                int i = Array.IndexOf(files, _viewModel.CurrentImagePath);
+                if (i == -1)
+                    return;
+                int newIdx = next ? i+1 : i-1;
+                if (newIdx < 0 || newIdx >= files.Length) return;
+
+                var target = files[newIdx];
+                await _manager.SetImageOnPreview(target);
+                _viewModel.CurrentImagePath = target;
+                _viewModel.LastOpenedFolder = folder;
+            }
+            catch (OperationCanceledException)
+            {
+                // cancelled — игнорируем
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(
+                    $"Error loading neighboring file: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
 
         private void ApplyDeskew(object sender, RoutedEventArgs e)
         {
