@@ -418,6 +418,23 @@
 
         </Border>
 
+        <Border Grid.Row="3" Grid.Column="2">
+            <StackPanel Orientation="Horizontal"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center">
+                <Button Style="{StaticResource ElevatedRoundedButton}"
+        Margin="5,5,5,5"
+        MinWidth="120"
+        Click="ApplyCurrentPipelineToCurrentFolder_Click">Apply PL to current Folder</Button>
+                <Button Style="{StaticResource ElevatedRoundedButton}"
+        Margin="5,5,5,5"
+        MinWidth="120"
+        Click="OpenNextFile_Click">Button</Button>
+
+            </StackPanel>
+
+        </Border>
+
         <!--Pipeline -->
         <ListBox x:Name="PipelineListBox"
                  Grid.Row="2"
@@ -429,6 +446,7 @@
                  BorderThickness="0"
                  AllowDrop="True"
                  HorizontalContentAlignment="Stretch"
+                 VerticalAlignment="Center"
                  ItemContainerStyle="{StaticResource PipelineCardListBoxItemStyle}"
                  PreviewMouseLeftButtonDown="PipelineListBox_PreviewMouseLeftButtonDown"
                  PreviewMouseMove="PipelineListBox_PreviewMouseMove"

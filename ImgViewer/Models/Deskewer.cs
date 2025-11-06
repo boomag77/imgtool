@@ -196,6 +196,7 @@ namespace ImgViewer.Models
             byte gb = (byte)((borderRgb >> 8) & 0xFF);
             byte bb = (byte)(borderRgb & 0xFF);
             var bgScalar = new Scalar(bb, gb, rb); // OpenCV uses BGR order
+            bgScalar = Scalar.All(0);
 
             using var big = new Mat(new OpenCvSharp.Size(bigW, bigH), MatType.CV_8UC3, bgScalar);
             int offX = (bigW - src.Width) / 2;

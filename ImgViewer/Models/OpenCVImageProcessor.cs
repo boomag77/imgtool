@@ -2,6 +2,7 @@
 using OpenCvSharp;
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
@@ -452,10 +453,140 @@ namespace ImgViewer.Models
                         //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
                         //либо используйте более устойчивую выборку(несколько областей).
                         //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
-                        RemoveBordersByRowColWhite(threshFrac: 0.40, contrastThr: 50, centralSample: 0.10, maxRemoveFrac: 0.45);
+                        double treshFrac = 0.40;
+                        int contrastThr = 50;
+                        double centralSample = 0.10;
+                        double maxRemoveFrac = 0.45;
+
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == null) continue;
+
+                            switch (kv.Key)
+                            {
+                                case "treshFrac":
+                                    {
+                                        var v = kv.Value;
+                                        if (v is double dv) { treshFrac = dv; break; }
+                                        if (v is float fv) { treshFrac = fv; break; }
+                                        if (v is int iv) { treshFrac = iv; break; }
+                                        var s = v?.ToString()?.Trim();
+                                        if (string.IsNullOrEmpty(s)) break;
+
+                                        if (s.EndsWith("%", StringComparison.Ordinal))
+                                        {
+                                            var p = s.TrimEnd('%').Trim();
+                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
+                                                treshFrac = pd / 100.0;
+                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
+                                                treshFrac = pd / 100.0;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                                        {
+                                            treshFrac = d;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
+                                        {
+                                            treshFrac = d;
+                                        }
+                                    }
+                                    break;
+
+                                case "contrastThr":
+                                    {
+                                        var v = kv.Value;
+                                        if (v is int iv) { contrastThr = iv; break; }
+                                        if (v is long lv) { contrastThr = (int)lv; break; }
+                                        if (v is double dv) { contrastThr = Convert.ToInt32(Math.Round(dv)); break; }
+                                        if (v is float fv) { contrastThr = Convert.ToInt32(Math.Round(fv)); break; }
+                                        var s = v?.ToString()?.Trim();
+                                        if (string.IsNullOrEmpty(s)) break;
+                                        if (int.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var i) ||
+                                            int.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out i))
+                                        {
+                                            contrastThr = i;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var dd))
+                                        {
+                                            contrastThr = Convert.ToInt32(Math.Round(dd));
+                                        }
+                                    }
+                                    break;
+
+                                case "centralSample":
+                                    {
+                                        var v = kv.Value;
+                                        if (v is double dv) { centralSample = dv; break; }
+                                        if (v is float fv) { centralSample = fv; break; }
+                                        if (v is int iv) { centralSample = iv; break; }
+                                        var s = v?.ToString()?.Trim();
+                                        if (string.IsNullOrEmpty(s)) break;
+                                        if (s.EndsWith("%", StringComparison.Ordinal))
+                                        {
+                                            var p = s.TrimEnd('%').Trim();
+                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
+                                                centralSample = pd / 100.0;
+                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
+                                                centralSample = pd / 100.0;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                                        {
+                                            centralSample = d;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
+                                        {
+                                            centralSample = d;
+                                        }
+                                    }
+                                    break;
+
+                                case "maxRemoveFrac":
+                                    {
+                                        var v = kv.Value;
+                                        if (v is double dv) { maxRemoveFrac = dv; break; }
+                                        if (v is float fv) { maxRemoveFrac = fv; break; }
+                                        if (v is int iv) { maxRemoveFrac = iv; break; }
+                                        var s = v?.ToString()?.Trim();
+                                        if (string.IsNullOrEmpty(s)) break;
+                                        if (s.EndsWith("%", StringComparison.Ordinal))
+                                        {
+                                            var p = s.TrimEnd('%').Trim();
+                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
+                                                maxRemoveFrac = pd / 100.0;
+                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
+                                                maxRemoveFrac = pd / 100.0;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                                        {
+                                            maxRemoveFrac = d;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
+                                        {
+                                            maxRemoveFrac = d;
+                                        }
+                                    }
+                                    break;
+
+                                default:
+                                    // ignore unknown key
+                                    break;
+                            }
+                        }
+
+                        Debug.WriteLine(treshFrac);
+                        Debug.WriteLine(contrastThr);
+                        Debug.WriteLine(centralSample);
+                        Debug.WriteLine(maxRemoveFrac);
+
+                        RemoveBordersByRowColWhite(
+                            threshFrac: treshFrac,
+                            contrastThr: contrastThr,
+                            centralSample: centralSample,
+                            maxRemoveFrac: maxRemoveFrac
+                        );
+
                         //var thr = EstimateBlackThreshold(_currentImage);
                         //RemoveBorderArtifactsGeneric_Safe(_currentImage, 255);
-                        //RemoveBordersByRowColWhite(threshFrac: 0.70, contrastThr: 30, centralSample: 0.10, maxRemoveFrac: 0.45);
                         break;
                     case ProcessorCommands.Despeckle:
                         //applyDespeckleCurrent();
@@ -835,7 +966,7 @@ namespace ImgViewer.Models
 
         public static Deskewer.Parameters ParseParametersSimple(Dictionary<string, object>? parameters)
         {
-            var result = new Parameters
+            var result = new Deskewer.Parameters
             {
                 byBorders = false,
                 cTresh1 = 50,

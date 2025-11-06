@@ -52,6 +52,9 @@ namespace ImgViewer.Views
         private DraggedItemAdorner? _draggedItemAdorner;
         private InsertionIndicatorAdorner? _insertionAdorner;
 
+        private bool _livePipelineRunning = false;
+
+
         public IViewModel ViewModel
         {
             get => _viewModel;
@@ -201,21 +204,18 @@ namespace ImgViewer.Views
             }
         }
 
+        // --- Replace this existing method with the code below ---
         private async void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
         {
-            // simple guard to avoid re-entrancy (if parameter change triggers reset which triggers param change)
-            if (_handlingOps.Contains(op)) return;
+            // avoid re-entrancy: if a pipeline-run is already applying, ignore subsequent rapid changes
+            if (_livePipelineRunning) return;
 
+            _livePipelineRunning = true;
             try
             {
-                _handlingOps.Add(op);
-
-                // 1) Reset the current image to original using the same logic as Reset button.
-                //    If you have a dedicated Reset method, call it instead of invoking the click handler.
-                //    Example uses the ResetButton_Click event handler you mentioned exists.
+                // 1) Reset preview to original on UI thread (same behavior as Reset button)
                 try
                 {
-                    // ensure this runs on UI thread
                     Dispatcher.Invoke(() => ResetPreview());
                 }
                 catch (Exception ex)
@@ -223,29 +223,89 @@ namespace ImgViewer.Views
                     Debug.WriteLine($"Reset failed in parameter-change handler: {ex}");
                 }
 
-                // 2) If this operation is marked Live, run it
-                if (op.Live)
+                // 2) Execute ALL operations from the start that are marked InPipeline && Live
+                //    Execute sequentially in pipeline order to accumulate effects predictably.
+                foreach (var pipelineOp in PipeLineOperations)
                 {
-                    // Run the operation off the UI thread if it is heavy; otherwise run on UI thread.
-                    // I use Task.Run to avoid blocking UI; if Execute touches UI, marshal inside Execute accordingly.
-                    await Task.Run(() =>
+                    // only run operations that are both InPipeline and Live
+                    if (!pipelineOp.InPipeline || !pipelineOp.Live) continue;
+
+                    // avoid duplicate parallel runs for the same operation
+                    if (!_liveRunning.Add(pipelineOp)) continue;
+
+                    try
                     {
-                        try
+                        // run heavy work off UI thread; op.Execute(...) should marshal to UI if it updates UI.
+                        await Task.Run(() =>
                         {
-                            op.Execute(this); // call the existing Run logic for this operation
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"Live execution failed for {op.DisplayName}: {ex}");
-                        }
-                    });
+                            try
+                            {
+                                pipelineOp.Execute(this);
+                            }
+                            catch (Exception exExec)
+                            {
+                                Debug.WriteLine($"Live execution failed for {pipelineOp.DisplayName}: {exExec}");
+                            }
+                        });
+                    }
+                    finally
+                    {
+                        _liveRunning.Remove(pipelineOp);
+                    }
                 }
             }
             finally
             {
-                _handlingOps.Remove(op);
+                _livePipelineRunning = false;
             }
         }
+
+
+        //private async void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
+        //{
+        //    // simple guard to avoid re-entrancy (if parameter change triggers reset which triggers param change)
+        //    if (_handlingOps.Contains(op)) return;
+
+        //    try
+        //    {
+        //        _handlingOps.Add(op);
+
+        //        // 1) Reset the current image to original using the same logic as Reset button.
+        //        //    If you have a dedicated Reset method, call it instead of invoking the click handler.
+        //        //    Example uses the ResetButton_Click event handler you mentioned exists.
+        //        try
+        //        {
+        //            // ensure this runs on UI thread
+        //            Dispatcher.Invoke(() => ResetPreview());
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Debug.WriteLine($"Reset failed in parameter-change handler: {ex}");
+        //        }
+
+        //        // 2) If this operation is marked Live, run it
+        //        if (op.Live)
+        //        {
+        //            // Run the operation off the UI thread if it is heavy; otherwise run on UI thread.
+        //            // I use Task.Run to avoid blocking UI; if Execute touches UI, marshal inside Execute accordingly.
+        //            await Task.Run(() =>
+        //            {
+        //                try
+        //                {
+        //                    op.Execute(this); // call the existing Run logic for this operation
+        //                }
+        //                catch (Exception ex)
+        //                {
+        //                    Debug.WriteLine($"Live execution failed for {op.DisplayName}: {ex}");
+        //                }
+        //            });
+        //        }
+        //    }
+        //    finally
+        //    {
+        //        _handlingOps.Remove(op);
+        //    }
+        //}
 
         private void InitializePipeLineOperations()
         {
@@ -270,22 +330,24 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Border Removal",
-                "Run",
+                "Preview",
                 new[]
                 {
-                    new PipeLineParameter("Margin", "BorderMargin", 4, 0, 100, 1),
-                    new PipeLineParameter("Sensitivity", "BorderSensitivity", 0.5, 0, 1, 0.05)
+                    new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
+                    new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 250, 1),
+                    new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
+                    new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01)
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary())));
 
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Auto Crop",
-                "Run",
-                new[]
-                {
-                    new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
-                },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary())));
+            //_pipeLineOperations.Add(new PipeLineOperation(
+            //    "Auto Crop",
+            //    "Run",
+            //    new[]
+            //    {
+            //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
+            //    },
+            //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary())));
 
             
 
@@ -300,14 +362,14 @@ namespace ImgViewer.Views
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary())));
 
 
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Batch Processing",
-                "Process Folder",
-                new[]
-                {
-                    new PipeLineParameter("Parallel", "Parallelism", 1, 1, Environment.ProcessorCount, 1)
-                },
-                (window, operation) => window.ProcessFolderClick(window, new RoutedEventArgs())));
+            //_pipeLineOperations.Add(new PipeLineOperation(
+            //    "Batch Processing",
+            //    "Process Folder",
+            //    new[]
+            //    {
+            //        new PipeLineParameter("Parallel", "Parallelism", 1, 1, Environment.ProcessorCount, 1)
+            //    },
+            //    (window, operation) => window.ProcessFolderClick(window, new RoutedEventArgs())));
         }
 
         private void PipelineRunButton_Click(object sender, RoutedEventArgs e)
@@ -334,6 +396,50 @@ namespace ImgViewer.Views
             {
                 parameter.Decrement();
                 e.Handled = true;
+            }
+        }
+
+        private async Task RunLiveOperationsForNewImageAsync()
+        {
+            try
+            {
+                // Если оригинального изображения нет — ничего не делать
+                if (_viewModel?.OriginalImage == null) return;
+
+                // Сброс к оригиналу (на UI-потоке)
+                Dispatcher.Invoke(() => ResetPreview());
+
+                // Выполняем последовательно в порядке PipeLineOperations все операции с Live == true
+                foreach (var op in PipeLineOperations)
+                {
+                    if (!op.Live || !op.InPipeline) continue;
+
+                    // защита от повторного параллельного запуска одной и той же операции
+                    if (!_liveRunning.Add(op)) continue;
+
+                    try
+                    {
+                        await Task.Run(() =>
+                        {
+                            try
+                            {
+                                op.Execute(this);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"RunLiveOperations: execution failed for {op.DisplayName}: {ex}");
+                            }
+                        });
+                    }
+                    finally
+                    {
+                        _liveRunning.Remove(op);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"RunLiveOperationsForNewImageAsync failed: {ex}");
             }
         }
 
@@ -405,7 +511,7 @@ namespace ImgViewer.Views
             }
         }
 
-        private void PipelineListBox_Drop(object sender, DragEventArgs e)
+        private async void PipelineListBox_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(typeof(PipeLineOperation)) || _draggedOperation == null)
             {
@@ -419,6 +525,17 @@ namespace ImgViewer.Views
 
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
+
+            // ----- NEW: после изменения порядка ресетим и перезапускаем live-пайплайн -----
+            try
+            {
+                // RunLiveOperationsForNewImageAsync уже делает ResetPreview в начале, поэтому просто вызываем его.
+                await RunLiveOperationsForNewImageAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Pipeline reorder live-run failed: {ex}");
+            }
         }
 
         private void PipelineListBox_GiveFeedback(object sender, GiveFeedbackEventArgs e)
@@ -614,6 +731,8 @@ namespace ImgViewer.Views
                     await _manager.SetImageOnPreview(fileName);
                     _viewModel.CurrentImagePath = fileName;
                     _viewModel.LastOpenedFolder = System.IO.Path.GetDirectoryName(fileName);
+
+                    await RunLiveOperationsForNewImageAsync();
                 }
                 catch (OperationCanceledException)
                 {
@@ -671,6 +790,8 @@ namespace ImgViewer.Views
                 await _manager.SetImageOnPreview(target);
                 _viewModel.CurrentImagePath = target;
                 _viewModel.LastOpenedFolder = folder;
+
+                await RunLiveOperationsForNewImageAsync();
             }
             catch (OperationCanceledException)
             {
@@ -723,6 +844,8 @@ namespace ImgViewer.Views
             ExecuteProcessorCommand(ProcessorCommands.DotsRemove, GetParametersFromSender(sender));
         }
 
+
+
         private void ProcessFolderClick(object sender, RoutedEventArgs e)
         {
             var dlg = new System.Windows.Forms.FolderBrowserDialog();
@@ -739,36 +862,49 @@ namespace ImgViewer.Views
                 var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
                 _manager.ProcessFolder(folderPath);
 
-                //var workerPool = new ImgWorkerPool(_cts, commands, 1, imgProcessor, fileExplorer, sourceFolder, 0);
-                //StatusText.Text = "Processing...";
-                //await Task.Yield();
-                //workerPool.ProgressChanged += (done, total) =>
-                //{
-                //    Dispatcher.InvokeAsync(() =>
-                //    {
-                //        MyProgressBar.Maximum = total;
-                //        MyProgressBar.Value = done;
-                //    });
-                //};
-                //workerPool.ErrorOccured += (msg) =>
-                //{
-                //    Dispatcher.InvokeAsync(() =>
-                //    {
-                //        System.Windows.MessageBox.Show(this, msg, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                //    });
-                //};
-                //try
-                //{
-                //    await workerPool.RunAsync();
-                //}
-                //catch (OperationCanceledException)
-                //{
-                //    StatusText.Text = "Cancelled";
-
-                //}
             }
             //StatusText.Text = "Ready";
             //MyProgressBar.Value = 0;
+        }
+
+        private void ApplyCurrentPipelineToCurrentFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // попытка взять папку из LastOpenedFolder, иначе - из пути текущего файла
+                //string? folder = _viewModel?.LastOpenedFolder;
+                string folder = string.Empty;
+                if (string.IsNullOrWhiteSpace(folder) && !string.IsNullOrWhiteSpace(_viewModel?.CurrentImagePath))
+                {
+                    folder = System.IO.Path.GetDirectoryName(_viewModel.CurrentImagePath);
+                }
+
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                {
+                    System.Windows.MessageBox.Show("Folder unknown or doesn't exist. Open a file first.",
+                                                   "Info",
+                                                   MessageBoxButton.OK,
+                                                   MessageBoxImage.Information);
+                    return;
+                }
+
+                // опционально: спросить подтверждение у пользователя
+                var res = System.Windows.MessageBox.Show($"Apply current pipeline to all images in:\n{folder} ?",
+                                                         "Confirm",
+                                                         MessageBoxButton.OKCancel,
+                                                         MessageBoxImage.Question);
+                if (res != MessageBoxResult.OK) return;
+
+                // вызываем менеджер — он уже делает обработку папки
+                _manager.ProcessFolder(folder);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Failed to process folder: {ex.Message}",
+                                               "Error",
+                                               MessageBoxButton.OK,
+                                               MessageBoxImage.Error);
+            }
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
@@ -1042,6 +1178,7 @@ namespace ImgViewer.Views
                 {
                     // forward (operation, parameter) to listeners
                     ParameterChanged?.Invoke(this, p);
+                    
                 };
             }
         }
