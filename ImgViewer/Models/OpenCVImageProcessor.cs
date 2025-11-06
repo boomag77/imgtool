@@ -380,8 +380,37 @@ namespace ImgViewer.Models
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        //Binarize(140);
-                        BinarizeAdaptive();
+                        int SafeInt(object? v, int def)
+                        {
+                            if (v == null) return def;
+                            try
+                            {
+                                // Convert handles boxed numeric types and numeric strings
+                                return Convert.ToInt32(v);
+                            }
+                            catch
+                            {
+                                // fallback: try parsing as double then round
+                                try
+                                {
+                                    if (double.TryParse(v.ToString(), System.Globalization.NumberStyles.Any,
+                                                         System.Globalization.CultureInfo.InvariantCulture, out var d))
+                                        return (int)Math.Round(d);
+                                }
+                                catch { }
+                                return def;
+                            }
+                        }
+                        int treshold = 128;
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == "BinarizeThreshold")
+                            {
+                                treshold = SafeInt(kv.Value, treshold);
+                            }
+                        }
+                        Binarize(treshold);
+                        //BinarizeAdaptive();
                         //SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
