@@ -70,12 +70,7 @@ namespace ImgViewer.Models
         public void ApplyCommandToProcessingImage(ProcessorCommands command, Dictionary<string, object> parameters)
         {
             _mainViewModel.Status = $"Processing image...";
-            foreach (var kv in parameters)
-            {
-                Debug.WriteLine(kv.Key.ToString());
-                Debug.WriteLine(kv.Value.ToString());
-
-            }
+            
             _imageProcessor.ApplyCommandToCurrent(command, parameters);
             _mainViewModel.Status = $"Standby";
         }

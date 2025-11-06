@@ -6,6 +6,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using static ImgViewer.Models.Deskewer;
 
 namespace ImgViewer.Models
 {
@@ -384,9 +385,14 @@ namespace ImgViewer.Models
                         //SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
-                        Deskewer.Parameters p = new Deskewer.Parameters();
+                        //Deskewer.Parameters p = new Deskewer.Parameters();
+                        foreach (var kv in parameters)
+                        {
+                            Debug.WriteLine(kv.Key.ToString());
+                            Debug.WriteLine(kv.Value.ToString());
 
-                        NewDeskew();
+                        }
+                        NewDeskew(parameters);
                         //Deskew();
                         break;
                     case ProcessorCommands.BorderRemove:
@@ -777,18 +783,108 @@ namespace ImgViewer.Models
             return (list[mid - 1] + list[mid]) / 2;
         }
 
-        public void NewDeskew()
+
+        public static Deskewer.Parameters ParseParametersSimple(Dictionary<string, object>? parameters)
+        {
+            var result = new Parameters
+            {
+                byBorders = false,
+                cTresh1 = 50,
+                cTresh2 = 150,
+                morphKernel = 5,
+                houghTreshold = 80,
+                minLineLength = 200
+            };
+
+            if (parameters == null || parameters.Count == 0) return result;
+
+            int SafeInt(object? v, int def)
+            {
+                if (v == null) return def;
+                try
+                {
+                    // Convert handles boxed numeric types and numeric strings
+                    return Convert.ToInt32(v);
+                }
+                catch
+                {
+                    // fallback: try parsing as double then round
+                    try
+                    {
+                        if (double.TryParse(v.ToString(), System.Globalization.NumberStyles.Any,
+                                             System.Globalization.CultureInfo.InvariantCulture, out var d))
+                            return (int)Math.Round(d);
+                    }
+                    catch { }
+                    return def;
+                }
+            }
+
+            foreach (var kv in parameters)
+            {
+                if (kv.Key == null) continue;
+
+                switch (kv.Key) // keys are exact (case-sensitive) as you requested
+                {
+                    case "deskewAlgorithm":
+                        {
+                            var s = kv.Value?.ToString() ?? "Auto";
+                            // original logic: treat anything that is not "Auto" as byBorders=true
+                            // If you want only explicit "ByBorders" to set true, change the condition accordingly.
+                            result.byBorders = !s.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+                        }
+                        break;
+
+                    case "cannyTresh1":
+                        result.cTresh1 = SafeInt(kv.Value, result.cTresh1);
+                        break;
+
+                    case "cannyTresh2":
+                        result.cTresh2 = SafeInt(kv.Value, result.cTresh2);
+                        break;
+
+                    case "morphKernel":
+                        result.morphKernel = Math.Max(1, SafeInt(kv.Value, result.morphKernel));
+                        break;
+
+                    case "minLineLength":
+                        {
+                            int v = SafeInt(kv.Value, result.minLineLength);
+                             Math.Max(0, v);
+                        }
+                        break;
+
+                    case "houghTreshold":
+                        result.houghTreshold = SafeInt(kv.Value, result.houghTreshold);
+                        break;
+
+                    default:
+                        // unknown key: ignore
+                        break;
+                }
+            }
+
+            return result;
+        }
+
+        public void NewDeskew(Dictionary<string, object> parameters)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
             using var src = _currentImage.Clone();
-            _currentImage = Deskewer.Deskew(src);
+            
+
+            var p = new Deskewer.Parameters();
+
+            p = ParseParametersSimple(parameters);
+            
+            _currentImage = Deskewer.Deskew(src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
         }
 
         private void BordersDeskew()
         {
             if (_currentImage == null || _currentImage.Empty()) return;
             using var src = _currentImage.Clone();
-            _currentImage = Deskewer.Deskew(src, true);
+            //_currentImage = Deskewer.Deskew(src, true);
         }
 
         public void Deskew()

@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace ImgViewer.Models
 {
-    internal class Deskewer
+    public class Deskewer
     {
 
 
@@ -117,23 +117,17 @@ namespace ImgViewer.Models
         public struct Parameters
         {
             public bool byBorders { get; set; }
-            public int cannyTresh1 { get; set; }
-            public int cannyTresh2 { get; set; }
+            public int cTresh1 { get; set; }
+            public int cTresh2 { get; set; }
             public int morphKernel { get; set; }
-            public double minAreaFraction { get; set; }
 
             public int houghTreshold { get; set; }
             public int minLineLength { get; set; }
-            public int minAngle { get; set; }
-            public int maxAngle { get; set; }
-            public double coarseStep { get; set; }
-            public double refineStep { get; set; }
-            public int maxLineGap { get; set; }
 
         }
 
 
-        public static Mat Deskew(Mat orig, bool byBorders = false)
+        public static Mat Deskew(Mat orig, bool byBorders, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh)
         {
             if (orig == null || orig.Empty()) return orig;
 
@@ -146,9 +140,9 @@ namespace ImgViewer.Models
             if (byBorders)
             {
                 double borderAngle = GetSkewAngleByBorders(src,
-                    cannyThresh1: 50,
-                    cannyThresh2: 150,
-                    morphKernel: 5,
+                    cannyThresh1: cTresh1,
+                    cannyThresh2: cTresh2,
+                    morphKernel: morphK,
                     minAreaFraction: 0.2);
 
                 Debug.WriteLine($"Deskew: angle by Borders = {borderAngle:F3}");
@@ -162,7 +156,7 @@ namespace ImgViewer.Models
             else
             {
                 // 1) candidate angles
-                double houghAngle = GetSkewAngleByHough(src, cannyThresh1: 50, cannyThresh2: 150, houghThreshold: 80, minLineLength: Math.Min(src.Width, 200), maxLineGap: 20);
+                double houghAngle = GetSkewAngleByHough(src, cannyThresh1: cTresh1, cannyThresh2: cTresh2, houghThreshold: houghTresh, minLineLength: minLL, maxLineGap: 20);
                 Debug.WriteLine($"Deskew: angle by Hough = {houghAngle:F3}");
 
                 double projAngle = GetSkewAngleByProjection(src, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
