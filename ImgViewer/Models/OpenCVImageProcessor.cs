@@ -375,6 +375,7 @@ namespace ImgViewer.Models
 
         public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters = null)
         {
+         
             if (_currentImage != null)
             {
                 switch (command)
@@ -404,12 +405,35 @@ namespace ImgViewer.Models
                         int treshold = 128;
                         foreach (var kv in parameters)
                         {
-                            if (kv.Key == "BinarizeThreshold")
+                            if (kv.Key == "BinarizeTreshold")
                             {
                                 treshold = SafeInt(kv.Value, treshold);
                             }
                         }
-                        Binarize(treshold);
+                        foreach (var kv in parameters)
+                        {
+                            
+                            if (kv.Key == "binarizeAlgorithm")
+                            {
+                                Debug.WriteLine(kv.Value.ToString());
+                                switch (kv.Value.ToString())
+                                {
+                                    case "Treshold":
+                                        Debug.WriteLine(treshold);
+                                        Binarize(treshold);
+                                        break;
+                                    case "Adaptive":
+                                        BinarizeAdaptive();
+                                        break;
+                                    case "Sauvola":
+                                        SauvolaBinarize();
+                                        break;
+                                }
+                            }
+                            
+                        }
+
+                        //Binarize(treshold);
                         //BinarizeAdaptive();
                         //SauvolaBinarize();
                         break;

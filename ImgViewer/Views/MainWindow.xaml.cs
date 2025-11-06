@@ -139,7 +139,8 @@ namespace ImgViewer.Views
                 "Run",
                 new[]
                 {
-                    new PipeLineParameter("Threshold", "BinarizeThreshold", 128, 0, 255, 5)
+                    new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Treshold", "Sauvola", "Adaptive"}, 0),
+                    new PipeLineParameter("Treshold", "BinarizeTreshold", 128, 0, 255, 5)
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary())));
 
@@ -822,6 +823,8 @@ namespace ImgViewer.Views
             _parameters = new ObservableCollection<PipeLineParameter>(parameters ?? Enumerable.Empty<PipeLineParameter>());
             _execute = execute;
             _inPipeline = false;
+
+            InitializeParameterVisibilityRules();
         }
 
         public string DisplayName { get; }
@@ -848,6 +851,100 @@ namespace ImgViewer.Views
             _execute?.Invoke(window, this);
         }
 
+        private void InitializeParameterVisibilityRules()
+        {
+            // Deskew algorithm rules
+            var algo = _parameters.FirstOrDefault(p => p.Key == "deskewAlgorithm");
+            if (algo != null)
+            {
+                // apply initial visibility
+                ApplyDeskewVisibility(algo.SelectedOption);
+
+                // listen for changes on the combo parameter
+                algo.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
+                        e.PropertyName == nameof(PipeLineParameter.SelectedOption))
+                    {
+                        ApplyDeskewVisibility(algo.SelectedOption);
+                    }
+                };
+            }
+
+            // Binarize algorithm rules example
+            var binAlgo = _parameters.FirstOrDefault(p => p.Key == "binarizeAlgorithm");
+            if (binAlgo != null)
+            {
+                ApplyBinarizeVisibility(binAlgo.SelectedOption);
+                binAlgo.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
+                        e.PropertyName == nameof(PipeLineParameter.SelectedOption))
+                    {
+                        ApplyBinarizeVisibility(binAlgo.SelectedOption);
+                    }
+                };
+            }
+        }
+
+        private void ApplyDeskewVisibility(string? selectedOption)
+        {
+            // default to Auto if null
+            var selected = (selectedOption ?? "Auto").Trim();
+
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "deskewAlgorithm":
+                        p.IsVisible = true; // algorithm selector always visible
+                        break;
+
+                    // show these only for ByBorders
+                    case "cannyTresh1":
+                    case "cannyTresh2":
+                    case "morphKernel":
+                        p.IsVisible = selected.Equals("ByBorders", StringComparison.OrdinalIgnoreCase);
+                        break;
+
+                    // show these only for Hough
+                    case "minLineLength":
+                    case "houghTreshold":
+                        p.IsVisible = selected.Equals("Hough", StringComparison.OrdinalIgnoreCase);
+                        break;
+
+                    default:
+                        // keep other parameters visible by default
+                        p.IsVisible = true;
+                        break;
+                }
+            }
+        }
+
+        private void ApplyBinarizeVisibility(string? selectedOption)
+        {
+            var selected = (selectedOption ?? "").Trim();
+
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "binarizeAlgorithm":
+                        p.IsVisible = true;
+                        break;
+
+                    // show threshold param only when user selected "Treshold" (or "Threshold")
+                    case "BinarizeTreshold":
+                        p.IsVisible = selected.Equals("Treshold", StringComparison.OrdinalIgnoreCase);
+                        break;
+
+                    default:
+                        p.IsVisible = true;
+                        break;
+                }
+            }
+        }
+
         public Dictionary<string, object> CreateParameterDictionary()
         {
             return _parameters.ToDictionary(
@@ -866,6 +963,8 @@ namespace ImgViewer.Views
         private readonly double _min;
         private readonly double _max;
         private double _value;
+
+        private bool _isVisible = true;
 
         private IList<string>? _options;
         private int _selectedIndex;
@@ -911,6 +1010,19 @@ namespace ImgViewer.Views
                 if (!AreClose(_value, clamped))
                 {
                     _value = clamped;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsVisible
+        {
+            get => _isVisible;
+            set
+            {
+                if (_isVisible != value)
+                {
+                    _isVisible = value;
                     OnPropertyChanged();
                 }
             }

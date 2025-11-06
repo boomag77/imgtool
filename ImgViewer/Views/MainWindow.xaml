@@ -494,7 +494,8 @@
                                     <DataTemplate DataType="{x:Type views:PipeLineParameter}">
                                         <StackPanel Orientation="Horizontal"
                                                     Margin="0,0,12,8"
-                                                    VerticalAlignment="Center">
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
                                             <TextBlock Text="{Binding Label}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource PipelineTextBrush}"
