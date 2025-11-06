@@ -432,10 +432,6 @@ namespace ImgViewer.Models
                             }
                             
                         }
-
-                        //Binarize(treshold);
-                        //BinarizeAdaptive();
-                        //SauvolaBinarize();
                         break;
                     case ProcessorCommands.Deskew:
                         //Deskewer.Parameters p = new Deskewer.Parameters();

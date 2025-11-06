@@ -1,15 +1,19 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 using Brush = System.Windows.Media.Brush;
@@ -33,7 +37,9 @@ namespace ImgViewer.Views
     {
         private readonly IImageProcessor _processor;
         private readonly IFileProcessor _explorer;
+
         private readonly ObservableCollection<PipeLineOperation> _pipeLineOperations = new();
+        private readonly HashSet<PipeLineOperation> _handlingOps = new();
 
         private PipeLineOperation? _draggedOperation;
         private PipeLineOperation? _activeOperation;
@@ -67,7 +73,7 @@ namespace ImgViewer.Views
 
         private string _lastOpenedFolder = string.Empty;
 
-
+        private readonly HashSet<PipeLineOperation> _liveRunning = new();
 
         public MainWindow()
         {
@@ -89,7 +95,156 @@ namespace ImgViewer.Views
             };
 
             InitializePipeLineOperations();
+            
+            SubscribeParameterChangedHandlers();
+            HookLiveHandlers();
 
+        }
+
+        private void HookLiveHandlers()
+        {
+            // attach to existing operations
+            foreach (var op in PipeLineOperations)
+                op.LiveChanged += OnOperationLiveChanged;
+
+            // attach to future additions/removals if collection changes
+            if (PipeLineOperations is INotifyCollectionChanged coll)
+            {
+                coll.CollectionChanged += (s, e) =>
+                {
+                    if (e.NewItems != null)
+                    {
+                        foreach (PipeLineOperation added in e.NewItems)
+                            added.LiveChanged += OnOperationLiveChanged;
+                    }
+                    if (e.OldItems != null)
+                    {
+                        foreach (PipeLineOperation removed in e.OldItems)
+                            removed.LiveChanged -= OnOperationLiveChanged;
+                    }
+                };
+            }
+        }
+
+        private async void OnOperationLiveChanged(PipeLineOperation op)
+        {
+            // only react when Live turned ON
+            if (!op.Live) return;
+
+            // avoid duplicate parallel runs for same op
+            if (!_liveRunning.Add(op)) return;
+
+            try
+            {
+                // 1) reset preview to original on UI thread
+                // Prefer a ResetImage() helper if you have it, otherwise call ResetButton_Click safely.
+                Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        // If you have ResetImage() helper, call it instead:
+                        
+                        ResetPreview();
+
+                        // Otherwise call reset button handler (you earlier had ResetButton_Click)
+                        //ResetButton_Click(/*sender*/ ResetButton /*if you have the button reference*/, new RoutedEventArgs());
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Reset failed before live run: {ex}");
+                    }
+                });
+
+                // 2) execute operation on background thread
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        // if Execute modifies UI, you must update UI via Dispatcher inside Execute
+                        op.Execute(this);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Live execution failed for {op.DisplayName}: {ex}");
+                    }
+                });
+            }
+            finally
+            {
+                _liveRunning.Remove(op);
+            }
+        }
+
+        private void SubscribeParameterChangedHandlers()
+        {
+            foreach (var op in PipeLineOperations)
+            {
+                op.ParameterChanged += OnOperationParameterChanged;
+            }
+
+            // If PipeLineOperations can change at runtime, hook new items as well:
+            if (PipeLineOperations is INotifyCollectionChanged coll)
+            {
+                coll.CollectionChanged += (s, e) =>
+                {
+                    if (e.NewItems != null)
+                    {
+                        foreach (PipeLineOperation added in e.NewItems)
+                            added.ParameterChanged += OnOperationParameterChanged;
+                    }
+                    if (e.OldItems != null)
+                    {
+                        foreach (PipeLineOperation removed in e.OldItems)
+                            removed.ParameterChanged -= OnOperationParameterChanged;
+                    }
+                };
+            }
+        }
+
+        private async void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
+        {
+            // simple guard to avoid re-entrancy (if parameter change triggers reset which triggers param change)
+            if (_handlingOps.Contains(op)) return;
+
+            try
+            {
+                _handlingOps.Add(op);
+
+                // 1) Reset the current image to original using the same logic as Reset button.
+                //    If you have a dedicated Reset method, call it instead of invoking the click handler.
+                //    Example uses the ResetButton_Click event handler you mentioned exists.
+                try
+                {
+                    // ensure this runs on UI thread
+                    Dispatcher.Invoke(() => ResetPreview());
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Reset failed in parameter-change handler: {ex}");
+                }
+
+                // 2) If this operation is marked Live, run it
+                if (op.Live)
+                {
+                    // Run the operation off the UI thread if it is heavy; otherwise run on UI thread.
+                    // I use Task.Run to avoid blocking UI; if Execute touches UI, marshal inside Execute accordingly.
+                    await Task.Run(() =>
+                    {
+                        try
+                        {
+                            op.Execute(this); // call the existing Run logic for this operation
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Live execution failed for {op.DisplayName}: {ex}");
+                        }
+                    });
+                }
+            }
+            finally
+            {
+                _handlingOps.Remove(op);
+            }
         }
 
         private void InitializePipeLineOperations()
@@ -140,7 +295,7 @@ namespace ImgViewer.Views
                 new[]
                 {
                     new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Treshold", "Sauvola", "Adaptive"}, 0),
-                    new PipeLineParameter("Treshold", "BinarizeTreshold", 128, 0, 255, 5)
+                    new PipeLineParameter("Treshold", "BinarizeTreshold", 128, 0, 255, 1)
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary())));
 
@@ -458,7 +613,7 @@ namespace ImgViewer.Views
                     var fileName = dlg.FileName;
                     await _manager.SetImageOnPreview(fileName);
                     _viewModel.CurrentImagePath = fileName;
-                    _viewModel.LastOpenedFolder = Path.GetDirectoryName(fileName);
+                    _viewModel.LastOpenedFolder = System.IO.Path.GetDirectoryName(fileName);
                 }
                 catch (OperationCanceledException)
                 {
@@ -502,7 +657,7 @@ namespace ImgViewer.Views
 
                 // собрать файлы с нужными расширениями
                 var files = Directory.GetFiles(folder)
-                                     .Where(f => _imageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                                     .Where(f => _imageExtensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
                                      .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                                      .ToArray();
 
@@ -617,6 +772,16 @@ namespace ImgViewer.Views
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            //if (_viewModel.OriginalImage == null) return;
+            //var originalImage = _viewModel.OriginalImage;
+
+            //_viewModel.ImageOnPreview = originalImage;
+            //_manager.SetImageForProcessing(originalImage);
+            Dispatcher.Invoke(() => ResetPreview());
+        }
+
+        private void ResetPreview()
         {
             if (_viewModel.OriginalImage == null) return;
             var originalImage = _viewModel.OriginalImage;
@@ -810,11 +975,15 @@ namespace ImgViewer.Views
         }
     }
 
-    public class PipeLineOperation
+    public class PipeLineOperation : INotifyPropertyChanged
     {
         private readonly ObservableCollection<PipeLineParameter> _parameters;
         private readonly Action<MainWindow, PipeLineOperation>? _execute;
+
+        public event Action<PipeLineOperation, PipeLineParameter?>? ParameterChanged;
+
         private bool _inPipeline = false;
+        private bool _live = false;
 
         public PipeLineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<MainWindow, PipeLineOperation> execute)
         {
@@ -824,8 +993,12 @@ namespace ImgViewer.Views
             _execute = execute;
             _inPipeline = false;
 
+
             InitializeParameterVisibilityRules();
+            HookParameterChanges();
         }
+
+        public event Action<PipeLineOperation>? LiveChanged;
 
         public string DisplayName { get; }
 
@@ -843,6 +1016,33 @@ namespace ImgViewer.Views
                     _inPipeline = value;
                     OnPropertyChanged();
                 }
+            }
+        }
+
+        public bool Live
+        {
+            get => _live;
+            set
+            {
+                if (_live != value)
+                {
+                    _live = value;
+                    OnPropertyChanged();
+                    LiveChanged?.Invoke(this); // notify subscribers (optional)
+                }
+            }
+        }
+
+        private void HookParameterChanges()
+        {
+            foreach (var p in _parameters)
+            {
+                // attach a lightweight handler to forward notifications
+                p.PropertyChanged += (s, e) =>
+                {
+                    // forward (operation, parameter) to listeners
+                    ParameterChanged?.Invoke(this, p);
+                };
             }
         }
 

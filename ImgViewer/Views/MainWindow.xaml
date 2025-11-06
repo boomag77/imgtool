@@ -466,12 +466,16 @@
                                            Foreground="{StaticResource PipelineTextBrush}"
                                            VerticalAlignment="Center"/>
 
-                                <CheckBox Grid.Column="1"
-                                          Content="In pipeline"
-                                          IsChecked="{Binding InPipeline, Mode=TwoWay}"
-                                          Style="{StaticResource PipelineCheckBoxStyle}"
-                                          VerticalAlignment="Center"
-                                          Margin="12,0,0,0"/>   
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0" >
+                                    <CheckBox Content="In pipeline"
+                                              IsChecked="{Binding InPipeline, Mode=TwoWay}"
+                                              Style="{StaticResource PipelineCheckBoxStyle}"
+                                              VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                    <CheckBox Content="Live"
+                                              IsChecked="{Binding Live, Mode=TwoWay}"
+                                              Style="{StaticResource PipelineCheckBoxStyle}"
+                                              VerticalAlignment="Center" /> 
+                                </StackPanel>
 
                             </Grid>
                             <ItemsControl ItemsSource="{Binding Parameters}">
