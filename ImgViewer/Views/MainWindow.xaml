@@ -14,6 +14,68 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InvBoolToVis"/>
 
+        <DataTemplate x:Key="ParameterTemplate">
+            <Border Padding="4" Margin="2"
+                Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <!-- Label -->
+                        <ColumnDefinition Width="*"/>
+                        <!-- Editor -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Label on the left -->
+                    <TextBlock Grid.Column="0"
+                           Text="{Binding Label}"
+                           VerticalAlignment="Center"
+                           Margin="4,0"/>
+
+                    <!-- Editor: exactly ONE control via triggers -->
+                    <ContentControl Grid.Column="1" VerticalAlignment="Center">
+                        <ContentControl.Style>
+                            <Style TargetType="ContentControl">
+                                <!-- Default editor: numeric/text -->
+                                <Setter Property="Content">
+                                    <Setter.Value>
+                                        <TextBox Width="100"
+                                             VerticalAlignment="Center"
+                                             Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </Setter.Value>
+                                </Setter>
+
+                                <Style.Triggers>
+                                    <!-- Combo -->
+                                    <DataTrigger Binding="{Binding IsCombo}" Value="True">
+                                        <Setter Property="Content">
+                                            <Setter.Value>
+                                                <ComboBox Width="180"
+                                                      VerticalAlignment="Center"
+                                                      ItemsSource="{Binding Options}"
+                                                      SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"/>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+
+                                    <!-- Checkbox -->
+                                    <DataTrigger Binding="{Binding IsBool}" Value="True">
+                                        <Setter Property="Content">
+                                            <Setter.Value>
+                                                <!-- No Content — label is already left -->
+                                                <CheckBox IsChecked="{Binding BoolValue, Mode=TwoWay}"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Left"/>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentControl.Style>
+                    </ContentControl>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
         <SolidColorBrush x:Key="PipelineCardBackgroundBrush" Color="#2F3136"/>
         <SolidColorBrush x:Key="PipelineCardBorderBrush" Color="#464A52"/>
         <SolidColorBrush x:Key="PipelineTextBrush" Color="#E5E7EA"/>
@@ -307,6 +369,7 @@
             </Setter>
         </Style>
 
+        
 
 
 
@@ -496,7 +559,11 @@
                                 </StackPanel>
 
                             </Grid>
+                            
+                            
                             <ItemsControl ItemsSource="{Binding Parameters}">
+                                
+                                
                                 <ItemsControl.Style>
                                     <Style TargetType="ItemsControl">
                                         <Setter Property="Margin" Value="0,0,0,4"/>
@@ -512,62 +579,108 @@
                                         <WrapPanel />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
+                                
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type views:PipeLineParameter}">
                                         <StackPanel Orientation="Horizontal"
                                                     Margin="0,0,12,8"
                                                     VerticalAlignment="Center"
                                                     Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock Text="{Binding Label}"
+                                            <TextBlock x:Name="ParamLabel"
+                                                       Text="{Binding Label}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource PipelineTextBrush}"
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,6,0"/>               
+                                                       Margin="0,0,8,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <!-- скрываем левый лейбл если параметр булев -->
+                                                            <DataTrigger Binding="{Binding IsBool}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
 
-                                            <!-- Outer border kept same -->
+                                            <!-- Outer border kept same (hidden for bool parameters) -->
                                             <Border Background="{StaticResource PipelineTextboxBackgroundBrush}"
                                                     BorderBrush="{StaticResource PipelineCardBorderBrush}"
                                                     BorderThickness="1"
-                                                    CornerRadius="3">   
+                                                    CornerRadius="3"
+                                                    Visibility="{Binding IsBool, Converter={StaticResource InvBoolToVis}}">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="18"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <!-- ComboBox: visible when IsCombo == true -->
-                                                    <ComboBox Grid.Column="0"
-                                                              MinWidth="50"
-                                                              MaxWidth="140"
-                                                              ItemsSource="{Binding Options}"
-                                                              SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
-                                                              Visibility="{Binding IsCombo, Converter={StaticResource BoolToVis}}"
-                                                              Style="{StaticResource PipelineComboBoxStyle}"
-                                                              ItemContainerStyle="{StaticResource PipelineComboBoxItemStyle}"
-                                                              Background="Transparent"
-                                                              Foreground="{StaticResource PipelineTextBrush}"
-                                                              BorderThickness="0"
-                                                              HorizontalContentAlignment="Right"
-                                                              VerticalContentAlignment="Center"
-                                                              FontSize="13"/>   
+                                                    <!-- EDITOR: exactly ONE control via triggers -->
+                                                    <ContentControl Grid.Column="0" VerticalAlignment="Center">
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <!-- Default editor: numeric/text -->
+                                                                <Setter Property="Content">
+                                                                    <Setter.Value>
+                                                                        <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}"
+                                                                                 Background="Transparent"
+                                                                                 Foreground="{StaticResource PipelineTextBrush}"
+                                                                                 BorderThickness="0"
+                                                                                 Padding="6,2"
+                                                                                 HorizontalContentAlignment="Right"
+                                                                                 VerticalContentAlignment="Center"
+                                                                                 MinWidth="50"
+                                                                                 MaxWidth="140"
+                                                                                 FontSize="13"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
+
+                                                                <Style.Triggers>
+                                                                    <!-- Combo -->
+                                                                    <DataTrigger Binding="{Binding IsCombo}" Value="True">
+                                                                        <Setter Property="Content">
+                                                                            <Setter.Value>
+                                                                                <ComboBox MinWidth="50"
+                                                                                          MaxWidth="140"
+                                                                                          ItemsSource="{Binding Options}"
+                                                                                          SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                                                                          Style="{StaticResource PipelineComboBoxStyle}"
+                                                                                          ItemContainerStyle="{StaticResource PipelineComboBoxItemStyle}"
+                                                                                          Background="Transparent"
+                                                                                          Foreground="{StaticResource PipelineTextBrush}"
+                                                                                          BorderThickness="0"
+                                                                                          HorizontalContentAlignment="Right"
+                                                                                          VerticalContentAlignment="Center"
+                                                                                          FontSize="13"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </DataTrigger>
 
 
-                                                    <!-- Numeric area: visible when IsCombo == false -->
-                                                    <Grid Grid.Column="0" Visibility="{Binding IsCombo, Converter={StaticResource InvBoolToVis}}">
-                                                        <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}"
-                                                                 Background="Transparent"
-                                                                 Foreground="{StaticResource PipelineTextBrush}"
-                                                                 BorderThickness="0"
-                                                                 Padding="6,2"
-                                                                 HorizontalContentAlignment="Right"
-                                                                 VerticalContentAlignment="Center"
-                                                                 MinWidth="50"
-                                                                 MaxWidth="140"
-                                                                 FontSize="13"/>    
-                                                    </Grid>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                    </ContentControl>
 
-                                                    <!-- Spinners: keep them in Column=1 but only visible for numeric -->
-                                                    <Grid Grid.Column="1" Visibility="{Binding IsCombo, Converter={StaticResource InvBoolToVis}}">
+                                                    <!-- SPINNERS: visible only when NOT combo AND NOT bool -->
+                                                    <Grid Grid.Column="1">
+                                                        <Grid.Style>
+                                                            <Style TargetType="Grid">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding IsCombo}" Value="False"/>
+                                                                            <Condition Binding="{Binding IsBool}"  Value="False"/>
+                                                                        </MultiDataTrigger.Conditions>
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </MultiDataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Grid.Style>
+
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition/>
                                                             <RowDefinition/>
@@ -575,10 +688,10 @@
 
                                                         <RepeatButton Grid.Row="0"
                                                                       Click="SpinnerUp_Click"
-                                                                      Style="{StaticResource SpinnerRepeatButtonStyle}">    
+                                                                      Style="{StaticResource SpinnerRepeatButtonStyle}">
                                                             <Viewbox Width="8" Height="5">
                                                                 <Path Data="M0,4 L4,0 8,4 Z"
-                                                                      Fill="{StaticResource PipelineTextBrush}"/>
+                                                                  Fill="{StaticResource PipelineTextBrush}"/>
                                                             </Viewbox>
                                                         </RepeatButton>
 
@@ -592,10 +705,28 @@
                                                         </RepeatButton>
                                                     </Grid>
                                                 </Grid>
+
                                             </Border>
+                                            <!-- BOOL parameter: CheckBox OUTSIDE the editor border (shows label to the right) -->
+                                            <StackPanel Orientation="Horizontal"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding IsBool, Converter={StaticResource BoolToVis}}"
+                                                        Margin="0,0,0,0">
+                                                <CheckBox IsChecked="{Binding BoolValue, Mode=TwoWay}"
+                                                          Style="{StaticResource PipelineCheckBoxStyle}"  
+                                                          VerticalAlignment="Center"
+                                                          HorizontalAlignment="Left"
+                                                          Background="Transparent"
+                                                          BorderThickness="0"
+                                                          Margin="0"/>
+                                                <TextBlock Text="{Binding Label}"
+                                                           Foreground="{StaticResource PipelineTextBrush}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="6,0,0,0"
+                                                           FontSize="13"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
-
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <Button Content="{Binding ActionLabel}"

@@ -1,5 +1,6 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Models;
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -357,7 +358,20 @@ namespace ImgViewer.Views
                 new[]
                 {
                     new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Treshold", "Sauvola", "Adaptive"}, 0),
-                    new PipeLineParameter("Treshold", "BinarizeTreshold", 128, 0, 255, 1)
+                    // Treshold alg
+                    new PipeLineParameter("Treshold", "BinarizeTreshold", 128, 0, 255, 1),
+                    // Adaptive alg
+                    new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
+                    new PipeLineParameter("Constant C", "C", 14, -50.0, 50.0, 1),
+
+                     // new boolean checkbox parameters:
+                    new PipeLineParameter("Use Gaussian", "useGaussian", false),
+                    new PipeLineParameter("Apply Morphology", "useMorphology", false),
+
+                    // morphology-specific numeric params (visible only if Apply Morphology == true — see ниже how to hide/show)
+                    new PipeLineParameter("Morph kernel", "morphKernelBinarize", 3, 1, 21, 2),
+                    new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
+
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary())));
 
@@ -1212,15 +1226,39 @@ namespace ImgViewer.Views
             var binAlgo = _parameters.FirstOrDefault(p => p.Key == "binarizeAlgorithm");
             if (binAlgo != null)
             {
+                // initial apply
                 ApplyBinarizeVisibility(binAlgo.SelectedOption);
+
+                // ensure morph fields reflect the current state right away
+                var morphFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "useMorphology");
+                if (morphFlagImmediate != null)
+                {
+                    // set initial visibility of morph fields based on current checkbox value
+                    ApplyMorphVisibility(morphFlagImmediate.BoolValue);
+                    // subscribe once so further toggles update visibility
+                    morphFlagImmediate.PropertyChanged -= MorphFlag_PropertyChanged;
+                    morphFlagImmediate.PropertyChanged += MorphFlag_PropertyChanged;
+                }
+
+                // Also listen for changes of the algorithm selection and re-evaluate
                 binAlgo.PropertyChanged += (s, e) =>
                 {
                     if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
                         e.PropertyName == nameof(PipeLineParameter.SelectedOption))
                     {
+                        // re-evaluate which controls are visible based on chosen algorithm
                         ApplyBinarizeVisibility(binAlgo.SelectedOption);
                     }
                 };
+            }
+        }
+
+        private void ApplyMorphVisibility(bool enabled)
+        {
+            foreach (var p in _parameters)
+            {
+                if (p.Key == "morphKernelBinarize" || p.Key == "morphIterationsBinarize")
+                    p.IsVisible = enabled;
             }
         }
 
@@ -1260,7 +1298,30 @@ namespace ImgViewer.Views
 
         private void ApplyBinarizeVisibility(string? selectedOption)
         {
-            var selected = (selectedOption ?? "").Trim();
+            // find the binarizeAlgorithm parameter (source of truth)
+            var binAlgo = _parameters.FirstOrDefault(x => x.Key == "binarizeAlgorithm");
+
+            // robust "isAdaptive" detection:
+            // 1) prefer SelectedOption string if available
+            // 2) otherwise fallback to SelectedIndex (index 2 means "Adaptive" in your options order)
+            bool isAdaptive = false;
+            if (binAlgo != null)
+            {
+                var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
+                if (!string.IsNullOrEmpty(opt))
+                    isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+                else
+                    isAdaptive = binAlgo.SelectedIndex == 2; // defensive fallback: index 2 = Adaptive
+            }
+            else
+            {
+                // fallback if binAlgo missing — keep previous behaviour
+                isAdaptive = (selectedOption ?? "").Trim().Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+            }
+
+            // find useMorphology flag once
+            var morphFlag = _parameters.FirstOrDefault(x => x.Key == "useMorphology");
+            bool useMorph = morphFlag != null && morphFlag.IsBool && morphFlag.BoolValue;
 
             foreach (var p in _parameters)
             {
@@ -1270,9 +1331,24 @@ namespace ImgViewer.Views
                         p.IsVisible = true;
                         break;
 
-                    // show threshold param only when user selected "Treshold" (or "Threshold")
                     case "BinarizeTreshold":
-                        p.IsVisible = selected.Equals("Treshold", StringComparison.OrdinalIgnoreCase);
+                        p.IsVisible = (binAlgo != null)
+                            ? ((binAlgo.SelectedOption ?? "").Equals("Treshold", StringComparison.OrdinalIgnoreCase)
+                                || binAlgo.SelectedIndex == 0)
+                            : (selectedOption ?? "").Trim().Equals("Treshold", StringComparison.OrdinalIgnoreCase);
+                        break;
+
+                    case "blockSize":
+                    case "C":
+                    case "useGaussian":
+                    case "useMorphology":
+                        p.IsVisible = isAdaptive;
+                        break;
+
+                    case "morphKernelBinarize":
+                    case "morphIterationsBinarize":
+                        // visible only when algorithm == Adaptive AND ApplyMorphology checked
+                        p.IsVisible = isAdaptive && useMorph;
                         break;
 
                     default:
@@ -1282,11 +1358,42 @@ namespace ImgViewer.Views
             }
         }
 
+        private void MorphFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            if (sender is not PipeLineParameter morphParam) return;
+
+            // compute current algorithm -> isAdaptive (same logic as ApplyBinarizeVisibility)
+            var binAlgo = _parameters.FirstOrDefault(x => x.Key == "binarizeAlgorithm");
+            bool isAdaptive = false;
+            if (binAlgo != null)
+            {
+                var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
+                if (!string.IsNullOrEmpty(opt))
+                    isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+                else
+                    isAdaptive = binAlgo.SelectedIndex == 2;
+            }
+
+            bool useMorph = morphParam.BoolValue;
+
+            foreach (var q in _parameters)
+            {
+                if (q.Key == "morphKernelBinarize" || q.Key == "morphIterationsBinarize")
+                    q.IsVisible = isAdaptive && useMorph;
+            }
+        }
+
+
         public Dictionary<string, object> CreateParameterDictionary()
         {
             return _parameters.ToDictionary(
                 parameter => parameter.Key,
-                parameter => (object)(parameter.IsCombo ? (object?)parameter.SelectedOption ?? string.Empty : parameter.Value)
+                parameter => (object)(
+                    parameter.IsCombo ? (object?)parameter.SelectedOption ?? string.Empty :
+                    parameter.IsBool ? (object)parameter.BoolValue :
+                                        (object)parameter.Value
+                )
             );
         }
 
@@ -1302,6 +1409,8 @@ namespace ImgViewer.Views
         private double _value;
 
         private bool _isVisible = true;
+        private bool _isBool = false;
+        private bool _boolValue = false;
 
         private IList<string>? _options;
         private int _selectedIndex;
@@ -1332,6 +1441,26 @@ namespace ImgViewer.Views
             SelectedIndex = Math.Max(0, Math.Min(_options.Count - 1, selectedIndex));
         }
 
+        // constructor for CheckBox
+        public PipeLineParameter(string label, string key, bool boolValue)
+        {
+            Label = label;
+            Key = key;
+            Step = 1;
+            _min = double.NaN;
+            _max = double.NaN;
+            _value = double.NaN;
+            _options = null;
+            _selectedIndex = -1;
+
+            _isBool = true;
+            _boolValue = boolValue;
+        }
+
+        public bool IsBool => _isBool;
+
+
+
         public string Label { get; }
 
         public string Key { get; }
@@ -1347,6 +1476,19 @@ namespace ImgViewer.Views
                 if (!AreClose(_value, clamped))
                 {
                     _value = clamped;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool BoolValue
+        {
+            get => _boolValue;
+            set
+            {
+                if (_boolValue != value)
+                {
+                    _boolValue = value;
                     OnPropertyChanged();
                 }
             }

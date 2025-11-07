@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using static ImgViewer.Models.Deskewer;
@@ -374,6 +375,61 @@ namespace ImgViewer.Models
             //throw new NotImplementedException();
         }
 
+        private bool SafeBool(object? v, bool def)
+        {
+            if (v == null) return def;
+            if (v is bool bb) return bb;
+
+            // common numeric: 1/0
+            if (v is int i) return i != 0;
+            if (v is long l) return l != 0L;
+            if (v is double d) return !double.IsNaN(d) && Math.Abs(d) > double.Epsilon && d != 0.0;
+            if (v is float f) return Math.Abs(f) > float.Epsilon && f != 0f;
+
+            // strings like "true","false","1","0","yes","no","on","off"
+            var s = v.ToString()?.Trim();
+            if (string.IsNullOrEmpty(s)) return def;
+            if (bool.TryParse(s, out var rb)) return rb;
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var iv)) return iv != 0;
+
+            switch (s.ToLowerInvariant())
+            {
+                case "yes":
+                case "y":
+                case "on":
+                    return true;
+                case "no":
+                case "n":
+                case "off":
+                    return false;
+            }
+
+            return def;
+        }
+
+        private int SafeInt(object? v, int def)
+        {
+            if (v == null) return def;
+            try
+            {
+                // Convert handles boxed numeric types and numeric strings
+                return Convert.ToInt32(v);
+            }
+            catch
+            {
+                // fallback: try parsing as double then round
+                try
+                {
+                    if (double.TryParse(v.ToString(), System.Globalization.NumberStyles.Any,
+                                         System.Globalization.CultureInfo.InvariantCulture, out var d))
+                        return (int)Math.Round(d);
+                }
+                catch { }
+                return def;
+            }
+        }
+
+
         public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters = null)
         {
          
@@ -382,33 +438,64 @@ namespace ImgViewer.Models
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        int SafeInt(object? v, int def)
-                        {
-                            if (v == null) return def;
-                            try
-                            {
-                                // Convert handles boxed numeric types and numeric strings
-                                return Convert.ToInt32(v);
-                            }
-                            catch
-                            {
-                                // fallback: try parsing as double then round
-                                try
-                                {
-                                    if (double.TryParse(v.ToString(), System.Globalization.NumberStyles.Any,
-                                                         System.Globalization.CultureInfo.InvariantCulture, out var d))
-                                        return (int)Math.Round(d);
-                                }
-                                catch { }
-                                return def;
-                            }
-                        }
+                        
                         int treshold = 128;
+                        int blockSize = 3;
+                        double c = 14;
+                        bool useGaussian = false;
+                        bool useMorphology = false;
+                        int morphKernel = 3;
+                        int morphIters = 1;
+
                         foreach (var kv in parameters)
                         {
-                            if (kv.Key == "BinarizeTreshold")
+                            switch (kv.Key)
                             {
-                                treshold = SafeInt(kv.Value, treshold);
+                                case "BinarizeTreshold":
+                                    treshold = SafeInt(kv.Value, treshold);
+                                    break;
+                                case "blockSize":
+                                    blockSize = SafeInt(kv.Value, blockSize);
+                                    break;
+                                case "C":
+                                    {
+                                        var v = kv.Value;
+                                        if (v is double dv) { c = dv; break; }
+                                        if (v is float fv) { c = fv; break; }
+                                        if (v is int iv) { c = iv; break; }
+                                        var s = v?.ToString()?.Trim();
+                                        if (string.IsNullOrEmpty(s)) break;
+                                        if (s.EndsWith("%", StringComparison.Ordinal))
+                                        {
+                                            var p = s.TrimEnd('%').Trim();
+                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
+                                                c = pd / 100.0;
+                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
+                                                c = pd / 100.0;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                                        {
+                                            c = d;
+                                        }
+                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
+                                        {
+                                            c = d;
+                                        }
+                                    }
+                                    break;
+                                case "useGaussian":
+                                    useGaussian = SafeBool(kv.Value, useGaussian);
+                                    break;
+                                case "useMorphology":
+                                    useMorphology = SafeBool(kv.Value, useMorphology);
+                                    break;
+                                case "morphKernelBinarize":
+                                    morphKernel = SafeInt(kv.Value, morphKernel);
+                                    break;
+                                case "morphIterationsBinarize":
+                                    morphIters = SafeInt(kv.Value, morphIters);
+                                    break;
+
                             }
                         }
                         foreach (var kv in parameters)
@@ -424,7 +511,7 @@ namespace ImgViewer.Models
                                         Binarize(treshold);
                                         break;
                                     case "Adaptive":
-                                        BinarizeAdaptive();
+                                        BinarizeAdaptive(blockSize, c, useGaussian, useMorphology, morphKernel, morphIters);
                                         break;
                                     case "Sauvola":
                                         SauvolaBinarize();
@@ -721,9 +808,17 @@ namespace ImgViewer.Models
             return src;
         }
 
-        private void BinarizeAdaptive(int? blockSize = null, double C = 14, bool useGaussian = false, bool invert = false)
+        private void BinarizeAdaptive(int? blockSize = null, double C = 14, bool useGaussian = false, bool useMorphology = false, int morphKernel = 3, int morphIterations = 1,  bool invert = false)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
+
+            // Debug all args
+            Debug.WriteLine("BlockSize - ", blockSize);
+            Debug.WriteLine("C - ", C);
+            Debug.WriteLine("Use Gaussian - ", useGaussian.ToString());
+            Debug.WriteLine("Use Morphology - ", useMorphology.ToString());
+            Debug.WriteLine("Morph kernel - ", morphKernel);
+            Debug.WriteLine("Morph iterations - ", morphIterations);
 
             using var gray = MatToGray(_currentImage);
             if (gray == null) return;
@@ -752,6 +847,11 @@ namespace ImgViewer.Models
             var threshType = invert ? ThresholdTypes.BinaryInv : ThresholdTypes.Binary;
             Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, C);
 
+            if (useMorphology)
+            {
+                using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(morphKernel, morphKernel));
+                Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: morphIterations);
+            }
             // 5) опционально: морфология небольшая (убрать шум/скрепить буквы) — можно раскомментировать при желании
             //using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
             //Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: 3);
