@@ -312,9 +312,7 @@ namespace ImgViewer.Views
         {
             _pipeLineOperations.Clear();
 
-            
-
-            _pipeLineOperations.Add(new PipeLineOperation(
+            var op1 = new PipeLineOperation(
                 "Deskew",
                 "Preview",
                 new[]
@@ -326,10 +324,13 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
                     new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1)
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Deskew, operation.CreateParameterDictionary()))
-                );
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Deskew, operation.CreateParameterDictionary()));
 
-            _pipeLineOperations.Add(new PipeLineOperation(
+
+            op1.Command = ProcessorCommands.Deskew;
+            _pipeLineOperations.Add(op1);
+
+            var op2 = new PipeLineOperation(
                 "Border Removal",
                 "Preview",
                 new[]
@@ -339,21 +340,23 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
                     new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01)
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary())));
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary()));
+            op2.Command = ProcessorCommands.BorderRemove;
+            _pipeLineOperations.Add(op2);
 
-            _pipeLineOperations.Add(new PipeLineOperation(
+            var op3 = new PipeLineOperation(
                 "Auto Crop",
                 "Run",
                 new[]
                 {
                     new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary())));
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary()));
+            op3.Command = ProcessorCommands.AutoCropRectangle;
+            _pipeLineOperations.Add(op3);
 
-
-
-            _pipeLineOperations.Add(new PipeLineOperation(
-                "Auto Binarize",
+            var op4 = new PipeLineOperation(
+                "Binarize",
                 "Run",
                 new[]
                 {
@@ -373,7 +376,9 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
 
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary())));
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary()));
+            op4.Command = ProcessorCommands.Binarize;
+            _pipeLineOperations.Add(op4);
 
 
             //_pipeLineOperations.Add(new PipeLineOperation(
@@ -874,7 +879,22 @@ namespace ImgViewer.Views
                 var fileExplorer = new FileProcessor(token);
                 var imgProcessor = new OpenCVImageProcessor(_manager, token);
                 var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
-                _manager.ProcessFolder(folderPath);
+
+                var cmds = PipeLineOperations
+                            .Where(op => op.InPipeline && op.Command.HasValue)
+                            .Select(op => op.Command.Value)
+                            .ToArray();
+
+                if (cmds.Length == 0)
+                {
+                    System.Windows.MessageBox.Show("Pipeline is empty — enable operations before running.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // вызываем менеджер, передавая команды
+                //_manager.ProcessFolder(folderPath, cmds);
+
+                //_manager.ProcessFolder(folderPath);
 
             }
             //StatusText.Text = "Ready";
@@ -910,7 +930,28 @@ namespace ImgViewer.Views
                 if (res != MessageBoxResult.OK) return;
 
                 // вызываем менеджер — он уже делает обработку папки
-                _manager.ProcessFolder(folder);
+
+                //var cmds = PipeLineOperations
+                //            .Where(op => op.InPipeline && op.Command.HasValue)
+                //            .Select(op => op.Command.Value)
+                //            .ToArray();
+
+                //if (cmds.Length == 0)
+                //{
+                //    System.Windows.MessageBox.Show("Pipeline is empty — enable operations before running.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                //    return;
+                //}
+
+                var pipeline = PipeLineOperations
+                    .Where(op => op.InPipeline && op.Command.HasValue)
+                    .Select(op => (op.Command.Value, op.CreateParameterDictionary()))
+                    .ToArray();
+
+                // вызываем менеджер, передавая команды
+                _manager.ProcessFolder(folder, pipeline);
+
+
+                //_manager.ProcessFolder(folder);
             }
             catch (Exception ex)
             {
@@ -1131,6 +1172,8 @@ namespace ImgViewer.Views
         private readonly Action<MainWindow, PipeLineOperation>? _execute;
 
         public event Action<PipeLineOperation, PipeLineParameter?>? ParameterChanged;
+
+        public ProcessorCommands? Command { get; set; }
 
         private bool _inPipeline = false;
         private bool _live = false;

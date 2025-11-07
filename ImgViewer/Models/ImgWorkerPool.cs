@@ -12,7 +12,10 @@ namespace ImgViewer.Models
         private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
         private readonly int _workersCount;
-        private readonly ProcessorCommands[] _commandsQueue;
+
+        private readonly (ProcessorCommands command, Dictionary<string, object> parameters)[] _pipelineTemplate;
+
+        //private readonly ProcessorCommands[] _commandsQueue;
 
         private int _processedCount;
         private readonly int _totalCount;
@@ -21,7 +24,7 @@ namespace ImgViewer.Models
         public event Action<int, int>? ProgressChanged;
 
         public ImgWorkerPool(CancellationTokenSource cts,
-                             ProcessorCommands[] commandsQueue,
+                             (ProcessorCommands command, Dictionary<string, object> parameters)[] pipelineTemplate,
                              int maxWorkersCount,
                              SourceImageFolder sourceFolder,
                              int maxFilesQueue = 0)
@@ -31,7 +34,7 @@ namespace ImgViewer.Models
 
             _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
             Directory.CreateDirectory(_outputFolder);
-            _commandsQueue = commandsQueue;
+            _pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommands, Dictionary<string, object>)>();
 
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
@@ -42,6 +45,30 @@ namespace ImgViewer.Models
             _processedCount = 0;
             _totalCount = sourceFolder.Files.Length;
         }
+
+
+        //public ImgWorkerPool(CancellationTokenSource cts,
+        //                     ProcessorCommands[] commandsQueue,
+        //                     int maxWorkersCount,
+        //                     SourceImageFolder sourceFolder,
+        //                     int maxFilesQueue = 0)
+        //{
+        //    _cts = cts;
+        //    _sourceFolder = sourceFolder;
+
+        //    _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
+        //    Directory.CreateDirectory(_outputFolder);
+        //    _commandsQueue = commandsQueue;
+
+        //    int cpuCount = Environment.ProcessorCount;
+        //    _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
+
+        //    _filesQueue = new BlockingCollection<string>(
+        //        maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
+        //    );
+        //    _processedCount = 0;
+        //    _totalCount = sourceFolder.Files.Length;
+        //}
 
         private async Task EnqueueFiles()
         {
@@ -71,17 +98,30 @@ namespace ImgViewer.Models
                         if (_cts.IsCancellationRequested)
                             break;
 
-                        imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
 
+                        var loaded = fileProc.Load<ImageSource>(filePath);
+                        imgProc.CurrentImage = loaded.Item1;
+                        //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
 
+                        foreach (var op in _pipelineTemplate)
+                        {
+                            try
+                            {
+                                imgProc.ApplyCommandToCurrent(op.command, op.parameters ?? new Dictionary<string, object>());
+                            }
+                            catch (Exception exOp)
+                            {
+                                ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
+                            }
+                        }
 
 
                         // Применяем команды
-                        foreach (var command in _commandsQueue)
-                        {
+                        //foreach (var command in _commandsQueue)
+                        //{
 
-                            imgProc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
-                        }
+                        //    imgProc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
+                        //}
 
 
                         var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");

@@ -1,6 +1,8 @@
 ﻿using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.Windows.Media;
+using System.Text.Json;
+using System.Text;
 
 namespace ImgViewer.Models
 {
@@ -82,18 +84,55 @@ namespace ImgViewer.Models
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
         }
 
-        public async void ProcessFolder(string srcFolder)
+        public async void ProcessFolder(string srcFolder, (ProcessorCommands command, Dictionary<string, object> parameters)[] pipeline = null)
         {
+            bool debug = false;
+
             _mainViewModel.Status = $"Processing folder...";
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
-            ProcessorCommands[] commands =
+            var pipelineToUse = pipeline ?? new (ProcessorCommands, Dictionary<string, object>)[]
+               {
+                    (ProcessorCommands.Deskew, new Dictionary<string, object>()),
+                    (ProcessorCommands.BorderRemove, new Dictionary<string, object>()),
+                    //(ProcessorCommands.AutoCropRectangle, new Dictionary<string, object>()),
+                    (ProcessorCommands.Binarize, new Dictionary<string, object>()),
+               };
+            if (debug)
             {
-                ProcessorCommands.Deskew,
-                ProcessorCommands.BorderRemove,
-                //ProcessorCommands.AutoCropRectangle,
-                ProcessorCommands.Binarize,
-            };
-            var workerPool = new ImgWorkerPool(_cts, commands, 0, sourceFolder, 0);
+                // дебаг вывод
+                foreach (var p in pipelineToUse)
+                {
+                    string paramStr;
+                    if (p.parameters == null || p.parameters.Count == 0)
+                    {
+                        paramStr = "{}";
+                    }
+                    else
+                    {
+                        try
+                        {
+                            // Try to serialize the dictionary to JSON for the most readable output.
+                            // Use limited depth/size by default options; if something isn't serializable we'll hit catch.
+                            paramStr = JsonSerializer.Serialize(p.parameters, new JsonSerializerOptions
+                            {
+                                WriteIndented = false,
+                                // ignore cycles / non-serializable members will throw
+                            });
+                        }
+                        catch
+                        {
+                            // Fallback: print each key=value using safe formatter
+                            var kvParts = p.parameters.Select(kv => $"{kv.Key}={FormatParamValue(kv.Value)}");
+                            paramStr = "{" + string.Join(", ", kvParts) + "}";
+                        }
+                    }
+
+                    Debug.WriteLine($"Pipeline step: {p.command} params: {paramStr}");
+                }
+            }
+
+
+            var workerPool = new ImgWorkerPool(_cts, pipelineToUse, 0, sourceFolder, 0);
             try
             {
                 await workerPool.RunAsync();
@@ -109,6 +148,52 @@ namespace ImgViewer.Models
         public void Dispose()
         {
             GC.SuppressFinalize(this);
+        }
+
+        static string FormatParamValue(object? v)
+        {
+            if (v == null) return "null";
+
+            // primitives and strings
+            var t = v.GetType();
+            if (t.IsPrimitive || v is decimal || v is string || v is DateTime || v is Guid)
+                return v.ToString() ?? "<empty>";
+
+            // IDictionary
+            if (v is System.Collections.IDictionary dict)
+            {
+                var items = new List<string>();
+                foreach (var key in dict.Keys)
+                {
+                    var val = dict[key];
+                    items.Add($"{key}={FormatParamValue(val)}");
+                    if (items.Count >= 10) { items.Add("..."); break; } // limit length
+                }
+                return "{" + string.Join(", ", items) + "}";
+            }
+
+            // IEnumerable (but not string)
+            if (v is System.Collections.IEnumerable ie && !(v is string))
+            {
+                var items = new List<string>();
+                int i = 0;
+                foreach (var it in ie)
+                {
+                    items.Add(FormatParamValue(it));
+                    if (++i >= 8) { items.Add("..."); break; } // limit items
+                }
+                return "[" + string.Join(", ", items) + "]";
+            }
+
+            // Common heavy/complex types: show type name and some hint instead of trying to serialize them
+            var typeName = t.Name;
+            if (typeName.Contains("Mat") || typeName.Contains("Image") || typeName.Contains("Bitmap") || typeName.Contains("ImageSource"))
+            {
+                return $"<{typeName}>";
+            }
+
+            // Last resort: ToString (may be type name)
+            try { return v.ToString() ?? $"<{typeName}>"; } catch { return $"<{typeName}>"; }
         }
 
     }
