@@ -429,12 +429,51 @@ namespace ImgViewer.Models
             }
         }
 
+        private Mat ApplyProcessingBlur(Mat source, int kernelSize = 3, string blurMode = "gaussian")
+        {
+            if (source == null) return null!;
+            // ensure safe copy of source
+            var src = source.Clone();
+
+            // sanitize kernel
+            int k = Math.Max(0, kernelSize);
+            if (k < 3)
+                return src; // no blur — return clone so caller can dispose safely
+
+            // make odd
+            if ((k & 1) == 0) k++;
+
+            Mat outMat = new Mat();
+            switch (blurMode?.ToLowerInvariant())
+            {
+                case "median":
+                    Cv2.MedianBlur(src, outMat, k); // k must be odd >= 3
+                    break;
+                case "bilateral":
+                    // bilateral uses diameter, sigmaColor, sigmaSpace; pick reasonable defaults
+                    Cv2.BilateralFilter(src, outMat, k, k * 2, k / 2);
+                    break;
+                case "box":
+                    Cv2.Blur(src, outMat, new OpenCvSharp.Size(k, k));
+                    break;
+                case "gaussian":
+                default:
+                    Cv2.GaussianBlur(src, outMat, new OpenCvSharp.Size(k, k), 0);
+                    break;
+            }
+
+            src.Dispose();
+            return outMat;
+        }
+
 
         public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters = null)
         {
          
             if (_currentImage != null)
             {
+                
+
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:

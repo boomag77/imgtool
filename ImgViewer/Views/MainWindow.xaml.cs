@@ -341,16 +341,16 @@ namespace ImgViewer.Views
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary())));
 
-            //_pipeLineOperations.Add(new PipeLineOperation(
-            //    "Auto Crop",
-            //    "Run",
-            //    new[]
-            //    {
-            //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
-            //    },
-            //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary())));
+            _pipeLineOperations.Add(new PipeLineOperation(
+                "Auto Crop",
+                "Run",
+                new[]
+                {
+                    new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
+                },
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary())));
 
-            
+
 
             _pipeLineOperations.Add(new PipeLineOperation(
                 "Auto Binarize",
