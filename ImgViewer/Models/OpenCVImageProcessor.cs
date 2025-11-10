@@ -572,7 +572,7 @@ namespace ImgViewer.Models
                         //Deskew();
                         break;
                     case ProcessorCommands.BorderRemove:
-                        BordersDeskew();
+                        //BordersDeskew();
                         //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
                         //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
                         //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.

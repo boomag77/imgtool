@@ -100,8 +100,10 @@ namespace ImgViewer.Models
                 {
                     return (null, null);
                 }
+                //throw new Exception();
+                //return (null, null);
                 MagickReadSettings settings = new MagickReadSettings();
-                
+
                 if (decodePixelWidth.HasValue)
                     settings.Width = decodePixelWidth.Value;
 
@@ -144,7 +146,7 @@ namespace ImgViewer.Models
 
                                     return ((T)(object)bmpSource, bmpBytes);
                                 }
-                                    
+
                             }
 
                         default:
