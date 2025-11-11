@@ -335,10 +335,24 @@ namespace ImgViewer.Views
                 "Preview",
                 new[]
                 {
+                    new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast"}, 0),
+                    // By contrast
                     new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
                     new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 250, 1),
                     new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
-                    new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01)
+                    new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
+                    // Auto
+                    new PipeLineParameter("Auto Threshold", "autoThresh", true),
+                    new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
+                    new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 1.0, 0.01),
+                    new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 5, 250, 1),
+                    new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
+                    new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 100, 2_000_000, 1),
+                    new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
+                    new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
+                    new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
+                    new PipeLineParameter("Feathe / blur radius", "featherPx", 12, 0, 500, 1),
+
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary()));
             op2.Command = ProcessorCommands.BorderRemove;
@@ -1294,6 +1308,31 @@ namespace ImgViewer.Views
                     }
                 };
             }
+
+            // Border removal algorithm rules
+            var bordersAlgo = _parameters.FirstOrDefault(p => p.Key == "borderRemovalAlgorithm");
+            if (bordersAlgo != null)
+            {
+                ApplyBorderRemovalVisibility(bordersAlgo.SelectedOption);
+
+                var autoThreshFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "autoThresh");
+                if (autoThreshFlagImmediate != null)
+                {
+                    ApplyAutoThreshVisibility(autoThreshFlagImmediate.BoolValue);
+                    autoThreshFlagImmediate.PropertyChanged -= AutoThreshFlag_PropertyChanged;
+                    autoThreshFlagImmediate.PropertyChanged += AutoThreshFlag_PropertyChanged;
+                }
+
+                bordersAlgo.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
+                        e.PropertyName == nameof(PipeLineParameter.SelectedOption))
+                    {
+                        // re-evaluate which controls are visible based on chosen algorithm
+                        ApplyBorderRemovalVisibility(bordersAlgo.SelectedOption);
+                    }
+                };
+            }
         }
 
         private void ApplyMorphVisibility(bool enabled)
@@ -1301,6 +1340,15 @@ namespace ImgViewer.Views
             foreach (var p in _parameters)
             {
                 if (p.Key == "morphKernelBinarize" || p.Key == "morphIterationsBinarize")
+                    p.IsVisible = enabled;
+            }
+        }
+
+        private void ApplyAutoThreshVisibility(bool enabled)
+        {
+            foreach (var p in _parameters)
+            {
+                if (p.Key == "marginPercent" || p.Key == "shiftFactor")
                     p.IsVisible = enabled;
             }
         }
@@ -1401,6 +1449,68 @@ namespace ImgViewer.Views
             }
         }
 
+        private void ApplyBorderRemovalVisibility(string? selectedOption)
+        {
+            var bordersAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
+            bool isAuto = false;
+            var autoThreshFlag = _parameters.FirstOrDefault(x => x.Key == "autoThresh");
+            bool autoThresh = autoThreshFlag != null && autoThreshFlag.IsBool && autoThreshFlag.BoolValue;
+            if (bordersAlgo != null)
+            {
+                var opt = (bordersAlgo.SelectedOption ?? string.Empty).Trim();
+                if (!string.IsNullOrEmpty(opt))
+                    isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+                else
+                    isAuto = bordersAlgo.SelectedIndex == 0; // defensive fallback: index 0 = Auto
+            }
+            else
+            {
+                // fallback if bordersAlgo missing — keep previous behaviour
+                isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
+            }
+            Debug.WriteLine("Borders Algo - ", bordersAlgo);
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "borderRemovalAlgorithm":
+                        p.IsVisible = true;
+                        break;
+                    case "autoThresh":
+                        p.IsVisible = isAuto;
+                        break;
+                    case "marginPercent":
+                    case "shiftFactor":
+                        p.IsVisible = isAuto && autoThresh;
+                        break;
+                    case "threshFrac":
+                        
+                    case "contrastThr":
+                    case "centralSample":
+                    case "maxRemoveFrac":
+                        p.IsVisible = (bordersAlgo != null)
+                            ? ((bordersAlgo.SelectedOption ?? "").Equals("By Contrast", StringComparison.OrdinalIgnoreCase)
+                                || bordersAlgo.SelectedIndex == 1)
+                            : (selectedOption ?? "").Trim().Equals("By Contrast", StringComparison.OrdinalIgnoreCase);
+                        break;
+                    case "darkThreshold":
+                        p.IsVisible = isAuto && !autoThresh;
+                        break;
+                    case "bgColor":
+                    case "minAreaPx":
+                    case "minSpanFraction":
+                    case "solidityThreshold":
+                    case "minDepthFraction":
+                    case "featherPx":
+                        p.IsVisible = isAuto;
+                        break;
+                    default:
+                        p.IsVisible = true;
+                        break;
+                }
+            }
+        }
+
         private void MorphFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
@@ -1424,6 +1534,36 @@ namespace ImgViewer.Views
             {
                 if (q.Key == "morphKernelBinarize" || q.Key == "morphIterationsBinarize")
                     q.IsVisible = isAdaptive && useMorph;
+            }
+        }
+
+        private void AutoThreshFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            if (sender is not PipeLineParameter autoThreshParam) return;
+
+            // compute current algorithm -> isAdaptive (same logic as ApplyBinarizeVisibility)
+            var bordersRemoveAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
+            bool isAuto = false;
+            if (bordersRemoveAlgo != null)
+            {
+                var opt = (bordersRemoveAlgo.SelectedOption ?? string.Empty).Trim();
+                if (!string.IsNullOrEmpty(opt))
+                    isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+                else
+                    isAuto = bordersRemoveAlgo.SelectedIndex == 0;
+            }
+
+            bool autoThresh = autoThreshParam.BoolValue;
+
+            foreach (var q in _parameters)
+            {
+                if (q.Key == "marginPercent" || q.Key == "shiftFactor")
+                    q.IsVisible = isAuto && autoThresh;
+                if (q.Key == "darkThreshold")
+                {
+                    q.IsVisible = isAuto && !autoThresh;
+                }
             }
         }
 

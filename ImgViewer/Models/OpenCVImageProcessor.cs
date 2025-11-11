@@ -5,10 +5,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using static ImgViewer.Models.Deskewer;
 
 namespace ImgViewer.Models
 {
@@ -22,7 +20,7 @@ namespace ImgViewer.Models
         public ImageSource CurrentImage
         {
             set
-                {
+            {
                 using var mat = BitmapSourceToMat((BitmapSource)value);
                 if (mat == null || mat.Empty()) return;
                 _currentImage = mat.Clone();
@@ -154,7 +152,7 @@ namespace ImgViewer.Models
             try
             {
                 //_currentImage = Cv2.ImRead(path, ImreadModes.Color);
-                
+
                 //BitmapSource bmpSource = MatToBitmapSource(_currentImage);
                 //ImageUpdated?.Invoke(BitmapSourceToStream(bmpSource));
             }
@@ -407,6 +405,58 @@ namespace ImgViewer.Models
             return def;
         }
 
+        private double SafeDouble(object? v, double def)
+        {
+            if (v == null || v == DBNull.Value) return def;
+
+            // fast-path for common numeric CLR types
+            if (v is double d) return d;
+            if (v is float f) return (double)f;
+            if (v is decimal m) return (double)m;
+            if (v is int i) return i;
+            if (v is long l) return l;
+            if (v is short sh) return sh;
+            if (v is byte b) return b;
+            if (v is sbyte sb) return sb;
+            if (v is uint ui) return ui;
+            if (v is ulong ul) return ul;
+            if (v is ushort us) return us;
+
+            // If it's already an IConvertible (strings included), prefer CurrentCulture for UI-sourced values
+            try
+            {
+                // Prefer current culture (user input), then invariant as fallback
+                try
+                {
+                    return Convert.ToDouble(v, CultureInfo.CurrentCulture);
+                }
+                catch { /* try invariant below */ }
+
+                try
+                {
+                    return Convert.ToDouble(v, CultureInfo.InvariantCulture);
+                }
+                catch { /* try string parsing below */ }
+
+                // Fallback: parse string representation (CurrentCulture then Invariant)
+                var s = v.ToString();
+                if (!string.IsNullOrWhiteSpace(s))
+                {
+                    s = s.Trim();
+                    if (double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var parsed))
+                        return parsed;
+                    if (double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out parsed))
+                        return parsed;
+                }
+            }
+            catch
+            {
+                // unexpected — swallow and return default
+            }
+
+            return def;
+        }
+
         private int SafeInt(object? v, int def)
         {
             if (v == null) return def;
@@ -469,15 +519,15 @@ namespace ImgViewer.Models
 
         public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters = null)
         {
-         
+
             if (_currentImage != null)
             {
-                
+
 
                 switch (command)
                 {
                     case ProcessorCommands.Binarize:
-                        
+
                         int treshold = 128;
                         int blockSize = 3;
                         double c = 14;
@@ -539,7 +589,7 @@ namespace ImgViewer.Models
                         }
                         foreach (var kv in parameters)
                         {
-                            
+
                             if (kv.Key == "binarizeAlgorithm")
                             {
                                 Debug.WriteLine(kv.Value.ToString());
@@ -557,7 +607,7 @@ namespace ImgViewer.Models
                                         break;
                                 }
                             }
-                            
+
                         }
                         break;
                     case ProcessorCommands.Deskew:
@@ -572,145 +622,126 @@ namespace ImgViewer.Models
                         //Deskew();
                         break;
                     case ProcessorCommands.BorderRemove:
-                        //BordersDeskew();
-                        //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
-                        //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
-                        //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
-                        //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
-                        //либо используйте более устойчивую выборку(несколько областей).
-                        //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
-                        double treshFrac = 0.40;
-                        int contrastThr = 50;
-                        double centralSample = 0.10;
-                        double maxRemoveFrac = 0.45;
-
-                        foreach (var kv in parameters)
                         {
-                            if (kv.Key == null) continue;
+                            //BordersDeskew();
+                            //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
+                            //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
+                            //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
+                            //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
+                            //либо используйте более устойчивую выборку(несколько областей).
+                            //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
+                            double treshFrac = 0.40;
+                            int contrastThr = 50;
+                            double centralSample = 0.10;
+                            double maxRemoveFrac = 0.45;
 
-                            switch (kv.Key)
+                            byte darkThresh = 40;
+                            bool autoThresh = false;
+                            int marginPercentForThresh = 10;
+                            double shiftFactorForTresh = 0.25;
+                            Scalar? bgColor = null;
+                            int minAreaPx = 2000;
+                            double minSpanFraction = 0.6;
+                            double solidityThreshold = 0.6;
+                            double minDepthFraction = 0.05;
+                            int featherPx = 12;
+
+
+                            foreach (var kv in parameters)
                             {
-                                case "treshFrac":
-                                    {
-                                        var v = kv.Value;
-                                        if (v is double dv) { treshFrac = dv; break; }
-                                        if (v is float fv) { treshFrac = fv; break; }
-                                        if (v is int iv) { treshFrac = iv; break; }
-                                        var s = v?.ToString()?.Trim();
-                                        if (string.IsNullOrEmpty(s)) break;
+                                if (kv.Key == null) continue;
 
-                                        if (s.EndsWith("%", StringComparison.Ordinal))
-                                        {
-                                            var p = s.TrimEnd('%').Trim();
-                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
-                                                treshFrac = pd / 100.0;
-                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
-                                                treshFrac = pd / 100.0;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-                                        {
-                                            treshFrac = d;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
-                                        {
-                                            treshFrac = d;
-                                        }
-                                    }
-                                    break;
+                                switch (kv.Key)
+                                {
+                                    case "autoThresh":
+                                        autoThresh = SafeBool(kv.Value, autoThresh);
+                                        break;
+                                    case "marginPercent":
+                                        marginPercentForThresh = SafeInt(kv.Value, marginPercentForThresh);
+                                        break;
+                                    case "shiftFactor":
+                                        shiftFactorForTresh = SafeDouble(kv.Value, shiftFactorForTresh);
+                                        break;
+                                    case "bgColor":
+                                        int i = SafeInt(kv.Value, 0);
+                                        int color = Math.Max(0, Math.Min(255, i));
+                                        bgColor = new Scalar(0, 0, 255);
+                                        break;
+                                    case "darkThreshold":
+                                        int iThresh = SafeInt(kv.Value, darkThresh);
+                                        darkThresh = (byte)(iThresh < 0 ? 0 : (iThresh > 255 ? 255 : iThresh));
+                                        break;
+                                    case "treshFrac":
+                                        treshFrac = SafeDouble(kv.Value, treshFrac);
+                                        break;
+                                    case "minSpanFraction":
+                                        minSpanFraction = SafeDouble(kv.Value, minSpanFraction);
+                                        break;
+                                    case "solidityThreshold":
+                                        solidityThreshold = SafeDouble(kv.Value, solidityThreshold);
+                                        break;
+                                    case "minDepthFraction":
+                                        minDepthFraction = SafeDouble(kv.Value, minDepthFraction);
+                                        break;
 
-                                case "contrastThr":
-                                    {
-                                        var v = kv.Value;
-                                        if (v is int iv) { contrastThr = iv; break; }
-                                        if (v is long lv) { contrastThr = (int)lv; break; }
-                                        if (v is double dv) { contrastThr = Convert.ToInt32(Math.Round(dv)); break; }
-                                        if (v is float fv) { contrastThr = Convert.ToInt32(Math.Round(fv)); break; }
-                                        var s = v?.ToString()?.Trim();
-                                        if (string.IsNullOrEmpty(s)) break;
-                                        if (int.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var i) ||
-                                            int.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out i))
-                                        {
-                                            contrastThr = i;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var dd))
-                                        {
-                                            contrastThr = Convert.ToInt32(Math.Round(dd));
-                                        }
-                                    }
-                                    break;
+                                    case "contrastThr":
+                                        contrastThr = SafeInt(kv.Value, contrastThr);
+                                        break;
+                                    case "minAreaPx":
+                                        minAreaPx = SafeInt(kv.Value, minAreaPx);
+                                        break;
+                                    case "featherPx":
+                                        featherPx = SafeInt(kv.Value, featherPx);
+                                        break;
 
-                                case "centralSample":
-                                    {
-                                        var v = kv.Value;
-                                        if (v is double dv) { centralSample = dv; break; }
-                                        if (v is float fv) { centralSample = fv; break; }
-                                        if (v is int iv) { centralSample = iv; break; }
-                                        var s = v?.ToString()?.Trim();
-                                        if (string.IsNullOrEmpty(s)) break;
-                                        if (s.EndsWith("%", StringComparison.Ordinal))
-                                        {
-                                            var p = s.TrimEnd('%').Trim();
-                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
-                                                centralSample = pd / 100.0;
-                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
-                                                centralSample = pd / 100.0;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-                                        {
-                                            centralSample = d;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
-                                        {
-                                            centralSample = d;
-                                        }
-                                    }
-                                    break;
+                                    case "centralSample":
+                                        centralSample = SafeDouble(kv.Value, centralSample);
+                                        break;
 
-                                case "maxRemoveFrac":
-                                    {
-                                        var v = kv.Value;
-                                        if (v is double dv) { maxRemoveFrac = dv; break; }
-                                        if (v is float fv) { maxRemoveFrac = fv; break; }
-                                        if (v is int iv) { maxRemoveFrac = iv; break; }
-                                        var s = v?.ToString()?.Trim();
-                                        if (string.IsNullOrEmpty(s)) break;
-                                        if (s.EndsWith("%", StringComparison.Ordinal))
-                                        {
-                                            var p = s.TrimEnd('%').Trim();
-                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
-                                                maxRemoveFrac = pd / 100.0;
-                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
-                                                maxRemoveFrac = pd / 100.0;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-                                        {
-                                            maxRemoveFrac = d;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
-                                        {
-                                            maxRemoveFrac = d;
-                                        }
-                                    }
-                                    break;
+                                    case "maxRemoveFrac":
+                                        maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
+                                        break;
 
-                                default:
-                                    // ignore unknown key
-                                    break;
+                                    default:
+                                        // ignore unknown key
+                                        break;
+                                }
                             }
+
+
+                            foreach (var kv in parameters)
+                            {
+                                if (kv.Key == "borderRemovalAlgorithm")
+                                {
+                                    Debug.WriteLine(kv.Value.ToString());
+                                    switch (kv.Value.ToString())
+                                    {
+                                        case "Auto":
+                                            darkThresh = EstimateBlackThreshold(_currentImage, marginPercentForThresh, shiftFactorForTresh);
+                                            _currentImage = RemoveBorderArtifactsGeneric_Safe(_currentImage,
+                                                darkThresh,
+                                                null,
+                                                minAreaPx,
+                                                minSpanFraction,
+                                                solidityThreshold,
+                                                minDepthFraction,
+                                                featherPx
+                                            );
+                                            break;
+                                        case "By Contrast":
+                                            RemoveBordersByRowColWhite(
+                                                    threshFrac: treshFrac,
+                                                    contrastThr: contrastThr,
+                                                    centralSample: centralSample,
+                                                    maxRemoveFrac: maxRemoveFrac
+                                                );
+                                            break;
+                                    }
+                                }
+
+                            }
+
                         }
-
-                        Debug.WriteLine(treshFrac);
-                        Debug.WriteLine(contrastThr);
-                        Debug.WriteLine(centralSample);
-                        Debug.WriteLine(maxRemoveFrac);
-
-                        RemoveBordersByRowColWhite(
-                            threshFrac: treshFrac,
-                            contrastThr: contrastThr,
-                            centralSample: centralSample,
-                            maxRemoveFrac: maxRemoveFrac
-                        );
-
                         //var thr = EstimateBlackThreshold(_currentImage);
                         //RemoveBorderArtifactsGeneric_Safe(_currentImage, 255);
                         break;
@@ -847,7 +878,7 @@ namespace ImgViewer.Models
             return src;
         }
 
-        private void BinarizeAdaptive(int? blockSize = null, double C = 14, bool useGaussian = false, bool useMorphology = false, int morphKernel = 3, int morphIterations = 1,  bool invert = false)
+        private void BinarizeAdaptive(int? blockSize = null, double C = 14, bool useGaussian = false, bool useMorphology = false, int morphKernel = 3, int morphIterations = 1, bool invert = false)
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
@@ -891,9 +922,6 @@ namespace ImgViewer.Models
                 using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(morphKernel, morphKernel));
                 Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: morphIterations);
             }
-            // 5) опционально: морфология небольшая (убрать шум/скрепить буквы) — можно раскомментировать при желании
-            //using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(3, 3));
-            //Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: 3);
 
             using var color = new Mat();
             Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
@@ -1169,7 +1197,7 @@ namespace ImgViewer.Models
                     case "minLineLength":
                         {
                             int v = SafeInt(kv.Value, result.minLineLength);
-                             Math.Max(0, v);
+                            Math.Max(0, v);
                         }
                         break;
 
@@ -1190,12 +1218,12 @@ namespace ImgViewer.Models
         {
             if (_currentImage == null || _currentImage.Empty()) return;
             using var src = _currentImage.Clone();
-            
+
 
             var p = new Deskewer.Parameters();
 
             p = ParseParametersSimple(parameters);
-            
+
             _currentImage = Deskewer.Deskew(src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
         }
 
@@ -1210,7 +1238,7 @@ namespace ImgViewer.Models
         {
             if (_currentImage == null || _currentImage.Empty()) return;
 
-            
+
 
 
             double angle = GetSkewAngleByHough(_currentImage, cannyThresh1: 50, cannyThresh2: 150, houghThreshold: 80, minLineLength: Math.Min(_currentImage.Width, 200), maxLineGap: 20);
@@ -1245,7 +1273,7 @@ namespace ImgViewer.Models
             using var rotated = new Mat();
             Cv2.WarpAffine(src, rotated, M, new OpenCvSharp.Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
 
-            
+
             var result = rotated.Clone();
             _currentImage = result;
         }
@@ -1284,7 +1312,7 @@ namespace ImgViewer.Models
 
         public Mat RemoveBorderArtifactsGeneric_Safe(
             Mat src,
-            byte thr,                       // порог для определения "тёмного" (например EstimateBlackThreshold(rotated))
+            byte thr,                       // порог для определения "тёмного" (например EstimateBlackThreshold(rotated)) 
             Scalar? bgColor = null,         // цвет фона (null -> автоопределение по углам)
             int minAreaPx = 2000,           // если площадь >= этого -> считается значимой
             double minSpanFraction = 0.6,   // если bbox покрывает >= этой доли по ширине/высоте -> кандидат
@@ -1292,7 +1320,16 @@ namespace ImgViewer.Models
             double minDepthFraction = 0.05, // проникновение вглубь, в долях min(rows,cols)
             int featherPx = 12              // радиус растушёвки для мягкого перехода
         )
+
+
         {
+
+            Debug.WriteLine("Min Area - ", minAreaPx.ToString());
+            Debug.WriteLine("Min Span - ", minSpanFraction.ToString());
+            Debug.WriteLine("Solidity Thr - ", solidityThreshold.ToString());
+            Debug.WriteLine("Penetration -", minDepthFraction.ToString());
+            Debug.WriteLine("Feather -", featherPx.ToString());
+
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src;
 
@@ -1342,11 +1379,11 @@ namespace ImgViewer.Models
                 Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
 
                 //+++
-                int kernelWidth = Math.Max(15, working.Cols / 30);
-                using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 3));
-                Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
-                using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-                Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
+                //int kernelWidth = Math.Max(7, working.Cols / 60);
+                //using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 1));
+                //Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
+                //using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(1, 1));
+                //Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
                 //+++
 
                 // small open to reduce noise
@@ -1360,6 +1397,9 @@ namespace ImgViewer.Models
                 using var stats = new Mat();
                 using var cents = new Mat();
                 int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, cents);
+
+                System.Diagnostics.Debug.WriteLine($"darkMask nonzero: {Cv2.CountNonZero(darkMask)}");
+                System.Diagnostics.Debug.WriteLine($"nLabels: {nLabels}  labels.type={labels.Type()}  stats.size={stats.Rows}x{stats.Cols}");
 
                 // selected mask init
                 //  var selectedMask = Mat.Zeros(darkMask.Size(), MatType.CV_8U);
@@ -1423,6 +1463,8 @@ namespace ImgViewer.Models
                     }
                 }
 
+                //System.Diagnostics.Debug.WriteLine($"selectedMask nonzero: {Cv2.CountNonZero(selectedMask)}, type={selectedMask.Type()}");
+
                 // if nothing selected -> return clone
                 if (Cv2.CountNonZero(selectedMask) == 0)
                     return working.Clone();
@@ -1430,6 +1472,11 @@ namespace ImgViewer.Models
                 // 3) fill selected areas with background color (hard fill)
                 var filled = working.Clone();
                 filled.SetTo(chosenBg, selectedMask);
+                //filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
+
+                //Cv2.ImWrite("dbg_working.png", working);
+                //Cv2.ImWrite("dbg_selectedMask.png", selectedMask);
+                //Cv2.ImWrite("dbg_filled_after_setto.png", filled);
 
                 // 4) smooth the seam: create blurred (soft) mask and do local per-pixel blend in ROI
                 // create blurred mask (CV_8U -> blurred uchar)
@@ -1484,8 +1531,10 @@ namespace ImgViewer.Models
                         byte nr = (byte)Math.Round(fillB.Item2 * alpha + origB.Item2 * (1 - alpha));
                         // write to filled result
                         filled.Set<Vec3b>(r, c, new Vec3b(nb, ng, nr));
+                        //filled.Set<Vec3b>(r, c, new Vec3b(0, 0, 255));
                     }
                 }
+
 
                 return filled;
             }
