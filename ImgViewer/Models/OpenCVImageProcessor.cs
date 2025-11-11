@@ -1324,11 +1324,6 @@ namespace ImgViewer.Models
 
         {
 
-            Debug.WriteLine("Min Area - ", minAreaPx.ToString());
-            Debug.WriteLine("Min Span - ", minSpanFraction.ToString());
-            Debug.WriteLine("Solidity Thr - ", solidityThreshold.ToString());
-            Debug.WriteLine("Penetration -", minDepthFraction.ToString());
-            Debug.WriteLine("Feather -", featherPx.ToString());
 
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src;
@@ -1471,7 +1466,81 @@ namespace ImgViewer.Models
 
                 // 3) fill selected areas with background color (hard fill)
                 var filled = working.Clone();
+
+                // cut ++++++
+
+                int margin = featherPx; // adjust if you want expansion/shrink of mask
+
+                // Ensure mask is 0/255 CV_8U and clone
+                Mat modMask;
+                if (selectedMask.Type() != MatType.CV_8U)
+                {
+                    modMask = new Mat();
+                    selectedMask.ConvertTo(modMask, MatType.CV_8U);
+                }
+                else
+                {
+                    modMask = selectedMask.Clone();
+                }
+
+                // apply symmetric margin if requested
+                if (margin != 0)
+                {
+                    int m = Math.Abs(margin);
+                    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
+                    if (margin > 0)
+                        Cv2.Dilate(modMask, modMask, k, iterations: 1);
+                    else
+                        Cv2.Erode(modMask, modMask, k, iterations: 1);
+                }
+
+                // Safely convert chosenBg components to 0..255 integers WITHOUT Math.Clamp
+                int bVal = (int)Math.Round(chosenBg.Val0);
+                if (bVal < 0) bVal = 0; else if (bVal > 255) bVal = 255;
+                int gVal = (int)Math.Round(chosenBg.Val1);
+                if (gVal < 0) gVal = 0; else if (gVal > 255) gVal = 255;
+                int rVal = (int)Math.Round(chosenBg.Val2);
+                if (rVal < 0) rVal = 0; else if (rVal > 255) rVal = 255;
+
+                // Build result initialized with chosen background color (B,G,R)
+                Mat result = new Mat(working.Size(), MatType.CV_8UC3, new Scalar(bVal, gVal, rVal));
+
+                // Copy original pixels where mask == 0 (outside selection)
+                Mat invMask = new Mat();
+                Cv2.BitwiseNot(modMask, invMask);
+                working.CopyTo(result, invMask);
+
+                // return result immediately (no further blending)
+                return result;
+
+                // cut ++++++
+
+
+                //int margin = 100; // <-- ваш n: положительное = расширить, отрицательное = врезать внутрь
+
+                //// ensure mask is CV_8U with values 0/255
+                //Mat modMask = new Mat();
+                //if (selectedMask.Type() != MatType.CV_8U)
+                //    selectedMask.ConvertTo(modMask, MatType.CV_8U);
+                //else
+                //    modMask = selectedMask.Clone();
+
+                //if (margin > 0)
+                //{
+                //    // use a square kernel of size (2*margin+1)
+                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
+                //    Cv2.Dilate(modMask, modMask, k, iterations: 1);
+                //}
+                //else if (margin < 0)
+                //{
+                //    int m = -margin;
+                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
+                //    Cv2.Erode(modMask, modMask, k, iterations: 1);
+                //}
+
                 filled.SetTo(chosenBg, selectedMask);
+
+
                 //filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
 
                 //Cv2.ImWrite("dbg_working.png", working);

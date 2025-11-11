@@ -351,23 +351,23 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
                     new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
                     new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
-                    new PipeLineParameter("Feathe / blur radius", "featherPx", 12, 0, 500, 1),
+                    new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 20, 1),
 
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary()));
             op2.Command = ProcessorCommands.BorderRemove;
             _pipeLineOperations.Add(op2);
 
-            var op3 = new PipeLineOperation(
-                "Auto Crop",
-                "Run",
-                new[]
-                {
-                    new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
-                },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary()));
-            op3.Command = ProcessorCommands.AutoCropRectangle;
-            _pipeLineOperations.Add(op3);
+            //var op3 = new PipeLineOperation(
+            //    "Auto Crop",
+            //    "Run",
+            //    new[]
+            //    {
+            //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
+            //    },
+            //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary()));
+            //op3.Command = ProcessorCommands.AutoCropRectangle;
+            //_pipeLineOperations.Add(op3);
 
             var op4 = new PipeLineOperation(
                 "Binarize",
@@ -744,7 +744,7 @@ namespace ImgViewer.Views
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.StreamSource = stream;
             bitmap.EndInit();
-            bitmap.Freeze(); // ????? ????? ???? ???????????? ?? ?????? ??????
+            bitmap.Freeze(); 
 
             return bitmap;
         }

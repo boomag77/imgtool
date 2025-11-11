@@ -389,19 +389,24 @@
             <RowDefinition Height="Auto"/>
             
         </Grid.RowDefinitions>
+        
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="4*"/>
+            
             <!--Original image -->
-            <ColumnDefinition Width="2*"/>
-            <!--Pipeline -->
             <ColumnDefinition Width="4*"/>
+            <!--Pipeline and controls -->
+            <ColumnDefinition Width="2*"/>
             <!--Processing image -->
+            <ColumnDefinition Width="4*"/>
+            
         </Grid.ColumnDefinitions>
 
         <!--Menu -->
         <Menu Grid.Row="0" VerticalAlignment="Top" Grid.ColumnSpan="3">
             <MenuItem Header="_File">
-                <MenuItem Header="_Open File" Click="OpenFile_Click"/>
+                <MenuItem Header="_Open Image" Click="OpenFile_Click"/>
+                <Separator/>
+                <MenuItem Header="_Save Image As..." Click="SaveAs_Click"/>
                 <Separator/>
                 <MenuItem Header="_Exit" Click="ExitClick"/>
             </MenuItem>
@@ -436,7 +441,7 @@
             </Viewbox>
         </Border>
 
-        <Border Grid.Row="1" Grid.Column="2">
+        <Border Grid.Row="1" Grid.Column="1">
             <Button Style="{StaticResource ElevatedRoundedButton}"
                  Margin="5,5,5,5"
                     Visibility="{Binding IsProcessingImageOnPreview}"
@@ -446,7 +451,7 @@
                  Click="ResetButton_Click">Reset Image</Button>
                
         </Border>
-
+        <!--
         <Border Grid.Row="1" Grid.Column="0">
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Center"
@@ -463,8 +468,9 @@
             </StackPanel>
              
         </Border>
+        -->
 
-        <Border Grid.Row="3" Grid.Column="0">
+        <Border Grid.Row="3" Grid.Column="1">
             <StackPanel Orientation="Horizontal"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
@@ -741,7 +747,7 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!--Image preview -->
+        <!--Prpcessing Image preview -->
         <Border Grid.Row="2" Grid.Column="2"
         BorderThickness="1"
         BorderBrush="#FFBDBDBD"
