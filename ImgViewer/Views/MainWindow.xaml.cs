@@ -6,8 +6,10 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -81,6 +83,11 @@ namespace ImgViewer.Views
 
         private readonly HashSet<PipeLineOperation> _liveRunning = new();
 
+
+        private static readonly string[] DeskewAlgorithmOptions = new[] { "Auto", "ByBorders", "Hough", "Projection", "PCA" };
+        private static readonly string[] BorderRemovalOptions = new[] { "Auto", "By Contrast" };
+        private static readonly string[] BinarizeAlgorithmOptions = new[] { "Treshold", "Sauvola", "Adaptive" };
+
         public MainWindow()
         {
             InitializeComponent();
@@ -105,6 +112,13 @@ namespace ImgViewer.Views
             SubscribeParameterChangedHandlers();
             HookLiveHandlers();
 
+        }
+
+        private void UpdatePipeline(List<Operation> ops)
+        {
+            InitializePipeLineOperations(ops);
+            //SubscribeParameterChangedHandlers();
+            //HookLiveHandlers();
         }
 
         private void HookLiveHandlers()
@@ -310,13 +324,82 @@ namespace ImgViewer.Views
         //    }
         //}
 
-        private Pipeline ParsePiplineFromJSON(string jsonString)
+        private List<Operation> ParsePiplineFromJSON(string jsonString)
         {
-            return new Pipeline();
+            if (string.IsNullOrWhiteSpace(jsonString))
+                throw new ArgumentException("jsonString is empty", nameof(jsonString));
+
+            using var doc = JsonDocument.Parse(jsonString);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Array)
+                throw new ArgumentException("Expected root JSON element to be an array.");
+
+            var result = new List<Operation>();
+
+            foreach (var opEl in root.EnumerateArray())
+            {
+                if (opEl.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                // command
+                string command = opEl.TryGetProperty("command", out var cmdEl) && cmdEl.ValueKind == JsonValueKind.String
+                    ? cmdEl.GetString()!
+                    : throw new ArgumentException("Each operation must contain a string 'command' property.");
+
+                var parameters = new List<Parameter>();
+
+                if (opEl.TryGetProperty("parameters", out var paramsEl) && paramsEl.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in paramsEl.EnumerateObject())
+                    {
+                        object? parsed = ParseJsonElementValue(prop.Value);
+                        parameters.Add(new Parameter(prop.Name, parsed!));
+                    }
+                }
+
+                result.Add(new Operation { Command = command, Parameters = parameters.ToArray() });
+            }
+
+            return result;
         }
 
-        private void InitializePipeLineOperations(Pipeline pipeline = null)
+        private static object? ParseJsonElementValue(JsonElement el)
         {
+            switch (el.ValueKind)
+            {
+                case JsonValueKind.String:
+                    {
+                        var s = el.GetString()!;
+                        // try bool first (True/False case-insensitive)
+                        if (bool.TryParse(s, out var b)) return b;
+                        // try int
+                        if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)) return i;
+                        // try double (invariant culture: dot as decimal separator)
+                        if (double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var d)) return d;
+                        // else keep string
+                        return s;
+                    }
+                case JsonValueKind.Number:
+                    {
+                        // prefer int when possible
+                        if (el.TryGetInt32(out var ii)) return ii;
+                        else return el.GetDouble(); // fallback to double
+                    }
+                case JsonValueKind.True:
+                    return true;
+                case JsonValueKind.False:
+                    return false;
+                case JsonValueKind.Null:
+                    return null;
+                default:
+                    // objects/arrays -> return raw text (or you can throw depending on needs)
+                    return el.GetRawText();
+            }
+        }
+
+        private void InitializeDefaultPipeline()
+        {
+
             _pipeLineOperations.Clear();
 
             var op1 = new PipeLineOperation(
@@ -410,6 +493,173 @@ namespace ImgViewer.Views
             //        new PipeLineParameter("Parallel", "Parallelism", 1, 1, Environment.ProcessorCount, 1)
             //    },
             //    (window, operation) => window.ProcessFolderClick(window, new RoutedEventArgs())));
+        }
+
+        private void InitializePipeLineOperations(List<Operation> ops = null)
+        {
+            _pipeLineOperations.Clear();
+
+            if (ops == null)
+            {
+                InitializeDefaultPipeline();
+                return;
+            }
+
+            foreach (var op in ops)
+            {
+                // Определяем заголовок и режим (Preview / Run) — можно настроить по команде
+                string displayName = PrettyCommandName(op.Command);
+                string buttonText = "Preview";
+                var parameters = new List<PipeLineParameter>();
+
+                foreach (var p in op.Parameters)
+                {
+                    // p.Name - ключ в JSON; p.Value - object (int/double/bool/string)
+                    var plParam = CreatePipeLineParameterFromParsed(p.Name, p.Value);
+                    if (plParam != null) parameters.Add(plParam);
+                }
+
+                // Лямбда-обработчик: переводит PipeLineOperation в запуск существующего менеджера
+                Action<MainWindow, PipeLineOperation> handler = (window, operation) =>
+                {
+                    // предполагается, что CreateParameterDictionary существует у PipeLineOperation
+                    window.ExecuteManagerCommand(MapToProcessorCommand(op.Command), operation.CreateParameterDictionary());
+                };
+
+                var plo = new PipeLineOperation(displayName, buttonText, parameters.ToArray(), handler)
+                {
+                    Command = MapToProcessorCommand(op.Command)
+                };
+                _pipeLineOperations.Add(plo);
+            }
+
+
+        }
+
+        private string PrettyLabelFromKey(string key)
+        {
+            // простая замена camelCase/underscores на читаемый текст
+            if (string.IsNullOrWhiteSpace(key)) return key;
+            string s = key.Replace('_', ' ');
+            // вставим пробел перед заглавными, если camelCase
+            var outChars = new List<char>();
+            char prev = '\0';
+            foreach (var c in s)
+            {
+                if (char.IsUpper(c) && prev != '\0' && !char.IsWhiteSpace(prev) && !char.IsUpper(prev))
+                    outChars.Add(' ');
+                outChars.Add(c);
+                prev = c;
+            }
+            string res = new string(outChars.ToArray());
+            // capitalize first
+            if (res.Length > 0) res = char.ToUpperInvariant(res[0]) + res.Substring(1);
+            return res;
+        }
+
+        private PipeLineParameter? CreatePipeLineParameterFromParsed(string key, object? value)
+        {
+            // Уберём лишние пробелы и приведём к lower для ключей сопоставления
+            string lk = key.Trim();
+
+            // Специфичные опции для известных ключей (воспользуйтесь теми массивами, что выше)
+            if (string.Equals(lk, "deskewAlgorithm", StringComparison.OrdinalIgnoreCase))
+                return new PipeLineParameter("Algorithm", "deskewAlgorithm", DeskewAlgorithmOptions, Array.IndexOf(DeskewAlgorithmOptions, (value?.ToString() ?? "Auto")));
+
+            if (string.Equals(lk, "borderRemovalAlgorithm", StringComparison.OrdinalIgnoreCase))
+                return new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", BorderRemovalOptions, Array.IndexOf(BorderRemovalOptions, (value?.ToString() ?? "Auto")));
+
+            if (string.Equals(lk, "binarizeAlgorithm", StringComparison.OrdinalIgnoreCase))
+                return new PipeLineParameter("Algorithm", "binarizeAlgorithm", BinarizeAlgorithmOptions, Array.IndexOf(BinarizeAlgorithmOptions, (value?.ToString() ?? "Treshold")));
+
+            // Булевы параметры
+            if (value is bool bv)
+            {
+                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, bv);
+            }
+
+            // Целые числа
+            if (value is int iv)
+            {
+                // Подбор sensible bounds по имени параметра (если нужны особые min/max для некоторых ключей)
+                if (string.Equals(lk, "BinarizeTreshold", StringComparison.OrdinalIgnoreCase) ||
+                    lk.IndexOf("Threshold", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    lk.IndexOf("Tresh", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 0, 255, 1);
+                }
+
+                if (string.Equals(lk, "bgColor", StringComparison.OrdinalIgnoreCase))
+                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 0, 255, 1);
+
+                if (string.Equals(lk, "minAreaPx", StringComparison.OrdinalIgnoreCase))
+                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 100, 2_000_000, 1);
+
+                // default для int
+                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, Math.Max(0, iv - 100), iv + Math.Max(100, iv), 1);
+            }
+
+            // Вещественные числа (double)
+            if (value is double dv)
+            {
+                // если значение явно в диапазоне [0..1], подставим такие границы
+                if (dv >= 0.0 && dv <= 1.0)
+                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, dv, 0.0, 1.0, 0.01);
+
+                // стандартный fallback: min=0, max=dv*10 (чтобы можно было настраивать)
+                double max = Math.Max(1.0, dv * 10.0);
+                double step = dv < 1.0 ? 0.01 : 1.0;
+                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, dv, 0.0, max, step);
+            }
+
+            // Если значение boxed как System.Text.Json.JsonElement, попробуем обработать:
+            if (value is System.Text.Json.JsonElement je)
+            {
+                // простая попытка извлечь тип
+                if (je.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    if (je.TryGetInt32(out var jjInt)) return CreatePipeLineParameterFromParsed(lk, jjInt);
+                    if (je.TryGetDouble(out var jjDbl)) return CreatePipeLineParameterFromParsed(lk, jjDbl);
+                }
+                if (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False)
+                    return CreatePipeLineParameterFromParsed(lk, je.GetBoolean());
+                if (je.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return CreatePipeLineParameterFromParsed(lk, je.GetString());
+            }
+
+            // Строковые значения: создаём текстовый (строковый) параметр, если у вас есть конструктор для строк
+            if (value is string sv)
+            {
+                // Если у вас нет явного string-конструктора — можно создать выбора с одним элементом
+                // Использую конструктор (label, key, options[], selectedIndex)
+                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, new[] { sv }, 0);
+            }
+
+            // Null или неизвестный тип — возвращаем null (не будем создавать параметр)
+            return null;
+        }
+
+        private string PrettyCommandName(string command)
+        {
+            // если JSON использует "Deskew" и т.п. - можно вернуть локализованный заголовок
+            return command switch
+            {
+                "Deskew" => "Deskew",
+                "BordersRemove" => "Border Removal",
+                "Binarize" => "Binarize",
+                _ => command
+            };
+        }
+
+        private ProcessorCommand MapToProcessorCommand(string command)
+        {
+            return command switch
+            {
+                "Deskew" => ProcessorCommand.Deskew,
+                "BordersRemove" => ProcessorCommand.BordersRemove,
+                "Binarize" => ProcessorCommand.Binarize
+                //_ => ProcessorCommand.None // добавьте None или обработку по умолчанию
+            };
         }
 
         private void PipelineRunButton_Click(object sender, RoutedEventArgs e)
@@ -805,8 +1055,46 @@ namespace ImgViewer.Views
 
         private void LoadPipelineFromFile()
         {
-            //TODO async
-            Debug.WriteLine("Pipeline loaded from file");
+
+            var dlg = new Microsoft.Win32.OpenFileDialog();
+            dlg.Filter = "IGpreset files|*.igpreset";
+            List<Operation> pipeline = new List<Operation>();
+            if (dlg.ShowDialog() == true)
+            {
+                try
+                {
+                    var fileName = dlg.FileName;
+                    string json = File.ReadAllText(fileName);
+                    pipeline = ParsePiplineFromJSON(json);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Load was cancelled, do nothing
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show
+                    (
+                        $"Error loading image for preview: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
+                }
+            }
+
+#if DEBUG
+            foreach (var op in pipeline)
+            {
+                Debug.WriteLine($"Command: {op.Command}");
+                foreach (var p in op.Parameters)
+                {
+                    Debug.WriteLine($"  {p.Name} = {p.Value} (type: {p.Value?.GetType().Name ?? "null"})");
+                }
+            }
+#endif
+            UpdatePipeline(pipeline);
+
         }
 
         private void SavePipelinePreset_Click(object sender, RoutedEventArgs e)
@@ -870,6 +1158,7 @@ namespace ImgViewer.Views
         private void ResetPipelineToDefaults()
         {
             //TODO
+            InitializeDefaultPipeline();
             Debug.WriteLine("Pipeline has been reset.");
         }
 
