@@ -440,17 +440,6 @@
         Stretch="None"/>
             </Viewbox>
         </Border>
-
-        <Border Grid.Row="1" Grid.Column="1">
-            <Button Style="{StaticResource ElevatedRoundedButton}"
-                 Margin="5,5,5,5"
-                    Visibility="{Binding IsProcessingImageOnPreview}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                 MinWidth="120"
-                 Click="ResetButton_Click">Reset Image</Button>
-               
-        </Border>
         <!--
         <Border Grid.Row="1" Grid.Column="0">
             <StackPanel Orientation="Horizontal"
@@ -484,21 +473,29 @@
                     SnapsToDevicePixels="True">
                     <StackPanel Orientation="Vertical">
                         <TextBlock
-                            
                             Margin="5,5,5,5"
                             Text="Apply Pipeline Parameters to..."/>
                         <StackPanel Orientation="Horizontal"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
                                     Margin="10">
                             <Button Style="{StaticResource ElevatedRoundedButton}"
-                    Margin="5,5,5,5"
-                    MinWidth="120"
-                    Click="ApplyCurrentPipelineToCurrentFolder_Click">current Folder</Button>
+                                    Margin="5" MinWidth="120" Click="OpenNextFile_Click">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <Viewbox Width="14" Height="14" Stretch="Uniform">
+                                        <Canvas Width="8" Height="10">
+                                            <!-- triangle polygon; Fill bound to Button.Foreground so it inherits color -->
+                                            <Polygon Points="0,0 0,10 8,5"
+                                                     Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="selected folder" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                             <Button Style="{StaticResource ElevatedRoundedButton}"
-Margin="5,5,5,5"
-MinWidth="120"
-Click="OpenNextFile_Click">selected folder</Button>
+                                    Margin="5,5,5,5"
+                                    MinWidth="120"
+                                    Click="OpenNextFile_Click">selected folder</Button>
 
                         </StackPanel>
                     </StackPanel>
@@ -509,18 +506,31 @@ Click="OpenNextFile_Click">selected folder</Button>
                     BorderBrush="Black"
                     BorderThickness="1"
                     Margin="10">
-                    <StackPanel Orientation="Horizontal"
-            HorizontalAlignment="Center">
-                        <Button Style="{StaticResource ElevatedRoundedButton}"
-            Margin="5,15,5,15"
-            MinWidth="120"
-            Click="OpenPrevFile_Click">Prev</Button>
-                        <Button Style="{StaticResource ElevatedRoundedButton}"
-            Margin="5,15,5,15"
-            MinWidth="120"
-            Click="OpenNextFile_Click">Next</Button>
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock
+                            Margin="5,5,5,5"
+                            Text="Current folder navigation"/>
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center">
 
+                            <Button Style="{StaticResource ElevatedRoundedButton}"
+                                    Margin="5,15,5,15"
+                                    MinWidth="120"
+                                    Click="OpenPrevFile_Click">Prev</Button>
+                            <Button Style="{StaticResource ElevatedRoundedButton}"
+                                    Margin="5,5,5,5"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    MinWidth="120"
+                                    Click="ResetButton_Click">Reset Image</Button>
+                            <Button Style="{StaticResource ElevatedRoundedButton}"
+                                    Margin="5,15,5,15"
+                                    MinWidth="120"
+                                    Click="OpenNextFile_Click">Next</Button>    
+
+                        </StackPanel>
                     </StackPanel>
+                    
                 </Border>
                 
             </StackPanel>
