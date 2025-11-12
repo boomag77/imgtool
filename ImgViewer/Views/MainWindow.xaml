@@ -7,7 +7,7 @@
         xmlns:views="clr-namespace:ImgViewer.Views"
         xmlns:conv="clr-namespace:ImgViewer.Converters"
         mc:Ignorable="d"
-        Title="CCS Image Tool" Height="600" Width="800"
+        Title="Image Genie" Height="600" Width="800"
         Background="LightGray">
     <Window.Resources>
 
@@ -395,7 +395,7 @@
             <!--Original image -->
             <ColumnDefinition Width="4*"/>
             <!--Pipeline and controls -->
-            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="3*"/>
             <!--Processing image -->
             <ColumnDefinition Width="4*"/>
             
@@ -424,10 +424,10 @@
             
         
         <!--Original Image-->
-        <Border Grid.Row="2" Grid.Column="0"
+        <Border Grid.Row="1" Grid.Column="0" Grid.RowSpan="3"
         BorderThickness="1"
         BorderBrush="#FFBDBDBD"
-        Margin="5"
+        Margin="5,5,5,5"
         Padding="5"
         
         HorizontalAlignment="Center"
@@ -470,37 +470,61 @@
         </Border>
         -->
 
+
+
         <Border Grid.Row="3" Grid.Column="1">
-            <StackPanel Orientation="Horizontal"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-                <Button Style="{StaticResource ElevatedRoundedButton}"
-                Margin="5,5,5,5"
-                MinWidth="120"
-                Click="OpenPrevFile_Click">Prev</Button>
-                <Button Style="{StaticResource ElevatedRoundedButton}"
-                Margin="5,5,5,5"
-                MinWidth="120"
-                Click="OpenNextFile_Click">Next</Button>
+            
+            <StackPanel Orientation="Vertical"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <Border 
+                    BorderBrush="Black"
+                    BorderThickness="1"
+                    Margin="10"
+                    SnapsToDevicePixels="True">
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock
+                            
+                            Margin="5,5,5,5"
+                            Text="Apply Pipeline Parameters to..."/>
+                        <StackPanel Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                                    Margin="10">
+                            <Button Style="{StaticResource ElevatedRoundedButton}"
+                    Margin="5,5,5,5"
+                    MinWidth="120"
+                    Click="ApplyCurrentPipelineToCurrentFolder_Click">current Folder</Button>
+                            <Button Style="{StaticResource ElevatedRoundedButton}"
+Margin="5,5,5,5"
+MinWidth="120"
+Click="OpenNextFile_Click">selected folder</Button>
 
+                        </StackPanel>
+                    </StackPanel>
+                    
+                </Border>
+                
+                <Border
+                    BorderBrush="Black"
+                    BorderThickness="1"
+                    Margin="10">
+                    <StackPanel Orientation="Horizontal"
+            HorizontalAlignment="Center">
+                        <Button Style="{StaticResource ElevatedRoundedButton}"
+            Margin="5,15,5,15"
+            MinWidth="120"
+            Click="OpenPrevFile_Click">Prev</Button>
+                        <Button Style="{StaticResource ElevatedRoundedButton}"
+            Margin="5,15,5,15"
+            MinWidth="120"
+            Click="OpenNextFile_Click">Next</Button>
+
+                    </StackPanel>
+                </Border>
+                
             </StackPanel>
 
-        </Border>
-
-        <Border Grid.Row="3" Grid.Column="2">
-            <StackPanel Orientation="Horizontal"
-        HorizontalAlignment="Center"
-        VerticalAlignment="Center">
-                <Button Style="{StaticResource ElevatedRoundedButton}"
-        Margin="5,5,5,5"
-        MinWidth="120"
-        Click="ApplyCurrentPipelineToCurrentFolder_Click">Apply PL to current Folder</Button>
-                <Button Style="{StaticResource ElevatedRoundedButton}"
-        Margin="5,5,5,5"
-        MinWidth="120"
-        Click="OpenNextFile_Click">Button</Button>
-
-            </StackPanel>
 
         </Border>
 
@@ -748,7 +772,7 @@
         </ListBox>
 
         <!--Prpcessing Image preview -->
-        <Border Grid.Row="2" Grid.Column="2"
+        <Border Grid.Row="1" Grid.Column="2" Grid.RowSpan="3"
         BorderThickness="1"
         BorderBrush="#FFBDBDBD"
         Margin="5"

@@ -717,16 +717,20 @@ namespace ImgViewer.Models
                                     switch (kv.Value.ToString())
                                     {
                                         case "Auto":
-                                            darkThresh = EstimateBlackThreshold(_currentImage, marginPercentForThresh, shiftFactorForTresh);
-                                            _currentImage = RemoveBorderArtifactsGeneric_Safe(_currentImage,
-                                                darkThresh,
-                                                null,
-                                                minAreaPx,
-                                                minSpanFraction,
-                                                solidityThreshold,
-                                                minDepthFraction,
-                                                featherPx
-                                            );
+                                            if (autoThresh)
+                                            {
+                                                darkThresh = EstimateBlackThreshold(_currentImage, marginPercentForThresh, shiftFactorForTresh);
+                                            }
+
+                                                _currentImage = RemoveBorderArtifactsGeneric_Safe(_currentImage,
+                                                    darkThresh,
+                                                    null,
+                                                    minAreaPx,
+                                                    minSpanFraction,
+                                                    solidityThreshold,
+                                                    minDepthFraction,
+                                                    featherPx
+                                                );
                                             break;
                                         case "By Contrast":
                                             RemoveBordersByRowColWhite(
@@ -1347,15 +1351,17 @@ namespace ImgViewer.Models
                 Scalar chosenBg = bgColor ?? new Scalar(255, 255, 255);
                 if (!bgColor.HasValue)
                 {
+
+
                     int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
                     double sb = 0, sg = 0, sr = 0; int cnt = 0;
                     var rects = new[]
                     {
-                new Rect(0,0,cornerSize,cornerSize),
-                new Rect(Math.Max(0,cols-cornerSize),0,cornerSize,cornerSize),
-                new Rect(0,Math.Max(0,rows-cornerSize),cornerSize,cornerSize),
-                new Rect(Math.Max(0,cols-cornerSize), Math.Max(0,rows-cornerSize), cornerSize, cornerSize)
-            };
+                        new Rect(0,0,cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cols-cornerSize),0,cornerSize,cornerSize),
+                        new Rect(0,Math.Max(0,rows-cornerSize),cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cols-cornerSize), Math.Max(0,rows-cornerSize), cornerSize, cornerSize)
+                    };
                     foreach (var r in rects)
                     {
                         if (r.Width <= 0 || r.Height <= 0) continue;
@@ -1373,12 +1379,16 @@ namespace ImgViewer.Models
                 using var darkMask = new Mat();
                 Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
 
+
+
+
+
                 //+++
-                //int kernelWidth = Math.Max(7, working.Cols / 60);
-                //using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 1));
-                //Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
-                //using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(1, 1));
-                //Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
+                int kernelWidth = Math.Max(7, working.Cols / 60);
+                using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 1));
+                Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
+                using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(1, 1));
+                Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
                 //+++
 
                 // small open to reduce noise
