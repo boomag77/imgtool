@@ -13,7 +13,7 @@ namespace ImgViewer.Models
         private string _outputFolder = string.Empty;
         private readonly int _workersCount;
 
-        private readonly (ProcessorCommands command, Dictionary<string, object> parameters)[] _pipelineTemplate;
+        private readonly (ProcessorCommand command, Dictionary<string, object> parameters)[] _pipelineTemplate;
 
         //private readonly ProcessorCommands[] _commandsQueue;
 
@@ -24,7 +24,7 @@ namespace ImgViewer.Models
         public event Action<int, int>? ProgressChanged;
 
         public ImgWorkerPool(CancellationTokenSource cts,
-                             (ProcessorCommands command, Dictionary<string, object> parameters)[] pipelineTemplate,
+                             (ProcessorCommand command, Dictionary<string, object> parameters)[] pipelineTemplate,
                              int maxWorkersCount,
                              SourceImageFolder sourceFolder,
                              int maxFilesQueue = 0)
@@ -34,7 +34,7 @@ namespace ImgViewer.Models
 
             _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
             Directory.CreateDirectory(_outputFolder);
-            _pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommands, Dictionary<string, object>)>();
+            _pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
 
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;

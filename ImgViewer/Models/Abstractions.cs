@@ -1,4 +1,6 @@
-﻿namespace ImgViewer.Models
+﻿using ImgViewer.Interfaces;
+
+namespace ImgViewer.Models
 {
 
 
@@ -17,29 +19,40 @@
         Binarize
     }
 
-    public class Operation
+    public class PipeLineStep
     {
-        private readonly OperationType type;
+        private readonly ProcessorCommand type;
 
     }
 
     public class Pipeline
     {
-        private Operation[] _operations;
+        private PipeLineStep[] _operations;
 
     }
 
-    public struct DeskewOperation
-    {
-        OperationType type;
-
-    }
 
     enum DeskewAlgorithm
     {
         Auto,
         ByBorders,
+        Hough,
+        Projection,
+        PCA
 
+    }
+
+    enum BordersRemovalAlgorithm
+    {
+        Auto,
+        ByContrast
+    }
+
+    enum BinarizationAlgorithm
+    {
+        Treshold,
+        Sauvola,
+        Adaptive
     }
 
 }

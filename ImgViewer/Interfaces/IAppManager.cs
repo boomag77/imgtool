@@ -8,9 +8,11 @@ namespace ImgViewer.Interfaces
         public Task SetBmpImageOnPreview(ImageSource bmp);
 
         public Task SetImageForProcessing(ImageSource bmp);
-        public void ApplyCommandToProcessingImage(ProcessorCommands command, Dictionary<string, object> parameters);
+        public void ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters);
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression);
-        public void ProcessFolder(string srcFolder, (ProcessorCommands command, Dictionary<string, object> parameters)[] pipeline);
+        public void ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline);
+
+        public string BuildPipelineForSave((ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline);
         public void Shutdown();
     }
 

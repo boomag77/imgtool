@@ -69,7 +69,7 @@ namespace ImgViewer.Models
         }
 
 
-        public void ApplyCommandToProcessingImage(ProcessorCommands command, Dictionary<string, object> parameters)
+        public void ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
         {
             _mainViewModel.Status = $"Processing image...";
             
@@ -84,52 +84,60 @@ namespace ImgViewer.Models
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
         }
 
-        public async void ProcessFolder(string srcFolder, (ProcessorCommands command, Dictionary<string, object> parameters)[] pipeline = null)
+        public async void ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline = null)
         {
-            bool debug = false;
+            bool debug = true;
 
             _mainViewModel.Status = $"Processing folder...";
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
-            var pipelineToUse = pipeline ?? new (ProcessorCommands, Dictionary<string, object>)[]
+            var pipelineToUse = pipeline ?? new (ProcessorCommand, Dictionary<string, object>)[]
                {
-                    (ProcessorCommands.Deskew, new Dictionary<string, object>()),
-                    (ProcessorCommands.BorderRemove, new Dictionary<string, object>()),
+                    (ProcessorCommand.Deskew, new Dictionary<string, object>()),
+                    (ProcessorCommand.BordersRemove, new Dictionary<string, object>()),
                     //(ProcessorCommands.AutoCropRectangle, new Dictionary<string, object>()),
-                    (ProcessorCommands.Binarize, new Dictionary<string, object>()),
+                    (ProcessorCommand.Binarize, new Dictionary<string, object>()),
                };
             if (debug)
             {
+                Debug.WriteLine("!!!!! ------ WARNING! DEBUG IS ON IN FOLDER PROCESSING ----- !!!!!");
+                Debug.WriteLine("------- PIPELINE PARAMS------");
                 // дебаг вывод
-                foreach (var p in pipelineToUse)
-                {
-                    string paramStr;
-                    if (p.parameters == null || p.parameters.Count == 0)
-                    {
-                        paramStr = "{}";
-                    }
-                    else
-                    {
-                        try
-                        {
-                            // Try to serialize the dictionary to JSON for the most readable output.
-                            // Use limited depth/size by default options; if something isn't serializable we'll hit catch.
-                            paramStr = JsonSerializer.Serialize(p.parameters, new JsonSerializerOptions
-                            {
-                                WriteIndented = false,
-                                // ignore cycles / non-serializable members will throw
-                            });
-                        }
-                        catch
-                        {
-                            // Fallback: print each key=value using safe formatter
-                            var kvParts = p.parameters.Select(kv => $"{kv.Key}={FormatParamValue(kv.Value)}");
-                            paramStr = "{" + string.Join(", ", kvParts) + "}";
-                        }
-                    }
+                //foreach (var p in pipelineToUse)
+                //{
+                //    string paramStr;
+                //    if (p.parameters == null || p.parameters.Count == 0)
+                //    {
+                //        paramStr = "{}";
+                //    }
+                //    else
+                //    {
+                //        try
+                //        {
+                //            // Try to serialize the dictionary to JSON for the most readable output.
+                //            // Use limited depth/size by default options; if something isn't serializable we'll hit catch.
+                //            paramStr = JsonSerializer.Serialize(p.parameters, new JsonSerializerOptions
+                //            {
+                //                WriteIndented = false,
+                //                // ignore cycles / non-serializable members will throw
+                //            });
+                //        }
+                //        catch
+                //        {
+                //            // Fallback: print each key=value using safe formatter
+                //            var kvParts = p.parameters.Select(kv => $"{kv.Key}={FormatParamValue(kv.Value)}");
+                //            paramStr = "{" + string.Join(", ", kvParts) + "}";
+                //        }
+                //    }
 
-                    Debug.WriteLine($"Pipeline step: {p.command} params: {paramStr}");
-                }
+                //    Debug.WriteLine($"Pipeline step: {p.command} params: {paramStr}");
+                //}
+
+                string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
+                Debug.WriteLine("Pipeline JSON for save:");
+                Debug.WriteLine(pipeLineForSave);
+                return;
             }
+
 
 
             var workerPool = new ImgWorkerPool(_cts, pipelineToUse, 0, sourceFolder, 0);
@@ -143,6 +151,30 @@ namespace ImgViewer.Models
 
             }
             _mainViewModel.Status = $"Standby";
+        }
+
+        public string BuildPipelineForSave((ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
+        {
+            if (pipeline == null) return "[]";
+
+            // Проектируем каждый шаг в объект с параметрами string->string
+            var items = pipeline.Select(step => new
+            {
+                command = step.command.ToString(), // или (int)step.command если хочешь числовой код
+                parameters = (step.parameters == null || step.parameters.Count == 0)
+                    ? new Dictionary<string, string>()
+                    : step.parameters.ToDictionary(
+                        kv => kv.Key,
+                        kv => FormatParamValue(kv.Value) ?? "null"  // FormatParamValue уже у тебя есть
+                    )
+            }).ToList();
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true
+            };
+
+            return JsonSerializer.Serialize(items, options);
         }
 
         public void Dispose()

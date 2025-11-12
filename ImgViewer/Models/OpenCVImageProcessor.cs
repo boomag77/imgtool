@@ -517,7 +517,7 @@ namespace ImgViewer.Models
         }
 
 
-        public void ApplyCommandToCurrent(ProcessorCommands command, Dictionary<string, object> parameters = null)
+        public void ApplyCommandToCurrent(ProcessorCommand command, Dictionary<string, object> parameters = null)
         {
 
             if (_currentImage != null)
@@ -526,7 +526,7 @@ namespace ImgViewer.Models
 
                 switch (command)
                 {
-                    case ProcessorCommands.Binarize:
+                    case ProcessorCommand.Binarize:
 
                         int treshold = 128;
                         int blockSize = 3;
@@ -610,7 +610,7 @@ namespace ImgViewer.Models
 
                         }
                         break;
-                    case ProcessorCommands.Deskew:
+                    case ProcessorCommand.Deskew:
                         //Deskewer.Parameters p = new Deskewer.Parameters();
                         foreach (var kv in parameters)
                         {
@@ -621,7 +621,7 @@ namespace ImgViewer.Models
                         NewDeskew(parameters);
                         //Deskew();
                         break;
-                    case ProcessorCommands.BorderRemove:
+                    case ProcessorCommand.BordersRemove:
                         {
                             //BordersDeskew();
                             //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
@@ -749,17 +749,17 @@ namespace ImgViewer.Models
                         //var thr = EstimateBlackThreshold(_currentImage);
                         //RemoveBorderArtifactsGeneric_Safe(_currentImage, 255);
                         break;
-                    case ProcessorCommands.Despeckle:
+                    case ProcessorCommand.Despeckle:
                         //applyDespeckleCurrent();
                         break;
-                    case ProcessorCommands.AutoCropRectangle:
+                    case ProcessorCommand.AutoCropRectangle:
                         AutoCrop();
                         //applyAutoCropRectangleCurrent();
                         break;
-                    case ProcessorCommands.LineRemove:
+                    case ProcessorCommand.LineRemove:
                         //ApplyLinesRemoveCurrent();
                         break;
-                    case ProcessorCommands.DotsRemove:
+                    case ProcessorCommand.DotsRemove:
                         //RemoveSpecksWithHandler();
                         break;
 

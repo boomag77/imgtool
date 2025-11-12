@@ -1,6 +1,7 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using System;
+using System.CodeDom;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -13,6 +14,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -308,7 +310,12 @@ namespace ImgViewer.Views
         //    }
         //}
 
-        private void InitializePipeLineOperations()
+        private Pipeline ParsePiplineFromJSON(string jsonString)
+        {
+            return new Pipeline();
+        }
+
+        private void InitializePipeLineOperations(Pipeline pipeline = null)
         {
             _pipeLineOperations.Clear();
 
@@ -324,10 +331,10 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
                     new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1)
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Deskew, operation.CreateParameterDictionary()));
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Deskew, operation.CreateParameterDictionary()));
 
 
-            op1.Command = ProcessorCommands.Deskew;
+            op1.Command = ProcessorCommand.Deskew;
             _pipeLineOperations.Add(op1);
 
             var op2 = new PipeLineOperation(
@@ -354,8 +361,8 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 20, 1),
 
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.BorderRemove, operation.CreateParameterDictionary()));
-            op2.Command = ProcessorCommands.BorderRemove;
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));
+            op2.Command = ProcessorCommand.BordersRemove;
             _pipeLineOperations.Add(op2);
 
             //var op3 = new PipeLineOperation(
@@ -390,8 +397,8 @@ namespace ImgViewer.Views
                     new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
 
                 },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.Binarize, operation.CreateParameterDictionary()));
-            op4.Command = ProcessorCommands.Binarize;
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
+            op4.Command = ProcessorCommand.Binarize;
             _pipeLineOperations.Add(op4);
 
 
@@ -571,6 +578,8 @@ namespace ImgViewer.Views
             }
         }
 
+
+
         private void PipelineListBox_GiveFeedback(object sender, GiveFeedbackEventArgs e)
         {
             if (_draggedItemAdorner != null)
@@ -695,12 +704,12 @@ namespace ImgViewer.Views
             return bitmap;
         }
 
-        private void ExecuteManagerCommand(ProcessorCommands command, Dictionary<string, object> parameters)
+        private void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
         {
             _manager?.ApplyCommandToProcessingImage(command, parameters);
         }
 
-        private void ExecuteProcessorCommand(ProcessorCommands command, Dictionary<string, object> parameters)
+        private void ExecuteProcessorCommand(ProcessorCommand command, Dictionary<string, object> parameters)
         {
             _processor?.ApplyCommandToCurrent(command, parameters);
         }
@@ -784,6 +793,86 @@ namespace ImgViewer.Views
             }
         }
 
+        private void LoadPipelinePreset_Click(object sender, RoutedEventArgs e)
+        {
+            var res = System.Windows.MessageBox.Show($"WARNING! All unsaved parameters will be lost! Are you sure?",
+                                                         "Confirm",
+                                                         MessageBoxButton.OKCancel,
+                                                         MessageBoxImage.Warning);
+            if (res == MessageBoxResult.Cancel) return;
+            LoadPipelineFromFile();
+        }
+
+        private void LoadPipelineFromFile()
+        {
+            //TODO async
+            Debug.WriteLine("Pipeline loaded from file");
+        }
+
+        private void SavePipelinePreset_Click(object sender, RoutedEventArgs e)
+        {
+
+            var pipeline = GetPipelineParameters();
+            if (pipeline.Length == 0)
+            {
+                System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var dlg = new Microsoft.Win32.SaveFileDialog();
+            dlg.InitialDirectory = _lastOpenedFolder;
+            dlg.Filter = "*.igpreset|*.*";
+
+            if (dlg.ShowDialog() == true)
+            {
+                var path = dlg.FileName + ".igpreset";
+                var json = _manager.BuildPipelineForSave(pipeline);
+                SavePipelineToJSON(path, json);
+                _lastOpenedFolder = System.IO.Path.GetDirectoryName(path);
+            }
+            
+            
+        }
+
+        private void SavePipelineToJSON(string path, string json)
+        {
+            // TODO async
+
+            var folder = System.IO.Path.GetDirectoryName(path);
+            string pipeLineForSave = json;
+            string fileName = System.IO.Path.GetFileName(path);
+            try
+            {
+                File.WriteAllText(System.IO.Path.Combine(folder, fileName), pipeLineForSave);
+                #if DEBUG
+                Debug.WriteLine("Pipeline saved to " + fileName);
+                #endif
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(ex.Message, "Error!", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            
+        }
+
+        private void ResetPipelineToDefaults_Click(object sender, RoutedEventArgs e)
+        {
+            //TODO
+            var res = System.Windows.MessageBox.Show($"WARNING! All parameters will be set to the default values! Are you sure?",
+                                                         "Confirm",
+                                                         MessageBoxButton.OKCancel,
+                                                         MessageBoxImage.Warning);
+            if (res == MessageBoxResult.Cancel) return;
+
+            ResetPipelineToDefaults();
+        }
+
+        private void ResetPipelineToDefaults()
+        {
+            //TODO
+            Debug.WriteLine("Pipeline has been reset.");
+        }
+
         private async void OpenNextFile_Click(object sender, RoutedEventArgs e)
         {
             await OpenSiblingFileAsync(true);
@@ -842,39 +931,39 @@ namespace ImgViewer.Views
 
         private void ApplyDeskew(object sender, RoutedEventArgs e)
         {
-            ExecuteManagerCommand(ProcessorCommands.Deskew, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.Deskew, GetParametersFromSender(sender));
         }
 
         private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.AutoCropRectangle, GetParametersFromSender(sender));
         }
 
         private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteProcessorCommand(ProcessorCommands.Despeckle, GetParametersFromSender(sender));
+            ExecuteProcessorCommand(ProcessorCommand.Despeckle, GetParametersFromSender(sender));
         }
 
 
         private void ApplyBorderRemoveCommand_Click(object sender, RoutedEventArgs e)
         {
 
-            ExecuteManagerCommand(ProcessorCommands.BorderRemove, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.BordersRemove, GetParametersFromSender(sender));
         }
 
         private void ApplyAutoBinarizeCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteManagerCommand(ProcessorCommands.Binarize, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.Binarize, GetParametersFromSender(sender));
         }
 
         private void ApplyLineRemoveCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteProcessorCommand(ProcessorCommands.LineRemove, GetParametersFromSender(sender));
+            ExecuteProcessorCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
         }
 
         private void ApplyPunchesRemoveCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteProcessorCommand(ProcessorCommands.DotsRemove, GetParametersFromSender(sender));
+            ExecuteProcessorCommand(ProcessorCommand.DotsRemove, GetParametersFromSender(sender));
         }
 
 
@@ -885,9 +974,9 @@ namespace ImgViewer.Views
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 string folderPath = dlg.SelectedPath;
-                ProcessorCommands[] commands =
+                ProcessorCommand[] commands =
                 {
-                    ProcessorCommands.Binarize,
+                    ProcessorCommand.Binarize,
                 };
                 var token = _cts.Token;
                 var fileExplorer = new FileProcessor(token);
@@ -915,11 +1004,21 @@ namespace ImgViewer.Views
             //MyProgressBar.Value = 0;
         }
 
+        private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
+            {
+            var pipeline = PipeLineOperations
+                    .Where(op => op.InPipeline && op.Command.HasValue)
+                    .Select(op => (op.Command.Value, op.CreateParameterDictionary()))
+                    .ToArray();
+
+            return pipeline;
+        }
+
         private void ApplyCurrentPipelineToCurrentFolder_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // попытка взять папку из LastOpenedFolder, иначе - из пути текущего файла
+                // попытка взять папку  из пути текущего файла
                 //string? folder = _viewModel?.LastOpenedFolder;
                 string folder = string.Empty;
                 if (string.IsNullOrWhiteSpace(folder) && !string.IsNullOrWhiteSpace(_viewModel?.CurrentImagePath))
@@ -933,6 +1032,14 @@ namespace ImgViewer.Views
                                                    "Info",
                                                    MessageBoxButton.OK,
                                                    MessageBoxImage.Information);
+                    return;
+                }
+
+                var pipeline =GetPipelineParameters();
+
+                if (pipeline.Length == 0)
+                {
+                    System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
@@ -956,10 +1063,8 @@ namespace ImgViewer.Views
                 //    return;
                 //}
 
-                var pipeline = PipeLineOperations
-                    .Where(op => op.InPipeline && op.Command.HasValue)
-                    .Select(op => (op.Command.Value, op.CreateParameterDictionary()))
-                    .ToArray();
+                
+
 
                 // вызываем менеджер, передавая команды
                 _manager.ProcessFolder(folder, pipeline);
@@ -1187,7 +1292,7 @@ namespace ImgViewer.Views
 
         public event Action<PipeLineOperation, PipeLineParameter?>? ParameterChanged;
 
-        public ProcessorCommands? Command { get; set; }
+        public ProcessorCommand? Command { get; set; }
 
         private bool _inPipeline = false;
         private bool _live = false;

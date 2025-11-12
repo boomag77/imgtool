@@ -15,7 +15,7 @@ namespace ImgViewer.Interfaces
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
-        void ApplyCommandToCurrent(ProcessorCommands commandName, Dictionary<string, object> parameters);
+        void ApplyCommandToCurrent(ProcessorCommand commandName, Dictionary<string, object> parameters);
 
         event Action<Stream> ImageUpdated;
         event Action<string> ErrorOccured;
@@ -43,11 +43,11 @@ namespace ImgViewer.Interfaces
     }
 
 
-    public enum ProcessorCommands
+    public enum ProcessorCommand
     {
         Deskew,
         Binarize,
-        BorderRemove,
+        BordersRemove,
         Despeckle,
         AutoCropRectangle,
         LineRemove,
