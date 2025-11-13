@@ -92,9 +92,10 @@ namespace ImgViewer.Views
         {
             InitializeComponent();
 
-            _manager = new AppManager(this);
-            DataContext = _viewModel;
             _cts = new CancellationTokenSource();
+
+            _manager = new AppManager(this, _cts);
+            DataContext = _viewModel;
 
             //ImgListBox.ItemsSource = Files;
 
@@ -277,6 +278,12 @@ namespace ImgViewer.Views
             }
         }
 
+        private void StopProcessing_Click(object sender, RoutedEventArgs e)
+        {
+            _manager.StopProcessingFolder();
+            Debug.WriteLine("Stopping");
+        }
+
 
         //private async void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
         //{
@@ -402,9 +409,11 @@ namespace ImgViewer.Views
 
             _pipeLineOperations.Clear();
 
+            string buttonText = "Preview";
+
             var op1 = new PipeLineOperation(
                 "Deskew",
-                "Preview",
+                buttonText,
                 new[]
                 {
                     new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] {"Auto", "ByBorders", "Hough", "Projection", "PCA" }, 0),
@@ -422,7 +431,7 @@ namespace ImgViewer.Views
 
             var op2 = new PipeLineOperation(
                 "Border Removal",
-                "Preview",
+                buttonText,
                 new[]
                 {
                     new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast"}, 0),
@@ -450,7 +459,7 @@ namespace ImgViewer.Views
 
             //var op3 = new PipeLineOperation(
             //    "Auto Crop",
-            //    "Run",
+            //    buttonText,
             //    new[]
             //    {
             //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
@@ -461,7 +470,7 @@ namespace ImgViewer.Views
 
             var op4 = new PipeLineOperation(
                 "Binarize",
-                "Run",
+                buttonText,
                 new[]
                 {
                     new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Treshold", "Sauvola", "Adaptive"}, 0),
@@ -484,15 +493,6 @@ namespace ImgViewer.Views
             op4.Command = ProcessorCommand.Binarize;
             _pipeLineOperations.Add(op4);
 
-
-            //_pipeLineOperations.Add(new PipeLineOperation(
-            //    "Batch Processing",
-            //    "Process Folder",
-            //    new[]
-            //    {
-            //        new PipeLineParameter("Parallel", "Parallelism", 1, 1, Environment.ProcessorCount, 1)
-            //    },
-            //    (window, operation) => window.ProcessFolderClick(window, new RoutedEventArgs())));
         }
 
         private void InitializePipeLineOperations(List<Operation> ops = null)
@@ -1904,6 +1904,7 @@ namespace ImgViewer.Views
                 }
             }
         }
+
 
         private void MorphFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {

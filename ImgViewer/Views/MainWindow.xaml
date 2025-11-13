@@ -733,7 +733,13 @@
                                     Width="Auto"
                                     Click="OpenNextFile_Click">
                                     selected folder
-                            </Button>     
+                            </Button>
+                            <Button Style="{StaticResource ElevatedRoundedButton}"
+                                    Margin="5,5,5,5"
+                                    Width="Auto"
+                                    Click="StopProcessing_Click">
+                               Stop processing
+                            </Button>
 
                         </StackPanel>
                     </StackPanel>

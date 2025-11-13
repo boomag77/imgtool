@@ -1,14 +1,19 @@
 ﻿using ImgViewer.Interfaces;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
 
 namespace ImgViewer.Models
 {
-    internal class ImgWorkerPool
+    internal class ImgWorkerPool : IDisposable
     {
+        private bool _disposed;
+
         private readonly BlockingCollection<string> _filesQueue;
         private readonly CancellationTokenSource _cts;
+        private readonly CancellationToken _token;
+        private CancellationTokenRegistration _tokenRegistration;
         private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
         private readonly int _workersCount;
@@ -30,6 +35,7 @@ namespace ImgViewer.Models
                              int maxFilesQueue = 0)
         {
             _cts = cts;
+            _token = _cts.Token;
             _sourceFolder = sourceFolder;
 
             _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
@@ -42,119 +48,111 @@ namespace ImgViewer.Models
             _filesQueue = new BlockingCollection<string>(
                 maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
             );
+            _tokenRegistration = _token.Register(() =>
+            {
+                try { _filesQueue.CompleteAdding(); } catch { }
+            });
             _processedCount = 0;
             _totalCount = sourceFolder.Files.Length;
         }
 
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
 
-        //public ImgWorkerPool(CancellationTokenSource cts,
-        //                     ProcessorCommands[] commandsQueue,
-        //                     int maxWorkersCount,
-        //                     SourceImageFolder sourceFolder,
-        //                     int maxFilesQueue = 0)
-        //{
-        //    _cts = cts;
-        //    _sourceFolder = sourceFolder;
-
-        //    _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
-        //    Directory.CreateDirectory(_outputFolder);
-        //    _commandsQueue = commandsQueue;
-
-        //    int cpuCount = Environment.ProcessorCount;
-        //    _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
-
-        //    _filesQueue = new BlockingCollection<string>(
-        //        maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
-        //    );
-        //    _processedCount = 0;
-        //    _totalCount = sourceFolder.Files.Length;
-        //}
+            try { _tokenRegistration.Dispose(); } catch { }
+            try { _filesQueue?.Dispose(); } catch { }
+        }
 
         private async Task EnqueueFiles()
         {
-            foreach (var file in _sourceFolder.Files)
+            try
             {
-                if (_cts.IsCancellationRequested)
-                    break;
+                foreach (var file in _sourceFolder.Files)
+                {
+                    _token.ThrowIfCancellationRequested();
 
-                _filesQueue.Add(file);
-                await Task.Yield();
+                    _filesQueue.Add(file, _token);
+                    await Task.Yield();
+                }
             }
-
-            _filesQueue.CompleteAdding();
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("EnqueueFiles cancelled by token");
+            }
+            finally
+            {
+                try { _filesQueue.CompleteAdding(); } catch { }
+            }
 
         }
 
         private void Worker()
         {
-            using var imgProc = new OpenCVImageProcessor(null, _cts.Token);
-            using var fileProc = new FileProcessor(_cts.Token);
+            var token = _token;
+
+            using var imgProc = new OpenCVImageProcessor(null, token);
+            using var fileProc = new FileProcessor(token);
             try
             {
-                foreach (var filePath in _filesQueue.GetConsumingEnumerable(_cts.Token))
+                foreach (var filePath in _filesQueue.GetConsumingEnumerable(token))
                 {
-                    try
+                    token.ThrowIfCancellationRequested();
+
+                    var loaded = fileProc.Load<ImageSource>(filePath);
+                    imgProc.CurrentImage = loaded.Item1;
+                    //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
+
+                    foreach (var op in _pipelineTemplate)
                     {
-                        if (_cts.IsCancellationRequested)
-                            break;
-
-
-                        var loaded = fileProc.Load<ImageSource>(filePath);
-                        imgProc.CurrentImage = loaded.Item1;
-                        //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
-
-                        foreach (var op in _pipelineTemplate)
+                        token.ThrowIfCancellationRequested();
+                        try
                         {
-                            try
-                            {
-                                imgProc.ApplyCommandToCurrent(op.command, op.parameters ?? new Dictionary<string, object>());
-                            }
-                            catch (Exception exOp)
-                            {
-                                ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
-                            }
+                            imgProc.ApplyCommandToCurrent(op.command, op.parameters ?? new Dictionary<string, object>());
                         }
-
-
-                        // Применяем команды
-                        //foreach (var command in _commandsQueue)
-                        //{
-
-                        //    imgProc.ApplyCommandToCurrent(command, new Dictionary<string, object>());
-                        //}
-
-
-                        var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
-                        var outputFilePath = Path.Combine(_outputFolder, fileName);
-                        //proc.SaveCurrentImage(outputFilePath);
-                        using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
+                        catch (OperationCanceledException)
                         {
-                            using (var ms = new MemoryStream())
-                            {
-                                if (outStream.CanSeek) outStream.Position = 0;
-                                outStream.CopyTo(ms);
-                                ms.Position = 0;
-                                fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true);
-                            }
+                            throw;
                         }
-
-
-
-                        Interlocked.Increment(ref _processedCount);
-                        ProgressChanged?.Invoke(_processedCount, _totalCount);
-
-
+                        catch (Exception exOp)
+                        {
+                            ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
+                        }
                     }
-                    catch (Exception ex)
+
+                    token.ThrowIfCancellationRequested();
+
+
+                    //TODO make saving worker(s) and dissfetent queue for the saving
+
+                    var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
+                    var outputFilePath = Path.Combine(_outputFolder, fileName);
+                    //proc.SaveCurrentImage(outputFilePath);
+                    using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
                     {
-                        ErrorOccured?.Invoke($"Error processing (Worker) {filePath}: {ex.Message}");
+                        using (var ms = new MemoryStream())
+                        {
+                            if (outStream.CanSeek) outStream.Position = 0;
+                            outStream.CopyTo(ms);
+                            ms.Position = 0;
+                            fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true);
+                        }
                     }
+
+
+
+                    Interlocked.Increment(ref _processedCount);
+                    ProgressChanged?.Invoke(_processedCount, _totalCount);
 
                 }
             }
             catch (OperationCanceledException)
             {
-                //Debug.WriteLine("Worker cancelled");
+
+                Debug.WriteLine("Worker cancelled!");
+                return;
+
             }
             catch (Exception ex)
             {
@@ -166,17 +164,35 @@ namespace ImgViewer.Models
         public async Task RunAsync()
         {
             var tasks = new List<Task>();
-
-            for (int i = 0; i < _workersCount; i++)
+            try
             {
+                for (int i = 0; i < _workersCount; i++)
+                {
+                    if (_cts.IsCancellationRequested) throw new OperationCanceledException();
+                    tasks.Add(Task.Run(() => Worker(), _token));
+                }
 
-                tasks.Add(Task.Run(() => Worker(), _cts.Token));
+                // in parallel enqueing que
+                var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
+                tasks.Add(enqueueTask);
+                await Task.WhenAll(tasks);
             }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("Enqueing cancelled!");
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Error in Enqueing (Worker Pool): {ex.Message}");
+            }
+            finally
+            {
+                try { _tokenRegistration.Dispose(); } catch { }
+                try { _filesQueue.Dispose(); } catch { }
 
-            // Параллельно наполняем очередь
-            var enqueueTask = Task.Run(() => EnqueueFiles(), _cts.Token);
-            tasks.Add(enqueueTask);
-            await Task.WhenAll(tasks);
+            }
+            
+
 
         }
     }

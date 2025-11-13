@@ -14,10 +14,11 @@ namespace ImgViewer.Models
         private readonly IImageProcessor _imageProcessor;
 
         private readonly CancellationTokenSource _cts;
+        private CancellationTokenSource? _poolCts;
 
-        public AppManager(IMainView mainView)
+        public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
-            _cts = new CancellationTokenSource();
+            _cts = cts;
             _mainViewModel = new MainViewModel();
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
@@ -84,11 +85,11 @@ namespace ImgViewer.Models
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
         }
 
-        public async void ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline = null)
+        public async Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline = null)
         {
-            bool debug = true;
+            bool debug = false;
 
-            _mainViewModel.Status = $"Processing folder...";
+            _mainViewModel.Status = $"Processing folder " + srcFolder;
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
             var pipelineToUse = pipeline ?? new (ProcessorCommand, Dictionary<string, object>)[]
                {
@@ -99,39 +100,6 @@ namespace ImgViewer.Models
                };
             if (debug)
             {
-                Debug.WriteLine("!!!!! ------ WARNING! DEBUG IS ON IN FOLDER PROCESSING ----- !!!!!");
-                Debug.WriteLine("------- PIPELINE PARAMS------");
-                // дебаг вывод
-                //foreach (var p in pipelineToUse)
-                //{
-                //    string paramStr;
-                //    if (p.parameters == null || p.parameters.Count == 0)
-                //    {
-                //        paramStr = "{}";
-                //    }
-                //    else
-                //    {
-                //        try
-                //        {
-                //            // Try to serialize the dictionary to JSON for the most readable output.
-                //            // Use limited depth/size by default options; if something isn't serializable we'll hit catch.
-                //            paramStr = JsonSerializer.Serialize(p.parameters, new JsonSerializerOptions
-                //            {
-                //                WriteIndented = false,
-                //                // ignore cycles / non-serializable members will throw
-                //            });
-                //        }
-                //        catch
-                //        {
-                //            // Fallback: print each key=value using safe formatter
-                //            var kvParts = p.parameters.Select(kv => $"{kv.Key}={FormatParamValue(kv.Value)}");
-                //            paramStr = "{" + string.Join(", ", kvParts) + "}";
-                //        }
-                //    }
-
-                //    Debug.WriteLine($"Pipeline step: {p.command} params: {paramStr}");
-                //}
-
                 string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
                 Debug.WriteLine("Pipeline JSON for save:");
                 Debug.WriteLine(pipeLineForSave);
@@ -139,18 +107,48 @@ namespace ImgViewer.Models
             }
 
 
+            if (_poolCts != null)
+            {
+                try { _poolCts.Cancel(); } catch { }
+                try { _poolCts.Dispose(); } catch { }
+                _poolCts = null;
+            }
+            _poolCts = new CancellationTokenSource();
 
-            var workerPool = new ImgWorkerPool(_cts, pipelineToUse, 0, sourceFolder, 0);
             try
             {
-                await workerPool.RunAsync();
-            }
-            catch (OperationCanceledException)
-            {
-                //StatusText.Text = "Cancelled";
+                using (var workerPool = new ImgWorkerPool(_poolCts, pipelineToUse, 0, sourceFolder, 0))
+                {
+                    try
+                    {
+                        await workerPool.RunAsync().ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) { }
+                    catch (Exception ex)
+                    {
+                        
+                    }
 
+                }
             }
-            _mainViewModel.Status = $"Standby";
+            finally
+            {
+                _mainViewModel.Status = $"Standby";
+            }
+        }
+
+        public void StopProcessingFolder()
+        {
+            if (_poolCts == null) return;
+            try
+            {
+                _poolCts.Cancel();
+            }
+            finally
+            {
+                _poolCts.Dispose();
+                _poolCts = null;
+            }
         }
 
         public string BuildPipelineForSave((ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
