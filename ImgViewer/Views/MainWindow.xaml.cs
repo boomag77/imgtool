@@ -118,8 +118,6 @@ namespace ImgViewer.Views
         private void UpdatePipeline(List<Operation> ops)
         {
             InitializePipeLineOperations(ops);
-            //SubscribeParameterChangedHandlers();
-            //HookLiveHandlers();
         }
 
         private void HookLiveHandlers()
@@ -235,6 +233,7 @@ namespace ImgViewer.Views
                 try
                 {
                     Dispatcher.Invoke(() => ResetPreview());
+
                 }
                 catch (Exception ex)
                 {
@@ -280,7 +279,7 @@ namespace ImgViewer.Views
 
         private void StopProcessing_Click(object sender, RoutedEventArgs e)
         {
-            _manager.StopProcessingFolder();
+            _manager.CancelBatchProcessing();
             Debug.WriteLine("Stopping");
         }
 
@@ -1257,41 +1256,41 @@ namespace ImgViewer.Views
 
 
 
-        private void ProcessFolderClick(object sender, RoutedEventArgs e)
-        {
-            var dlg = new System.Windows.Forms.FolderBrowserDialog();
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            {
-                string folderPath = dlg.SelectedPath;
-                ProcessorCommand[] commands =
-                {
-                    ProcessorCommand.Binarize,
-                };
-                var token = _cts.Token;
-                var fileExplorer = new FileProcessor(token);
-                var imgProcessor = new OpenCVImageProcessor(_manager, token);
-                var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
+        //private void ProcessFolderClick(object sender, RoutedEventArgs e)
+        //{
+        //    var dlg = new System.Windows.Forms.FolderBrowserDialog();
+        //    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        //    {
+        //        string folderPath = dlg.SelectedPath;
+        //        ProcessorCommand[] commands =
+        //        {
+        //            ProcessorCommand.Binarize,
+        //        };
+        //        var token = _cts.Token;
+        //        var fileExplorer = new FileProcessor(token);
+        //        var imgProcessor = new OpenCVImageProcessor(_manager, token);
+        //        var sourceFolder = fileExplorer.GetImageFilesPaths(folderPath);
 
-                var cmds = PipeLineOperations
-                            .Where(op => op.InPipeline && op.Command.HasValue)
-                            .Select(op => op.Command.Value)
-                            .ToArray();
+        //        var cmds = PipeLineOperations
+        //                    .Where(op => op.InPipeline && op.Command.HasValue)
+        //                    .Select(op => op.Command.Value)
+        //                    .ToArray();
 
-                if (cmds.Length == 0)
-                {
-                    System.Windows.MessageBox.Show("Pipeline is empty — enable operations before running.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
+        //        if (cmds.Length == 0)
+        //        {
+        //            System.Windows.MessageBox.Show("Pipeline is empty — enable operations before running.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        //            return;
+        //        }
 
-                // вызываем менеджер, передавая команды
-                //_manager.ProcessFolder(folderPath, cmds);
+        //        // вызываем менеджер, передавая команды
+        //        //_manager.ProcessFolder(folderPath, cmds);
 
-                //_manager.ProcessFolder(folderPath);
+        //        //_manager.ProcessFolder(folderPath);
 
-            }
-            //StatusText.Text = "Ready";
-            //MyProgressBar.Value = 0;
-        }
+        //    }
+        //    //StatusText.Text = "Ready";
+        //    //MyProgressBar.Value = 0;
+        //}
 
         private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
             {
@@ -1303,12 +1302,60 @@ namespace ImgViewer.Views
             return pipeline;
         }
 
+        private void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var pipeline = GetPipelineParameters();
+            if (pipeline == null) return;
+            if (pipeline.Length == 0)
+            {
+                System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string rootFolder = string.Empty;
+            var dlg = new System.Windows.Forms.FolderBrowserDialog();
+            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                rootFolder = dlg.SelectedPath;
+            }
+            if (rootFolder == string.Empty) return;
+
+            // опционально: спросить подтверждение у пользователя
+            var res = System.Windows.MessageBox.Show($"Apply current pipeline to all sub-folders in:\n{rootFolder} ?",
+                                                     "Confirm",
+                                                     MessageBoxButton.OKCancel,
+                                                     MessageBoxImage.Question);
+            if (res != MessageBoxResult.OK) return;
+            try
+            {
+                _manager.ProcessRootFolder(rootFolder, pipeline);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Failed to process Root folder {rootFolder}: {ex.Message}",
+                                               "Error",
+                                               MessageBoxButton.OK,
+                                               MessageBoxImage.Error);
+            }
+
+        }
+
         private void ApplyCurrentPipelineToCurrentFolder_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 // попытка взять папку  из пути текущего файла
                 //string? folder = _viewModel?.LastOpenedFolder;
+                
+
+                var pipeline = GetPipelineParameters();
+
+                if (pipeline.Length == 0)
+                {
+                    System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 string folder = string.Empty;
                 if (string.IsNullOrWhiteSpace(folder) && !string.IsNullOrWhiteSpace(_viewModel?.CurrentImagePath))
                 {
@@ -1321,14 +1368,6 @@ namespace ImgViewer.Views
                                                    "Info",
                                                    MessageBoxButton.OK,
                                                    MessageBoxImage.Information);
-                    return;
-                }
-
-                var pipeline =GetPipelineParameters();
-
-                if (pipeline.Length == 0)
-                {
-                    System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 

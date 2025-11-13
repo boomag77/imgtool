@@ -119,7 +119,7 @@ namespace ImgViewer.Models
                                 uint width = image.Width;
                                 uint height = image.Height;
                                 uint bytesPerPixel = image.ChannelCount; // 3 for RGB, 4 for RGBA
-                                uint stride = width * bytesPerPixel;
+                               uint stride = width * bytesPerPixel;
 
                                 PixelMapping pixelMapping = bytesPerPixel == 4 ? PixelMapping.BGRA : PixelMapping.BGR;
                                 using (var pixels = image.GetPixels())
@@ -247,6 +247,25 @@ namespace ImgViewer.Models
         public byte[] LoadImageBytes(string path)
         {
             return File.ReadAllBytes(path);
+        }
+
+        public SourceImageFolder[]? GetSubFoldersWithImagesPaths(string rootFolderPath)
+        {
+            if (_token.IsCancellationRequested) return null;
+            if (!Directory.Exists(rootFolderPath))
+            {
+                ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
+                return null;
+            }
+            var subFolders = new List<SourceImageFolder>();
+            IEnumerable<string> subFolderPath = Directory.EnumerateDirectories(rootFolderPath);
+            foreach (string subFolder in subFolderPath)
+            {
+                var sub = GetImageFilesPaths(subFolder);
+                if (sub == null || sub.Files.Length == 0) continue;
+                subFolders.Add(sub);
+            }
+            return subFolders.ToArray();
         }
 
         public SourceImageFolder? GetImageFilesPaths(string folderPath)

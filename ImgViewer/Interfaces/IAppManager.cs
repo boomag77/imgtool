@@ -12,9 +12,11 @@ namespace ImgViewer.Interfaces
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression);
         public Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline);
 
+        public Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline);
+
         public string BuildPipelineForSave((ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline);
 
-        public void StopProcessingFolder();
+        public void CancelBatchProcessing();
 
         public void Shutdown();
     }

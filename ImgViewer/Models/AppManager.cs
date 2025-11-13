@@ -15,6 +15,7 @@ namespace ImgViewer.Models
 
         private readonly CancellationTokenSource _cts;
         private CancellationTokenSource? _poolCts;
+        private CancellationTokenSource? _rootFolderCts;
 
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
@@ -85,19 +86,58 @@ namespace ImgViewer.Models
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
         }
 
-        public async Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline = null)
+        public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
+        {
+            if (pipeline == null) return;
+            _mainViewModel.Status = $"Processing folders in " + rootFolder;
+
+            
+            var sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths(rootFolder);
+            if (sourceFolders == null || sourceFolders.Length == 0) return;
+
+            if (_rootFolderCts != null)
+            {
+                try { _rootFolderCts.Cancel(); } catch { }
+                try { _rootFolderCts.Dispose(); } catch { }
+                _rootFolderCts = null;
+            }
+            _rootFolderCts = new CancellationTokenSource();
+            try
+            {
+                foreach (var sourceFolder in sourceFolders)
+                {
+                    _rootFolderCts.Token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        await ProcessFolder(sourceFolder.Path, pipeline);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Debug.WriteLine("Processing Root Folder was canceled.");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error while processing sub-Folder in root Folder {rootFolder}: {ex.Message}");
+                    }
+                }
+            }
+            finally
+            {
+                _mainViewModel.Status = "Standby";
+                try { _rootFolderCts?.Dispose(); } catch { }
+                _rootFolderCts = null;
+            }
+        }
+
+        public async Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
         {
             bool debug = false;
+            if (pipeline == null) return;
 
             _mainViewModel.Status = $"Processing folder " + srcFolder;
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
-            var pipelineToUse = pipeline ?? new (ProcessorCommand, Dictionary<string, object>)[]
-               {
-                    (ProcessorCommand.Deskew, new Dictionary<string, object>()),
-                    (ProcessorCommand.BordersRemove, new Dictionary<string, object>()),
-                    //(ProcessorCommands.AutoCropRectangle, new Dictionary<string, object>()),
-                    (ProcessorCommand.Binarize, new Dictionary<string, object>()),
-               };
+            var pipelineToUse = pipeline;
             if (debug)
             {
                 string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
@@ -124,9 +164,9 @@ namespace ImgViewer.Models
                         await workerPool.RunAsync().ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) { }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        
+                        // TODO Error handling
                     }
 
                 }
@@ -134,20 +174,33 @@ namespace ImgViewer.Models
             finally
             {
                 _mainViewModel.Status = $"Standby";
+                try
+                {
+                    _poolCts?.Dispose();
+                }
+                catch { }
+                _poolCts = null;
             }
         }
 
-        public void StopProcessingFolder()
+        public void CancelBatchProcessing()
         {
-            if (_poolCts == null) return;
             try
             {
-                _poolCts.Cancel();
+                _rootFolderCts?.Cancel();
             }
-            finally
+            catch (Exception e)
             {
-                _poolCts.Dispose();
-                _poolCts = null;
+
+            }
+
+            try
+            {
+                _poolCts?.Cancel();
+            }
+            catch (Exception e)
+            {
+
             }
         }
 
