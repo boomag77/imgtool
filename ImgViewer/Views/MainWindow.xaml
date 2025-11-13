@@ -7,7 +7,7 @@
         xmlns:views="clr-namespace:ImgViewer.Views"
         xmlns:conv="clr-namespace:ImgViewer.Converters"
         mc:Ignorable="d"
-        Title="Image Genie" Height="600" Width="800"
+        Title="Image Genie" Width="1024" Height="768"
         Background="LightGray">
     <Window.Resources>
 
@@ -116,6 +116,7 @@
             <Setter Property="Background" Value="#2F3136"/>
             <Setter Property="BorderBrush" Value="#2F3136"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Opacity" Value="20"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="MinWidth" Value="120"/>
             <Setter Property="Template">
@@ -156,6 +157,7 @@
             <Setter Property="Background" Value="#2F3136"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Opacity" Value="20"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -408,7 +410,15 @@
                 <Separator/>
                 <MenuItem Header="_Save Image As..." Click="SaveAs_Click"/>
                 <Separator/>
+                <MenuItem Header="_Saving options" Click="SaveAs_Click"/>
+                <Separator/>
                 <MenuItem Header="_Exit" Click="ExitClick"/>
+            </MenuItem>
+            <MenuItem Header="_Settings">
+                
+            </MenuItem>
+            <MenuItem Header="Help">
+                
             </MenuItem>
         </Menu>
         

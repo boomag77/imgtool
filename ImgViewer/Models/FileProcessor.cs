@@ -1,5 +1,6 @@
 ﻿using ImageMagick;
 using ImgViewer.Interfaces;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -302,6 +303,56 @@ namespace ImgViewer.Models
 
             return sourceFolder;
         }
+
+        public SourceImageFolder[] GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath)
+        {
+            if (string.IsNullOrWhiteSpace(rootFolderPath) || !Directory.Exists(rootFolderPath))
+            {
+                ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
+                return Array.Empty<SourceImageFolder>();
+            }
+
+            var result = new List<SourceImageFolder>();
+            var stack = new Stack<string>();
+            try
+            {
+                foreach (var d in Directory.EnumerateDirectories(rootFolderPath))
+                    stack.Push(d);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
+            {
+                ErrorOccured?.Invoke($"Cannot enumerate root: {ex.Message}");
+                return Array.Empty<SourceImageFolder>();
+            }
+
+            while (stack.Count > 0)
+            {
+                var dir = stack.Pop();
+
+                // skip names that contain "processed" (case-insensitive)
+                var name = Path.GetFileName(dir) ?? dir;
+                if (name.IndexOf("processed", StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+
+                // get files (your method), handle nulls
+                var sf = GetImageFilesPaths(dir);
+                if (sf != null && sf.Files?.Length > 0) result.Add(sf);
+
+                // push children, ignoring inaccessible ones
+                try
+                {
+                    foreach (var child in Directory.EnumerateDirectories(dir))
+                        stack.Push(child);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
+                {
+                    Debug.WriteLine($"Can't enumerate children of {dir}: {ex.Message}");
+                }
+            }
+
+            return result.ToArray();
+        }
+
 
     }
 }
