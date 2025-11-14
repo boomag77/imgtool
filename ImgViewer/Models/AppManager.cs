@@ -110,7 +110,7 @@ namespace ImgViewer.Models
 
         public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline, bool fullTree = true)
         {
-            var debug = true;
+            var debug = false;
             if (pipeline == null) return;
             _mainViewModel.Status = $"Processing folders in " + rootFolder;
 
@@ -186,7 +186,7 @@ namespace ImgViewer.Models
 
         public async Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
         {
-            bool debug = true;
+            bool debug = false ;
             if (pipeline == null) return;
 
             _mainViewModel.Status = $"Processing folder " + srcFolder;

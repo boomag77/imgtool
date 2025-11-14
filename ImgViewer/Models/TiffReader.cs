@@ -18,7 +18,13 @@ namespace ImgViewer.Models
             public int SamplesPerPixel;
             public int BitsPerSample;
             public bool IsRawCompressed;
+
+            // Для decoded raster (если есть) — как раньше:
             public byte[] Data;
+
+            // Для raw-compressed multi-strip TIFFs:
+            public byte[][] RawStrips;               // каждый элемент = содержимое одного raw-strip (точно столько байт, сколько ReadRawStrip вернул)
+            public int RowsPerStripOriginal;         // исходное ROWSPERSTRIP, чтобы правильно восстановить структуру
         }
 
         private static int GetIntTag(Tiff tiff, TiffTag tag, int defaultValue = 0)
@@ -26,6 +32,155 @@ namespace ImgViewer.Models
             FieldValue[]? v = tiff.GetField(tag);
             return v != null ? v[0].ToInt() : defaultValue;
         }
+
+        private static void DumpTiffInfo(string path)
+        {
+            using (Tiff tif = Tiff.Open(path, "r"))
+            {
+                if (tif == null) { Debug.WriteLine("Can't open TIFF"); return; }
+
+                Debug.WriteLine($"IsTiled: {tif.IsTiled()}");
+
+                // helper to read scalar tags safely
+                int GetInt(TiffTag tag, int defaultValue = -1)
+                {
+                    FieldValue[]? v = tif.GetField(tag);
+                    if (v == null || v.Length == 0) return defaultValue;
+                    try { return v[0].ToInt(); } catch { return defaultValue; }
+                }
+
+                double GetDouble(TiffTag tag, double defaultValue = double.NaN)
+                {
+                    FieldValue[]? v = tif.GetField(tag);
+                    if (v == null || v.Length == 0) return defaultValue;
+                    try { return v[0].ToDouble(); } catch { return defaultValue; }
+                }
+
+                Debug.WriteLine($"ImageWidth: {GetInt(TiffTag.IMAGEWIDTH)}");
+                Debug.WriteLine($"ImageLength: {GetInt(TiffTag.IMAGELENGTH)}");
+                Debug.WriteLine($"RowsPerStrip: {GetInt(TiffTag.ROWSPERSTRIP)}");
+                Debug.WriteLine($"Compression: {GetInt(TiffTag.COMPRESSION)}");
+                Debug.WriteLine($"Photometric: {GetInt(TiffTag.PHOTOMETRIC)}");
+                Debug.WriteLine($"PlanarConfiguration: {GetInt(TiffTag.PLANARCONFIG)}");
+                Debug.WriteLine($"SamplesPerPixel: {GetInt(TiffTag.SAMPLESPERPIXEL)}");
+                Debug.WriteLine($"BitsPerSample: {GetInt(TiffTag.BITSPERSAMPLE)}");
+
+                // Try to print STRIPOFFSETS and STRIPBYTECOUNTS if present
+                FieldValue[]? off = tif.GetField(TiffTag.STRIPOFFSETS);
+                if (off != null && off.Length > 0)
+                {
+                    // FieldValue may contain an array; try to safely print its elements
+                    var raw = off[0];
+                    try
+                    {
+                        object? val = raw.Value; // may be array or scalar
+                        if (val is Array arr)
+                        {
+                            string s = string.Join(", ", arr.Cast<object>().Select(x => x.ToString()));
+                            Debug.WriteLine($"StripOffsets: [{s}]");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"StripOffsets: {val}");
+                        }
+                    }
+                    catch { Debug.WriteLine("StripOffsets: (unknown format)"); }
+                }
+
+                FieldValue[]? counts = tif.GetField(TiffTag.STRIPBYTECOUNTS);
+                if (counts != null && counts.Length > 0)
+                {
+                    try
+                    {
+                        object? val = counts[0].Value;
+                        if (val is Array arr)
+                        {
+                            string s = string.Join(", ", arr.Cast<object>().Select(x => x.ToString()));
+                            Debug.WriteLine($"StripByteCounts: [{s}]");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"StripByteCounts: {val}");
+                        }
+                    }
+                    catch { Debug.WriteLine("StripByteCounts: (unknown format)"); }
+                }
+
+                int strips = tif.NumberOfStrips();
+                Debug.WriteLine($"NumberOfStrips(): {strips}");
+                int declaredStripSize = tif.StripSize();
+                Debug.WriteLine($"StripSize() (declared max): {declaredStripSize}");
+
+                // For each strip: try to read encoded strip and log actual read bytes.
+                for (int i = 0; i < strips; i++)
+                {
+                    try
+                    {
+                        int bufSize = Math.Max(declaredStripSize, 4096);
+                        byte[] buf = new byte[bufSize];
+                        // ReadEncodedStrip returns number of bytes read (or -1/0 if none)
+                        int read = tif.ReadEncodedStrip(i, buf, 0, buf.Length);
+                        Debug.WriteLine($"Strip {i}: read={read} bytes (buffer size={bufSize})");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Strip {i}: read error: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        private static byte[][] ExtractCcittRawStrips(Tiff image)
+        {
+            int stripsCount = image.NumberOfStrips();
+            if (stripsCount <= 0)
+                return Array.Empty<byte[]>();
+
+            var list = new System.Collections.Generic.List<byte[]>(stripsCount);
+
+            for (int i = 0; i < stripsCount; i++)
+            {
+                int rawSize = (int)image.RawStripSize(i);
+                if (rawSize <= 0)
+                {
+                    // возможно zero-length strip — добавим пустой элемент, чтобы индексы совпадали
+                    list.Add(Array.Empty<byte>());
+                    continue;
+                }
+
+                // выделяем буфер равный ожидаемому compressed size
+                // ReadRawStrip может вернуть меньше; используем возвращаемое значение для корректной длины
+                byte[] buf = new byte[rawSize];
+                try
+                {
+                    int read = image.ReadRawStrip(i, buf, 0, rawSize); // read = number of compressed bytes actually read
+                    if (read <= 0)
+                    {
+                        list.Add(Array.Empty<byte>());
+                    }
+                    else if (read == rawSize)
+                    {
+                        list.Add(buf);
+                    }
+                    else
+                    {
+                        // урезаем до фактического прочитанного размера
+                        byte[] shrunk = new byte[read];
+                        Array.Copy(buf, 0, shrunk, 0, read);
+                        list.Add(shrunk);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error reading raw strip {i}: {ex.Message}");
+                    // безопасно: добавляем пустой strip, обработка дальше может обнаружить и логнуть проблему
+                    list.Add(Array.Empty<byte>());
+                }
+            }
+
+            return list.ToArray();
+        }
+
 
         private static async Task<TiffImageInfo?> ReadTiff(string filePath)
         {
@@ -40,6 +195,9 @@ namespace ImgViewer.Models
                             Debug.WriteLine("Could not open incoming image");
                             return null;
                         }
+#if DEBUG
+                        DumpTiffInfo(filePath);
+#endif
                         int width = GetIntTag(tiff, TiffTag.IMAGEWIDTH);
                         int height = GetIntTag(tiff, TiffTag.IMAGELENGTH);
                         if (width <= 0 || height <= 0)
@@ -84,6 +242,9 @@ namespace ImgViewer.Models
                         byte[] data = Array.Empty<byte>();
                         bool isRaw = false;
 
+                        byte[][] tiRawStrips = null;
+                        int rowsPerStripOriginal = height;
+
                         switch (compression)
                         {
                             case (int)TiffCompression.None:
@@ -92,8 +253,19 @@ namespace ImgViewer.Models
 
                             case (int)TiffCompression.CCITTG3:
                             case (int)TiffCompression.CCITTG4:
-                                data = ExtractCcittRaw(tiff, width, height);
-                                isRaw = true;
+                                //data = ExtractCcittRaw(tiff, width, height);
+                                //isRaw = true;
+                                {
+                                    // читаем каждый raw-strip в отдельный элемент массива
+                                    var strips = ExtractCcittRawStrips(tiff);
+                                    data = Array.Empty<byte>(); // keep Data empty for raw case — raw strips are in RawStrips
+                                    isRaw = true;
+
+                                    // создадим локальный TiffImageInfo и заполним поля ниже (см. возвращаемую структуру)
+                                    // но т.к. ReadTiff в одном месте формирует TiffImageInfo в конце, мы запишем полученные значения туда:
+                                    tiRawStrips = strips;
+                                    rowsPerStripOriginal = GetIntTag(tiff, TiffTag.ROWSPERSTRIP, height);
+                                }
                                 break;
                             case (int)TiffCompression.JPEG:
                                 data = ExtractJpegRaw(tiff);
@@ -322,15 +494,44 @@ namespace ImgViewer.Models
                     output.SetField(TiffTag.FILLORDER, tiffImageInfo.FillOrder);
                     output.SetField(TiffTag.ROWSPERSTRIP, tiffImageInfo.Height);
 
-                    if (tiffImageInfo.IsRawCompressed)
+                    //if (tiffImageInfo.IsRawCompressed)
+                    //{
+                    //    output.WriteRawStrip(0, tiffImageInfo.Data, 0, tiffImageInfo.Data.Length);
+
+                    //}
+                    //else
+                    //{
+                    //    output.WriteEncodedStrip(0, tiffImageInfo.Data, 0, tiffImageInfo.Data.Length);
+                    //}
+                    if (tiffImageInfo.IsRawCompressed && tiffImageInfo.RawStrips != null && tiffImageInfo.RawStrips.Length > 0)
                     {
+                        // Восстанавливаем исходную структуру strip'ов:
+                        output.SetField(TiffTag.ROWSPERSTRIP, tiffImageInfo.RowsPerStripOriginal);
+
+                        for (int i = 0; i < tiffImageInfo.RawStrips.Length; i++)
+                        {
+                            byte[] strip = tiffImageInfo.RawStrips[i] ?? Array.Empty<byte>();
+                            if (strip.Length == 0)
+                            {
+                                // Записываем пустой strip (libtiff/WriteRawStrip может ожидать >=0)
+                                output.WriteRawStrip(i, strip, 0, 0);
+                            }
+                            else
+                            {
+                                output.WriteRawStrip(i, strip, 0, strip.Length);
+                            }
+                        }
+                    }
+                    else if (tiffImageInfo.IsRawCompressed)
+                    {
+                        // fallback (старое поведение) — если RawStrips не заполнены, запишем Data как один raw strip
                         output.WriteRawStrip(0, tiffImageInfo.Data, 0, tiffImageInfo.Data.Length);
                     }
                     else
                     {
                         output.WriteEncodedStrip(0, tiffImageInfo.Data, 0, tiffImageInfo.Data.Length);
                     }
-                   
+
                     output.WriteDirectory();
                     output.Flush();
                 }
