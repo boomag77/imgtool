@@ -12,6 +12,8 @@ namespace ImgViewer.Models
         private readonly IViewModel _mainViewModel;
         private readonly IFileProcessor _fileProcessor;
         private readonly IImageProcessor _imageProcessor;
+        private readonly AppSettings _appSettings;
+
 
         private readonly CancellationTokenSource _cts;
         private CancellationTokenSource? _poolCts;
@@ -20,11 +22,30 @@ namespace ImgViewer.Models
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
             _cts = cts;
-            _mainViewModel = new MainViewModel();
+            _appSettings = new AppSettings();
+            _mainViewModel = new MainViewModel(_appSettings);
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
             _imageProcessor = new OpenCVImageProcessor(this, _cts.Token);
 
+        }
+
+        public TiffCompression CurrentTiffCompression
+        {
+            get { return _appSettings.TiffCompression; }
+            set { _appSettings.TiffCompression = value; }
+        }
+
+        public string LastOpenedFolder
+        {
+            get
+            {
+                return _appSettings.LastOpenedFolder;
+            }
+            set
+            {
+                _appSettings.LastOpenedFolder = value;
+            }
         }
 
         public void Shutdown()

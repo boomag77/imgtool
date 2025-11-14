@@ -116,7 +116,6 @@
             <Setter Property="Background" Value="#2F3136"/>
             <Setter Property="BorderBrush" Value="#2F3136"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Opacity" Value="20"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="MinWidth" Value="120"/>
             <Setter Property="Template">
@@ -157,7 +156,6 @@
             <Setter Property="Background" Value="#2F3136"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Opacity" Value="20"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -410,7 +408,7 @@
                 <Separator/>
                 <MenuItem Header="_Save Image As..." Click="SaveAs_Click"/>
                 <Separator/>
-                <MenuItem Header="_Saving options" Click="SaveAs_Click"/>
+                <MenuItem Header="_Tiff compression" Click="SavingOptions_Click"/>
                 <Separator/>
                 <MenuItem Header="_Exit" Click="ExitClick"/>
             </MenuItem>
@@ -429,6 +427,9 @@
             </StatusBarItem>
             <StatusBarItem>
                 <ProgressBar x:Name="MyProgressBar" Width="200" Height="16" Minimum="0" Maximum="100" />
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock HorizontalAlignment="Right" Text="{Binding TiffCompressionLabel}"/>
             </StatusBarItem>
         </StatusBar>
 

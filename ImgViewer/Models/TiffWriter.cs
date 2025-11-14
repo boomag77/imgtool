@@ -1,4 +1,5 @@
 ﻿using BitMiracle.LibTiff.Classic;
+using System.ComponentModel;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -7,6 +8,7 @@ public enum TiffCompression
 {
     None = 1,
     CCITTG3 = 3,
+    [Description("CCITT G4 (Fax)")]
     CCITTG4 = 4,
     LZW = 5,
     Deflate = 8,

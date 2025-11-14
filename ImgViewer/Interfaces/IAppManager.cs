@@ -4,6 +4,8 @@ namespace ImgViewer.Interfaces
 {
     public interface IAppManager
     {
+        public TiffCompression CurrentTiffCompression { get; set;  }
+        public string LastOpenedFolder { get; set; }
         public Task SetImageOnPreview(string imagePath);
         public Task SetBmpImageOnPreview(ImageSource bmp);
 

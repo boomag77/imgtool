@@ -9,15 +9,27 @@ namespace ImgViewer.Models
 {
     internal class MainViewModel : IViewModel, INotifyPropertyChanged
     {
+        private readonly AppSettings _appSettings;
         private ImageSource? _originalImage;
         private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
-        private string? _lastOpenedFolder;
+        private string _tiffCompressionLabel;
+        //private string? _lastOpenedFolder;
         private int _progress;
         private string _status = "Ready";
 
         private CancellationTokenSource? _cts;
 
+
+        public string TiffCompressionLabel
+        {
+            get => _appSettings.TiffCompression.ToString();
+            set
+            {
+                _tiffCompressionLabel = value;
+                OnPropertyChanged();
+            }
+        }
 
         public string Status
         {
@@ -68,20 +80,23 @@ namespace ImgViewer.Models
             }
         }
 
-        public string? LastOpenedFolder
-        {
-            get => _lastOpenedFolder;
-            set
-            {
-                if (_lastOpenedFolder == value) return;
-                _lastOpenedFolder = value;
-            }
-        }
+        //public string? LastOpenedFolder
+        //{
+        //    get => _lastOpenedFolder;
+        //    set
+        //    {
+        //        if (_lastOpenedFolder == value) return;
+        //        _lastOpenedFolder = value;
+        //    }
+        //}
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public MainViewModel()
+        public MainViewModel(AppSettings appSettings)
         {
+            _appSettings = appSettings;
+
+
         }
 
         private void OnPropertyChanged([CallerMemberName] string propertyName = "")

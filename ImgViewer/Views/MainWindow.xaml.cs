@@ -1,4 +1,5 @@
-﻿using ImgViewer.Interfaces;
+﻿using BitMiracle.LibTiff.Classic;
+using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using System;
 using System.CodeDom;
@@ -79,7 +80,7 @@ namespace ImgViewer.Views
         private CancellationTokenSource? _currentLoadPreviewCts;
         private CancellationTokenSource? _currentLoadThumbnailsCts;
 
-        private string _lastOpenedFolder = string.Empty;
+        //private string _lastOpenedFolder = string.Empty;
 
         private readonly HashSet<PipeLineOperation> _liveRunning = new();
 
@@ -95,6 +96,7 @@ namespace ImgViewer.Views
             _cts = new CancellationTokenSource();
 
             _manager = new AppManager(this, _cts);
+
             DataContext = _viewModel;
 
             //ImgListBox.ItemsSource = Files;
@@ -1012,6 +1014,8 @@ namespace ImgViewer.Views
         {
             var dlg = new Microsoft.Win32.OpenFileDialog();
             dlg.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tif;*.tiff|All Files|*.*";
+            dlg.Multiselect = false;
+            dlg.InitialDirectory = _manager.LastOpenedFolder;
             if (dlg.ShowDialog() == true)
             {
                 try
@@ -1021,7 +1025,7 @@ namespace ImgViewer.Views
                     var fileName = dlg.FileName;
                     await _manager.SetImageOnPreview(fileName);
                     _viewModel.CurrentImagePath = fileName;
-                    _viewModel.LastOpenedFolder = System.IO.Path.GetDirectoryName(fileName);
+                    _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(fileName);
 
                     await RunLiveOperationsForNewImageAsync();
                 }
@@ -1107,7 +1111,7 @@ namespace ImgViewer.Views
             }
 
             var dlg = new Microsoft.Win32.SaveFileDialog();
-            dlg.InitialDirectory = _lastOpenedFolder;
+            dlg.InitialDirectory = _manager.LastOpenedFolder;
             dlg.Filter = "*.igpreset|*.*";
 
             if (dlg.ShowDialog() == true)
@@ -1115,7 +1119,7 @@ namespace ImgViewer.Views
                 var path = dlg.FileName + ".igpreset";
                 var json = _manager.BuildPipelineForSave(pipeline);
                 SavePipelineToJSON(path, json);
-                _lastOpenedFolder = System.IO.Path.GetDirectoryName(path);
+                _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(path);
             }
             
             
@@ -1177,7 +1181,7 @@ namespace ImgViewer.Views
             try
             {
                 // проверим папку
-                var folder = _viewModel.LastOpenedFolder;
+                var folder = _manager.LastOpenedFolder;
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
                     System.Windows.MessageBox.Show("Folder unknown or doesn't exist. Open a file first.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1199,7 +1203,7 @@ namespace ImgViewer.Views
                 var target = files[newIdx];
                 await _manager.SetImageOnPreview(target);
                 _viewModel.CurrentImagePath = target;
-                _viewModel.LastOpenedFolder = folder;
+                _manager.LastOpenedFolder = folder;
 
                 await RunLiveOperationsForNewImageAsync();
             }
@@ -1314,6 +1318,7 @@ namespace ImgViewer.Views
 
             string rootFolder = string.Empty;
             var dlg = new System.Windows.Forms.FolderBrowserDialog();
+            dlg.SelectedPath = _manager.LastOpenedFolder;
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 rootFolder = dlg.SelectedPath;
@@ -1431,30 +1436,30 @@ namespace ImgViewer.Views
         private void SaveAs_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.SaveFileDialog();
-            dlg.InitialDirectory = _lastOpenedFolder;
+            dlg.InitialDirectory = _manager.LastOpenedFolder;
             //dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
             dlg.Filter = "TIFF Image|*.tif;*.tiff";
 
             if (dlg.ShowDialog() == true)
             {
                 var path = dlg.FileName;
-                TiffCompression compression = TiffCompression.None;
+                TiffCompression compression = _manager.CurrentTiffCompression;
                 var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-                if (ext == ".tif" || ext == ".tiff")
-                {
-                    var tiffOptionsWindow = new TiffSavingOptionsWindow();
-                    tiffOptionsWindow.Owner = this;
+                //if (ext == ".tif" || ext == ".tiff")
+                //{
+                //    var tiffOptionsWindow = new TiffSavingOptionsWindow();
+                //    tiffOptionsWindow.Owner = this;
 
-                    if (tiffOptionsWindow.ShowDialog() == true)
-                    {
-                        compression = tiffOptionsWindow.SelectedCompression;
-                    }
-                    else
-                    {
-                        // User cancelled the TIFF options dialog
-                        return;
-                    }
-                }
+                //    if (tiffOptionsWindow.ShowDialog() == true)
+                //    {
+                //        compression = tiffOptionsWindow.SelectedCompression;
+                //    }
+                //    else
+                //    {
+                //        // User cancelled the TIFF options dialog
+                //        return;
+                //    }
+                //}
                 _manager.SaveProcessedImage(path,
                     ext switch
                     {
@@ -1467,6 +1472,25 @@ namespace ImgViewer.Views
                     compression);
             }
 
+        }
+
+        private void SavingOptions_Click(object sender, RoutedEventArgs e)
+        {
+            
+
+            var tiffOptionsWindow = new TiffSavingOptionsWindow();
+            tiffOptionsWindow.Owner = this;
+
+            if (tiffOptionsWindow.ShowDialog() == true)
+            {
+                _manager.CurrentTiffCompression = tiffOptionsWindow.SelectedCompression;
+                _viewModel.TiffCompressionLabel = tiffOptionsWindow.SelectedCompression.ToString();
+            }
+            else
+            {
+                // User cancelled the TIFF options dialog
+                return;
+            }
         }
 
         private void ExitClick(object sender, RoutedEventArgs e)
