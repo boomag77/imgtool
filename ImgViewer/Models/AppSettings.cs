@@ -198,10 +198,5 @@ namespace ImgViewer.Models
             public TiffCompression TiffCompression { get; set; }
             public string? LastOpenedFolder { get; set; }
         }
-
-        private void SaveSettingsToFile()
-        {
-
-        }
     }
 }

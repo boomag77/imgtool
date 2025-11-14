@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows.Media;
 using System.Text.Json;
 using System.Text;
+using System.Diagnostics.Eventing.Reader;
 
 namespace ImgViewer.Models
 {
@@ -107,13 +108,45 @@ namespace ImgViewer.Models
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
         }
 
-        public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
+        public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline, bool fullTree = true)
         {
+            var debug = true;
             if (pipeline == null) return;
             _mainViewModel.Status = $"Processing folders in " + rootFolder;
 
-            
-            var sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths(rootFolder);
+            SourceImageFolder[] sourceFolders = [];
+
+            if (fullTree)
+            {
+                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths_FullTree(rootFolder);
+                if (debug)
+                {
+                    Debug.WriteLine("Folders to process (FULL):");
+                    foreach (var folder in sourceFolders)
+                    {
+                        Debug.WriteLine(folder.Path);
+                    }
+                    return;
+                }
+                
+                if (sourceFolders == null) return;
+            }
+            else
+            {
+                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths(rootFolder);
+                if (debug)
+                {
+                    Debug.WriteLine("Folders to process:");
+                    foreach(var folder in sourceFolders)
+                    {
+                        Debug.WriteLine(folder.Path);
+                    }
+                    return;
+                }
+                if (sourceFolders == null) return;
+
+            }
+               
             if (sourceFolders == null || sourceFolders.Length == 0) return;
 
             if (_rootFolderCts != null)
@@ -153,20 +186,26 @@ namespace ImgViewer.Models
 
         public async Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
         {
-            bool debug = false;
+            bool debug = true;
             if (pipeline == null) return;
 
             _mainViewModel.Status = $"Processing folder " + srcFolder;
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
             var pipelineToUse = pipeline;
+            //if (debug)
+            //{
+            //    string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
+            //    Debug.WriteLine("Pipeline JSON for save:");
+            //    Debug.WriteLine(pipeLineForSave);
+            //    return;
+            //}
             if (debug)
             {
-                string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
-                Debug.WriteLine("Pipeline JSON for save:");
-                Debug.WriteLine(pipeLineForSave);
-                return;
+                foreach (var imagePath in sourceFolder.Files)
+                {
+                    Debug.WriteLine(imagePath);
+                }
             }
-
 
             if (_poolCts != null)
             {

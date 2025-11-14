@@ -304,7 +304,7 @@ namespace ImgViewer.Models
             return sourceFolder;
         }
 
-        public SourceImageFolder[] GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath)
+        public SourceImageFolder[]? GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath)
         {
             if (string.IsNullOrWhiteSpace(rootFolderPath) || !Directory.Exists(rootFolderPath))
             {

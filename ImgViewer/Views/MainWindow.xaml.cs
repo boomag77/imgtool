@@ -1324,6 +1324,7 @@ namespace ImgViewer.Views
                 rootFolder = dlg.SelectedPath;
             }
             if (rootFolder == string.Empty) return;
+            _manager.LastOpenedFolder = rootFolder;
 
             // опционально: спросить подтверждение у пользователя
             var res = System.Windows.MessageBox.Show($"Apply current pipeline to all sub-folders in:\n{rootFolder} ?",
@@ -1331,9 +1332,11 @@ namespace ImgViewer.Views
                                                      MessageBoxButton.OKCancel,
                                                      MessageBoxImage.Question);
             if (res != MessageBoxResult.OK) return;
+           
+           
             try
             {
-                _manager.ProcessRootFolder(rootFolder, pipeline);
+                _manager.ProcessRootFolder(rootFolder, pipeline, true);
             }
             catch (Exception ex)
             {
