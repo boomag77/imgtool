@@ -2,11 +2,14 @@
 using OpenCvSharp;
 using System.Buffers;
 using System.Diagnostics;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Point = OpenCvSharp.Point;
+using Size = OpenCvSharp.Size;
 
 namespace ImgViewer.Models
 {
@@ -15,6 +18,7 @@ namespace ImgViewer.Models
         private Mat _currentImage;
         private Scalar _pageColor;
         private Scalar _borderColor;
+        private Mat _blurred;
         private readonly IAppManager _appManager;
 
         public ImageSource CurrentImage
@@ -27,6 +31,8 @@ namespace ImgViewer.Models
 
             }
         }
+
+
 
 
         public OpenCVImageProcessor(IAppManager appManager, CancellationToken token)
@@ -523,25 +529,25 @@ namespace ImgViewer.Models
             if (_currentImage != null)
             {
 
-
                 switch (command)
                 {
                     case ProcessorCommand.Binarize:
 
-                        int treshold = 128;
+                        int threshold = 128;
                         int blockSize = 3;
                         double c = 14;
                         bool useGaussian = false;
                         bool useMorphology = false;
                         int morphKernel = 3;
                         int morphIters = 1;
+                        int majorityOffset = 20;
 
                         foreach (var kv in parameters)
                         {
                             switch (kv.Key)
                             {
-                                case "BinarizeTreshold":
-                                    treshold = SafeInt(kv.Value, treshold);
+                                case "binarizeThreshold":
+                                    threshold = SafeInt(kv.Value, threshold);
                                     break;
                                 case "blockSize":
                                     blockSize = SafeInt(kv.Value, blockSize);
@@ -584,6 +590,9 @@ namespace ImgViewer.Models
                                 case "morphIterationsBinarize":
                                     morphIters = SafeInt(kv.Value, morphIters);
                                     break;
+                                case "majorityOffset":
+                                    majorityOffset = SafeInt(kv.Value, majorityOffset);
+                                    break;
 
                             }
                         }
@@ -595,9 +604,9 @@ namespace ImgViewer.Models
                                 Debug.WriteLine(kv.Value.ToString());
                                 switch (kv.Value.ToString())
                                 {
-                                    case "Treshold":
-                                        Debug.WriteLine(treshold);
-                                        Binarize(treshold);
+                                    case "Threshold":
+                                        Debug.WriteLine(threshold);
+                                        Binarize(threshold);
                                         break;
                                     case "Adaptive":
                                         BinarizeAdaptive(blockSize, c, useGaussian, useMorphology, morphKernel, morphIters);
@@ -605,6 +614,12 @@ namespace ImgViewer.Models
                                     case "Sauvola":
                                         SauvolaBinarize();
                                         break;
+                                    case "Majority":
+                                        Debug.WriteLine(threshold.ToString() + " " + majorityOffset.ToString());
+
+                                        MajorityBinarize(threshold, majorityOffset);
+                                        break;
+
                                 }
                             }
 
@@ -665,7 +680,10 @@ namespace ImgViewer.Models
                                     case "bgColor":
                                         int i = SafeInt(kv.Value, 0);
                                         int color = Math.Max(0, Math.Min(255, i));
-                                        bgColor = new Scalar(0, 0, 255);
+                                        //bgColor = new Scalar(0, 0, 255);
+                                        //bgColor = new Scalar(color, color, color);
+                                        bgColor = SampleCentralGrayScalar(_currentImage, 0, 0.1);
+                                        Debug.WriteLine("bgColor:", bgColor.ToString());
                                         break;
                                     case "darkThreshold":
                                         int iThresh = SafeInt(kv.Value, darkThresh);
@@ -724,7 +742,7 @@ namespace ImgViewer.Models
 
                                                 _currentImage = RemoveBorderArtifactsGeneric_Safe(_currentImage,
                                                     darkThresh,
-                                                    null,
+                                                    bgColor,
                                                     minAreaPx,
                                                     minSpanFraction,
                                                     solidityThreshold,
@@ -751,22 +769,589 @@ namespace ImgViewer.Models
                         break;
                     case ProcessorCommand.Despeckle:
                         //applyDespeckleCurrent();
+
+                        bool smallAreaRelative = true;
+                        double smallAreaMultiplier = 0.25;
+                        int smallAreaAbsolutePx = 64;
+                        double maxDotHeightFraction = 0.35;
+                        double proximityRadiusFraction = 0.8;
+                        double squarenessTolerance = 0.6;
+                        bool keepClusters = true;
+                        bool useDilateBeforeCC = true;
+                        string dilateKernel = "1x3";
+                        int dilateIter = 1;
+                        bool showDespeckleDebug = false;
+
+                        DespeckleSettings settings = new DespeckleSettings();
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == null) continue;
+
+                            switch (kv.Key)
+                            {
+                                case "smallAreaRelative":
+                                    settings.SmallAreaRelative = SafeBool(kv.Value, smallAreaRelative);
+                                    break;
+                                case "smallAreaMultiplier":
+                                    settings.SmallAreaMultiplier = SafeDouble(kv.Value, smallAreaMultiplier);
+                                    break;
+                                case "smallAreaAbsolutePx":
+                                    settings.SmallAreaAbsolutePx = SafeInt(kv.Value, smallAreaAbsolutePx);
+                                    break;
+                                case "maxDotHeightFraction":
+                                    settings.MaxDotHeightFraction = SafeDouble(kv.Value, maxDotHeightFraction);
+                                    break;
+                                case "proximityRadiusFraction":
+                                    settings.ProximityRadiusFraction = SafeDouble(kv.Value, proximityRadiusFraction);
+                                    break;
+                                case "SquarenessTolerance":
+                                    settings.SquarenessTolerance = SafeDouble(kv.Value, squarenessTolerance);
+                                    break;
+                                case "keepClusters":
+                                    settings.KeepClusters = SafeBool(kv.Value, keepClusters);
+                                    break;
+                                case "useDilateBeforeCC":
+                                    settings.UseDilateBeforeCC = SafeBool(kv.Value, useDilateBeforeCC);
+                                    break;
+                                case "dilateKernel":
+                                    settings.DilateKernel = kv.Value.ToString();
+                                    if (settings.DilateKernel == string.Empty) settings.DilateKernel = dilateKernel;
+                                    break;
+                                case "dilateIter":
+                                    settings.DilateIter = SafeInt(kv.Value, dilateIter);
+                                    break;
+                                case "showDespeckleDebug":
+                                    settings.ShowDespeckleDebug = SafeBool(kv.Value, showDespeckleDebug);
+                                    break;
+
+                            }
+                        }
+
+                        //_currentImage = DespeckleApplyToSource(_currentImage, settings, true, false, true);
+                        Despeckle(settings);
+                        //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
+
                         break;
                     case ProcessorCommand.AutoCropRectangle:
                         AutoCrop();
                         //applyAutoCropRectangleCurrent();
                         break;
                     case ProcessorCommand.LineRemove:
-                        //ApplyLinesRemoveCurrent();
+                        int lineWidthPx = 1;
+                        double minLengthFraction = 0.5;
+                        LineOrientation orientation = LineOrientation.Vertical;
+                        int offsetStartPx = 0;
+                        int lineColorRed = 255;
+                        int lineColorGreen = 255;
+                        int lineColorBlue = 255;
+                        int colorTolerance = 40;
+                        
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == null) continue;
+                            switch (kv.Key)
+                            {
+                                case "lineWidthPx":
+                                    lineWidthPx = SafeInt(kv.Value, lineWidthPx);
+                                    break;
+                                case "minLengthFraction":
+                                    minLengthFraction = SafeDouble(kv.Value, minLengthFraction);
+                                    break;
+                                case "orientation":
+                                    switch (kv.Value)
+                                    {
+                                        case "Vertical":
+                                            orientation = LineOrientation.Vertical;
+                                            break;
+                                        case "Horizontal":
+                                            orientation = LineOrientation.Horizontal;
+                                            break;
+                                        default:
+                                            orientation = LineOrientation.Both;
+                                            break;
+                                    }
+                                    break;
+                                case "offsetStartPx":
+                                    offsetStartPx = SafeInt(kv.Value, offsetStartPx);
+                                    break;
+                                case "lineColorRed":
+                                    lineColorRed = SafeInt(kv.Value, lineColorRed);
+                                    break;
+                                case "lineColorGreen":
+                                    lineColorGreen = SafeInt(kv.Value, lineColorGreen);
+                                    break;
+                                case "lineColorBlue":
+                                    lineColorBlue = SafeInt(kv.Value, lineColorBlue);
+                                    break;
+                                case "colorTolerance":
+                                    colorTolerance = SafeInt(kv.Value, colorTolerance);
+                                    break;
+
+                            }
+                        }
+
+                        RemoveLines(lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
+
+                        
+
                         break;
                     case ProcessorCommand.DotsRemove:
                         //RemoveSpecksWithHandler();
                         break;
+                    case ProcessorCommand.ChannelsCorrection:
+                        break;
+                    case ProcessorCommand.PunchHolesRemove:
 
+                        Debug.WriteLine("Starting Punch removing");
+
+                        PunchShape shape = PunchShape.Circle;
+                        int diameter = 20;
+                        int height = 20;
+                        int width = 20;
+                        double density = 0.50;
+                        double sizeTolerance = 0.40;
+                        int leftOffset = 100;
+                        int rightOffset = 100;
+                        int topOffset = 100;
+                        int bottomOffset = 100;
+
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == null) continue;
+
+                            switch (kv.Key)
+                            {
+                                case "Circle":
+                                    shape = PunchShape.Circle;
+                                    break;
+                                case "Rect":
+                                    shape = PunchShape.Rect;
+                                    break;
+                                case "diameter":
+                                    diameter = SafeInt(kv.Value, diameter);
+                                    break;
+                                case "height":
+                                    height = SafeInt(kv.Value, height);
+                                    break;
+                                case "width":
+                                    width = SafeInt(kv.Value, width);
+                                    break;
+                                case "density":
+                                    density = SafeDouble(kv.Value, density);
+                                    break;
+                                case "sizeTolerance":
+                                    sizeTolerance = SafeDouble(kv.Value, sizeTolerance);
+                                    break;
+                                case "leftOffset":
+                                    leftOffset = SafeInt(kv.Value, leftOffset);
+                                    break;
+                                case "rightOffset":
+                                    rightOffset = SafeInt(kv.Value, rightOffset);
+                                    break;
+                                case "topOffset":
+                                    topOffset = SafeInt(kv.Value, topOffset);
+                                    break;
+                                case "bottomOffset":
+                                    bottomOffset = SafeInt(kv.Value, bottomOffset);
+                                    break;
+                                default:
+                                    // ignore unknown key
+                                    break;
+                            }
+                        }
+
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == "punchShape")
+                            {
+                                switch (kv.Value.ToString())
+                                {
+                                    case "Circle":
+                                        shape = PunchShape.Circle;
+                                        break;
+                                    case "Rect":
+                                        shape = PunchShape.Rect;
+                                        break;
+                                }
+                            }
+
+                        }
+
+                        List<PunchSpec> specs = new List<PunchSpec>();
+
+                        PunchSpec spec1 = new PunchSpec();
+                        spec1.Shape = shape;
+                        spec1.Diameter = diameter;
+                        spec1.RectSize = new OpenCvSharp.Size(width, height);
+                        spec1.Density = density;
+                        spec1.SizeToleranceFraction = sizeTolerance;
+                        Debug.WriteLine(spec1.Shape.ToString());
+                        Debug.WriteLine(spec1.Diameter.ToString());
+                        Debug.WriteLine(width.ToString());
+                        Debug.WriteLine(height.ToString());
+                        Debug.WriteLine(spec1.Count.ToString());
+                        Debug.WriteLine(spec1.Density.ToString());
+                        Debug.WriteLine(spec1.SizeToleranceFraction.ToString());
+                        //Debug.WriteLine(offset.ToString());
+
+                        
+                        specs.Add(spec1);
+                        PunchSpec spec2 = new PunchSpec();
+                        spec2.Diameter = diameter;
+                        spec2.RectSize = new OpenCvSharp.Size(width, height);
+                        spec2.Density = density;
+                        spec2.SizeToleranceFraction = sizeTolerance;
+                        if (spec1.Shape == PunchShape.Circle)
+                        {
+                            spec2.Shape = PunchShape.Rect;
+
+                        } else
+                        {
+                            spec2.Shape = PunchShape.Circle;
+                        }
+                        specs.Add(spec1);
+                        specs.Add(spec2);
+                        PunchHolesRemove(specs, topOffset, bottomOffset, leftOffset, rightOffset);
+
+                        
+
+
+                        break;
 
                 }
                 updateImagePreview();
             }
+        }
+
+        private void Despeckle(DespeckleSettings settings)
+        {
+            _currentImage = Despeckler.DespeckleApplyToSource(_currentImage, settings, settings.ShowDespeckleDebug, true, true);
+            updateImagePreview();
+        }
+
+        private void RemoveLines(
+            int lineWidthPx,
+            double minLengthFraction,
+            LineOrientation orientation,
+            int offsetStartPx,
+            int lineColorRed,
+            int lineColorGreen,
+            int lineColorBlue,
+            int colorTolerance)
+        {
+            Scalar lineColorRgb = new Scalar(lineColorRed, lineColorGreen, lineColorBlue);
+            bool inverColorMeaning = false;
+            Mat mask;
+            //_currentImage = LinesRemover.RemoveLongLines(_currentImage,
+            //    lineWidthPx,
+            //    minLengthFraction,
+            //    orientation,
+            //    offsetStartPx,
+            //    lineColorRgb,
+            //    out mask,
+            //    colorTolerance,
+            //    inverColorMeaning);
+            _currentImage = LinesRemover.RemoveEdgeStripes(_currentImage,
+                lineWidthPx,
+                minLengthFraction,
+                orientation,
+                offsetStartPx,
+                lineColorRgb,
+                out mask,
+                colorTolerance,
+                inverColorMeaning);
+        }
+
+        private void MajorityBinarize(int threshold, int offset)
+        {
+            int step = 10; // 5 or 10
+            int range = offset; // max absolute offset
+            var deltas = Enumerable.Range(-10, (range * 2) / step + 1)
+                                   .Select(i => i * step)
+                                   .ToArray();
+            _currentImage = MajorityVotingBinarize(_currentImage, threshold, deltas);
+        }
+
+
+        private static Mat ConvertWithChannelScalesToGray_CustomWeights(Mat src, double rPercent, double gPercent, double bPercent, out Mat? alphaMat)
+        {
+            alphaMat = null;
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return src.Clone();
+
+            double rScale = Math.Max(0.0, Math.Min(100.0, rPercent)) / 100.0;
+            double gScale = Math.Max(0.0, Math.Min(100.0, gPercent)) / 100.0;
+            double bScale = Math.Max(0.0, Math.Min(100.0, bPercent)) / 100.0;
+
+            if (src.Type().Channels == 1) return src.Clone();
+
+            Mat workBgr;
+            if (src.Type().Channels == 4)
+            {
+                var bgra = src;
+                Mat[] bgraCh = Cv2.Split(bgra);
+                alphaMat = bgraCh[3].Clone();
+                workBgr = new Mat();
+                Cv2.Merge(new[] { bgraCh[0], bgraCh[1], bgraCh[2] }, workBgr);
+                foreach (var m in bgraCh) m.Dispose();
+            }
+            else
+            {
+                workBgr = src.Clone();
+            }
+
+            Mat workF = new Mat();
+            workBgr.ConvertTo(workF, MatType.CV_32F);
+
+            // split channels
+            Mat[] ch = Cv2.Split(workF); // B,G,R
+
+            // apply channel scales
+            if (ch.Length >= 3)
+            {
+                if (bScale != 1.0) Cv2.Multiply(ch[0], bScale, ch[0]);
+                if (gScale != 1.0) Cv2.Multiply(ch[1], gScale, ch[1]);
+                if (rScale != 1.0) Cv2.Multiply(ch[2], rScale, ch[2]);
+            }
+
+            // compute weighted sum: grayF = 0.114*B + 0.587*G + 0.299*R
+            Mat grayF = new Mat();
+            // grayF = 0.114*B
+            Cv2.Multiply(ch[0], 0.114, grayF);
+            // grayF += 0.587*G
+            Mat tmp = new Mat();
+            Cv2.Multiply(ch[1], 0.587, tmp);
+            Cv2.Add(grayF, tmp, grayF);
+            tmp.Dispose();
+            // grayF += 0.299*R
+            Cv2.Multiply(ch[2], 0.299, tmp);
+            Cv2.Add(grayF, tmp, grayF);
+            tmp.Dispose();
+
+            // cleanup channels & workF
+            foreach (var m in ch) m.Dispose();
+            workF.Dispose();
+            workBgr.Dispose();
+
+            // convert float gray to 8U (saturate)
+            Mat grayU8 = new Mat();
+            grayF.ConvertTo(grayU8, MatType.CV_8U);
+            grayF.Dispose();
+
+            return grayU8;
+        }
+
+        private void PunchHolesRemove(List<PunchSpec> specs, int offsetTop, int offsetBottom, int offsetLeft, int offsetRight)
+        {
+            _currentImage = PunchHoleRemover.RemovePunchHoles(_currentImage, specs, offsetTop, offsetBottom, offsetLeft, offsetRight);
+            //updateImagePreview();
+        }
+
+
+        
+
+        public Mat DespeckleAfterBinarization(Mat bin, DespeckleSettings? settings = null, bool debug = false)
+        {
+            if (bin == null) throw new ArgumentNullException(nameof(bin));
+            if (bin.Type() != MatType.CV_8UC1) throw new ArgumentException("Expect CV_8UC1 binary image (text=0).");
+
+            // default settings if null
+            settings ??= new DespeckleSettings
+            {
+                SmallAreaRelative = true,
+                SmallAreaMultiplier = 0.25,
+                SmallAreaAbsolutePx = 64,
+                MaxDotHeightFraction = 0.35,
+                ProximityRadiusFraction = 0.8,
+                SquarenessTolerance = 0.6,
+                KeepClusters = true,
+                UseDilateBeforeCC = true,
+                DilateKernel = "1x3", // "1x3", "3x1" or "3x3"
+                DilateIter = 1,
+                ShowDespeckleDebug = false
+            };
+
+            if (settings.SmallAreaMultiplier <= 0) settings.SmallAreaMultiplier = 0.25;
+            if (settings.SmallAreaAbsolutePx <= 0) settings.SmallAreaAbsolutePx = 64;
+            if (settings.DilateIter < 0) settings.DilateIter = 0;
+
+            if (!(settings.DilateKernel == "1x3" || settings.DilateKernel == "3x1" || settings.DilateKernel == "3x3"))
+            {
+                // fallback to default
+                settings.DilateKernel = "1x3";
+            }
+
+            if (!settings.SmallAreaRelative && settings.SmallAreaAbsolutePx <= 0)
+                settings.SmallAreaAbsolutePx = 64;
+
+            // If despeckling disabled by giving absurd values, still allow quick exit:
+            // (you can add explicit Enable flag in settings if needed)
+            // Start processing
+            Mat work = bin.Clone();
+
+            // origBlackMask: 255 where original had text (pixel == 0)
+            using var origBlackMask = new Mat();
+            Cv2.InRange(work, new Scalar(0), new Scalar(0), origBlackMask); // 255 where text==0
+
+            // labelingMat: copy of work; we may dilate labelingMat to merge touching dots->glyphs,
+            // but we will intersect removal masks with origBlackMask so only original pixels removed.
+            Mat labelingMat = work.Clone();
+
+            if (settings.UseDilateBeforeCC && settings.DilateIter > 0)
+            {
+                Mat kernel;
+                switch (settings.DilateKernel)
+                {
+                    case "3x1":
+                        kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 1));
+                        break;
+                    case "3x3":
+                        kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+                        break;
+                    default: // "1x3"
+                        kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3));
+                        break;
+                }
+                var tmp = new Mat();
+                Cv2.Dilate(labelingMat, tmp, kernel, iterations: settings.DilateIter);
+                labelingMat.Dispose();
+                kernel.Dispose();
+                labelingMat = tmp;
+            }
+
+            // connected components (on labelingMat)
+            using var labels = new Mat();
+            using var stats = new Mat();
+            using var centroids = new Mat();
+            int nLabels = Cv2.ConnectedComponentsWithStats(labelingMat, labels, stats, centroids, PixelConnectivity.Connectivity8, MatType.CV_32S);
+
+            var comps = new List<(int label, Rect bbox, int area)>();
+            for (int lbl = 1; lbl < nLabels; lbl++) // label 0 = background
+            {
+                int left = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Left);
+                int top = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Top);
+                int width = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Width);
+                int height = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Height);
+                int area = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Area);
+                comps.Add((lbl, new Rect(left, top, width, height), area));
+            }
+
+            if (comps.Count == 0)
+            {
+                labelingMat.Dispose();
+                return work;
+            }
+
+            // median char height (robust)
+            var heights = comps.Select(c => c.bbox.Height).Where(h => h >= 3).ToArray();
+            int medianHeight = heights.Length > 0 ? heights.OrderBy(h => h).ElementAt(heights.Length / 2) : 20;
+
+            // compute thresholds
+            int smallAreaThrPx = settings.SmallAreaRelative
+                ? Math.Max(1, (int)Math.Round(settings.SmallAreaMultiplier * medianHeight * medianHeight))
+                : Math.Max(1, settings.SmallAreaAbsolutePx);
+
+            int maxDotHeight = Math.Max(1, (int)Math.Round(settings.MaxDotHeightFraction * medianHeight));
+            double proximityRadius = Math.Max(1.0, settings.ProximityRadiusFraction * medianHeight);
+            double squarenessTolerance = Math.Max(0.0, Math.Min(1.0, settings.SquarenessTolerance));
+
+            int rows = work.Rows, cols = work.Cols;
+            var horProj = new int[rows];
+            for (int y = 0; y < rows; y++) horProj[y] = cols - Cv2.CountNonZero(work.Row(y)); // black px per row
+            int projThr = Math.Max(1, cols / 100);
+            var textRows = new HashSet<int>(Enumerable.Range(0, rows).Where(y => horProj[y] > projThr));
+
+            Point Center(Rect r) => new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+
+            var bigBoxes = comps.Where(c => c.bbox.Height >= medianHeight * 0.6 || c.area > smallAreaThrPx * 4)
+                                .Select(c => c.bbox).ToArray();
+
+            static double DistPointToRect(Point p, Rect r)
+            {
+                int dx = Math.Max(Math.Max(r.Left - p.X, 0), p.X - r.Right);
+                int dy = Math.Max(Math.Max(r.Top - p.Y, 0), p.Y - r.Bottom);
+                return Math.Sqrt(dx * dx + dy * dy);
+            }
+
+            var smallComps = comps.Where(c => c.area < smallAreaThrPx || c.bbox.Height <= maxDotHeight).ToArray();
+            var toRemoveLabels = new List<int>();
+            var toKeepLabels = new HashSet<int>();
+
+            int rowCheckRange = Math.Max(1, medianHeight / 3);
+            int clusterHoriz = Math.Max(3, (int)(medianHeight * 0.6));
+
+            foreach (var c in smallComps)
+            {
+                var rect = c.bbox;
+                var center = Center(rect);
+
+                double minDistToBig = double.MaxValue;
+                foreach (var br in bigBoxes)
+                {
+                    double d = DistPointToRect(center, br);
+                    if (d < minDistToBig) minDistToBig = d;
+                }
+                bool nearBig = minDistToBig < proximityRadius;
+
+                bool onTextLine = false;
+                for (int ry = Math.Max(0, center.Y - rowCheckRange); ry <= Math.Min(rows - 1, center.Y + rowCheckRange); ry++)
+                {
+                    if (textRows.Contains(ry)) { onTextLine = true; break; }
+                }
+
+                bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
+
+                bool partOfCluster = false;
+                if (settings.KeepClusters)
+                {
+                    foreach (var c2 in smallComps)
+                    {
+                        if (c2.label == c.label) continue;
+                        if (Math.Abs(Center(c2.bbox).Y - center.Y) <= rowCheckRange &&
+                            Math.Abs(Center(c2.bbox).X - center.X) <= clusterHoriz)
+                        {
+                            partOfCluster = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (nearBig || (onTextLine && squareLike) || partOfCluster)
+                {
+                    toKeepLabels.Add(c.label);
+                    continue;
+                }
+
+                toRemoveLabels.Add(c.label);
+            }
+
+            // remove: build mask from labels and intersect with original black mask (so we never delete pixels created by dilation)
+            foreach (int lbl in toRemoveLabels)
+            {
+                using var mask = new Mat();
+                Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), mask); // 255 where label==lbl (on labelingMat)
+                using var intersect = new Mat();
+                Cv2.BitwiseAnd(mask, origBlackMask, intersect); // ensure only original black pixels removed
+                work.SetTo(new Scalar(255), intersect);
+            }
+
+            // debug visualization
+            if (debug || settings.ShowDespeckleDebug)
+            {
+                var vis = new Mat();
+                Cv2.CvtColor(bin, vis, ColorConversionCodes.GRAY2BGR);
+                foreach (var c in comps)
+                {
+                    var color = toKeepLabels.Contains(c.label) ? Scalar.Green : toRemoveLabels.Contains(c.label) ? Scalar.Red : Scalar.Yellow;
+                    Cv2.Rectangle(vis, c.bbox, color, 1);
+                }
+
+                labelingMat.Dispose();
+                return vis;
+            }
+
+            labelingMat.Dispose();
+            return work;
         }
 
         private void AutoCrop()
@@ -783,8 +1368,18 @@ namespace ImgViewer.Models
             updateImagePreview();
         }
 
+        private void SetBlurredWhenProcessing()
+        {
+            if (_currentImage != null)
+            {
+                _blurred = ApplyProcessingBlur(_blurred);
+                _appManager.SetBmpImageOnPreview(MatToBitmapSource(_blurred));
+            }
+        }
+
         private void updateImagePreview()
         {
+            if (_blurred != null) _blurred.Dispose();
             if (_currentImage != null)
             {
                 if (_appManager == null) return;
@@ -819,25 +1414,214 @@ namespace ImgViewer.Models
             }
         }
 
+        // Safe Mat -> BitmapSource conversion (no use of .Depth or non-existent members)
         private BitmapSource MatToBitmapSource(Mat mat)
         {
-            if (mat == null || mat.Empty())
+            if (mat == null || mat.Empty()) return null!;
+
+            // Desired types: 8-bit single/three/four channels
+            MatType desiredType;
+            PixelFormat pixelFormat;
+
+            // If mat already one of CV_8UC1/CV_8UC3/CV_8UC4 we will use that exact layout
+            if (mat.Type() == MatType.CV_8UC1)
             {
-                Debug.WriteLine("MatToBitmapSource: input Mat is null or empty.");
-                return null;
+                desiredType = MatType.CV_8UC1;
+                pixelFormat = PixelFormats.Gray8;
+            }
+            else if (mat.Type() == MatType.CV_8UC3)
+            {
+                desiredType = MatType.CV_8UC3;
+                pixelFormat = PixelFormats.Bgr24; // OpenCV BGR -> Bgr24
+            }
+            else if (mat.Type() == MatType.CV_8UC4)
+            {
+                desiredType = MatType.CV_8UC4;
+                pixelFormat = PixelFormats.Bgra32; // OpenCV BGRA -> Bgra32
+            }
+            else
+            {
+                // Not one of the exact desired types: decide target based on channels
+                int ch = mat.Channels();
+                if (ch == 1) { desiredType = MatType.CV_8UC1; pixelFormat = PixelFormats.Gray8; }
+                else if (ch == 3) { desiredType = MatType.CV_8UC3; pixelFormat = PixelFormats.Bgr24; }
+                else if (ch == 4) { desiredType = MatType.CV_8UC4; pixelFormat = PixelFormats.Bgra32; }
+                else
+                {
+                    // fallback: convert to 3-channel 8-bit BGR
+                    desiredType = MatType.CV_8UC3;
+                    pixelFormat = PixelFormats.Bgr24;
+                }
             }
 
-            // Быстрая конвертация через OpenCvSharp.Extensions:
-            //var bmp = mat.ToBitmap(); // создаёт System.Drawing.Bitmap (GDI+) — не идеально для WPF
-            // Но лучше: создать WriteableBitmap и скопировать байты
-            var wb = new WriteableBitmap(mat.Width, mat.Height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null);
-            int stride = mat.Cols * mat.ElemSize();
-            wb.WritePixels(new System.Windows.Int32Rect(0, 0, mat.Width, mat.Height), mat.Data, mat.Rows * stride, stride);
-            wb.Freeze();
-            return wb;
+            // Create a view that matches desiredType exactly (8-bit depth + correct channels).
+            // We will create a new Mat 'view' only if conversion is needed.
+            Mat view = mat;
+            bool viewOwned = false;
+
+            // If mat.Type() already equals desiredType we can use it directly.
+            if (mat.Type() != desiredType)
+            {
+                // We need to produce an 8-bit Mat with correct number of channels.
+                // Two-step robust approach:
+                // 1) If depth != 8-bit, first convert depth to 8-bit keeping channels
+                // 2) Then, if channels differ, use CvtColor to change channels
+
+                // Step 1: ensure 8-bit depth (CV_8U) while keeping channels
+                Mat step1 = mat;
+                bool step1Owned = false;
+
+                // Mat.Type() encodes both depth & channels; if depth isn't 8U, convert to CV_8UC(channels)
+                // We check whether current mat is an 8-bit type by comparing against any CV_8UC*
+                bool isCurrently8Bit =
+                    mat.Type() == MatType.CV_8UC1 ||
+                    mat.Type() == MatType.CV_8UC3 ||
+                    mat.Type() == MatType.CV_8UC4;
+
+                if (!isCurrently8Bit)
+                {
+                    step1 = new Mat();
+                    // ConvertTo will clamp/scale values; choose CV_8UC<channels>
+                    mat.ConvertTo(step1, MatType.CV_8UC(mat.Channels()));
+                    step1Owned = true;
+                }
+
+                // Step 2: if channels mismatch -> CvtColor from step1 -> view
+                if (step1.Channels() == (desiredType.Channels))
+                {
+                    // Same channel count -> just convert type (if needed)
+                    view = new Mat();
+                    step1.ConvertTo(view, desiredType);
+                    viewOwned = true;
+                }
+                else
+                {
+                    view = new Mat();
+                    // Cases: 1->3, 1->4, 3->1, 3->4, 4->3
+                    if (step1.Channels() == 1 && desiredType.Channels == 3)
+                        Cv2.CvtColor(step1, view, ColorConversionCodes.GRAY2BGR);
+                    else if (step1.Channels() == 1 && desiredType.Channels == 4)
+                        Cv2.CvtColor(step1, view, ColorConversionCodes.GRAY2BGRA);
+                    else if (step1.Channels() == 3 && desiredType.Channels == 1)
+                        Cv2.CvtColor(step1, view, ColorConversionCodes.BGR2GRAY);
+                    else if (step1.Channels() == 3 && desiredType.Channels == 4)
+                        Cv2.CvtColor(step1, view, ColorConversionCodes.BGR2BGRA);
+                    else if (step1.Channels() == 4 && desiredType.Channels == 3)
+                        Cv2.CvtColor(step1, view, ColorConversionCodes.BGRA2BGR);
+                    else
+                    {
+                        // fallback: try direct ConvertTo to desiredType
+                        step1.ConvertTo(view, desiredType);
+                    }
+                    viewOwned = true;
+                }
+
+                if (step1Owned) step1.Dispose();
+            }
+
+            try
+            {
+                int width = view.Cols;
+                int height = view.Rows;
+                int stride = (int)view.Step(); // use real step (may include padding)
+                long bufferSizeLong = (long)stride * height;
+                if (bufferSizeLong > int.MaxValue) throw new NotSupportedException("Image too large for WriteableBitmap.");
+
+                int bufferSize = (int)bufferSizeLong;
+                IntPtr dataPtr = view.Data;
+
+                var wb = new WriteableBitmap(width, height, 96, 96, pixelFormat, null);
+                var rect = new System.Windows.Int32Rect(0, 0, width, height);
+                wb.WritePixels(rect, dataPtr, bufferSize, stride);
+                wb.Freeze();
+                return wb;
+            }
+            finally
+            {
+                if (viewOwned && view != null && !view.IsDisposed) view.Dispose();
+            }
         }
 
 
+
+        // OLD METHOD
+        //private BitmapSource MatToBitmapSource(Mat mat)
+        //{
+        //    if (mat == null || mat.Empty())
+        //    {
+        //        Debug.WriteLine("MatToBitmapSource: input Mat is null or empty.");
+        //        return null;
+        //    }
+
+        //    // Быстрая конвертация через OpenCvSharp.Extensions:
+        //    //var bmp = mat.ToBitmap(); // создаёт System.Drawing.Bitmap (GDI+) — не идеально для WPF
+        //    // Но лучше: создать WriteableBitmap и скопировать байты
+        //    var wb = new WriteableBitmap(mat.Width, mat.Height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null);
+        //    int stride = mat.Cols * mat.ElemSize();
+        //    wb.WritePixels(new System.Windows.Int32Rect(0, 0, mat.Width, mat.Height), mat.Data, mat.Rows * stride, stride);
+        //    wb.Freeze();
+        //    return wb;
+        //}
+
+
+        public static Scalar SampleCentralGrayScalar(Mat src, int sampleSizePx = 0, double sampleFraction = 0.10)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return new Scalar(255, 255, 255); // fallback white
+
+            int w = src.Cols;
+            int h = src.Rows;
+            int minSide = Math.Min(w, h);
+
+            // choose sample side
+            int side;
+            if (sampleSizePx > 0)
+            {
+                side = Math.Max(1, Math.Min(sampleSizePx, minSide));
+            }
+            else
+            {
+                double frac = double.IsNaN(sampleFraction) || sampleFraction <= 0 ? 0.10 : sampleFraction;
+                side = Math.Max(1, (int)Math.Round(minSide * frac));
+            }
+
+            // center roi
+            int cx = w / 2;
+            int cy = h / 2;
+            int rx = Math.Max(0, cx - side / 2);
+            int ry = Math.Max(0, cy - side / 2);
+            int rw = Math.Min(side, w - rx);
+            int rh = Math.Min(side, h - ry);
+            if (rw <= 0 || rh <= 0) return new Scalar(255, 255, 255);
+
+            var roi = new Rect(rx, ry, rw, rh);
+
+            // extract roi
+            using var sample = new Mat(src, roi);
+
+            // compute mean
+            Scalar mean = Cv2.Mean(sample); // returns (B, G, R, A)
+
+            double gray;
+            if (sample.Channels() == 1)
+            {
+                // mean.Val0 already gray
+                gray = mean.Val0;
+            }
+            else
+            {
+                // OpenCV mean is BGR order in Scalar (Val0=B, Val1=G, Val2=R)
+                double b = mean.Val0;
+                double g = mean.Val1;
+                double r = mean.Val2;
+                gray = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+
+            // clamp and round
+            int gInt = (int)Math.Round(Math.Max(0.0, Math.Min(255.0, gray)));
+
+            return new Scalar(gInt, gInt, gInt);
+        }
 
 
 
@@ -939,8 +1723,139 @@ namespace ImgViewer.Models
             }
             old?.Dispose();
 
-            updateImagePreview();
         }
+
+        private Mat MajorityVotingBinarize(Mat srcColor, int baseThreshold = -1, int[] deltas = null)
+        {
+            if (srcColor == null) throw new ArgumentNullException(nameof(srcColor));
+            if (deltas == null) deltas = new[] { -20, 0, 20 };
+
+            using var gray = new Mat();
+            if (srcColor.Channels() == 3)
+                Cv2.CvtColor(srcColor, gray, ColorConversionCodes.BGR2GRAY);
+            else if (srcColor.Channels() == 4)
+                Cv2.CvtColor(srcColor, gray, ColorConversionCodes.BGRA2GRAY);
+            else
+                srcColor.CopyTo(gray);
+
+            int rows = gray.Rows, cols = gray.Cols;
+            int n = deltas.Length;
+
+            // base threshold: Otsu by default (more stable for documents)
+            int baseT = baseThreshold;
+            if (baseT <= 0)
+            {
+                using var tmp = new Mat();
+                double otsuVal = Cv2.Threshold(gray, tmp, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                baseT = (int)Math.Round(otsuVal);
+            }
+
+            // accumulator: use 16-bit to be safe
+            Mat acc = Mat.Zeros(gray.Size(), MatType.CV_16UC1);
+            var binList = new List<Mat>(n);
+
+            for (int i = 0; i < n; i++)
+            {
+                int t = Math.Max(0, Math.Min(255, baseT + deltas[i]));
+                var b = new Mat();
+
+                // BinaryInv -> text (dark) becomes 255 (foreground), background 0
+                Cv2.Threshold(gray, b, t, 255, ThresholdTypes.BinaryInv);
+
+                // Convert 0/255 -> 0/1 in 16-bit and add to acc
+                using var mask01 = new Mat();
+                b.ConvertTo(mask01, MatType.CV_16UC1, 1.0 / 255.0); // now 0 or 1 in CV_16U
+                Cv2.Add(acc, mask01, acc);
+
+                binList.Add(b); // store with text==255
+            }
+
+            // majority: need = ceil(n/2)
+            int need = (n + 1) / 2;
+            using var maskNeed16 = new Mat();
+            Cv2.Threshold(acc, maskNeed16, need - 1, 255, ThresholdTypes.Binary); // CV_16U, 0/255
+
+            using var maskNeed = new Mat();
+            maskNeed16.ConvertTo(maskNeed, MatType.CV_8UC1); // 0/255 8-bit
+
+            // result single-channel: default white (255), then set black (0) where maskNeed
+            var result = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(255));
+            result.SetTo(new Scalar(0), maskNeed); // black where majority says text
+
+            // compute median height from the middle bin (exists because binList has text==255)
+            int midIdx = Array.IndexOf(deltas, 0);
+            if (midIdx < 0) midIdx = n / 2;
+            Mat refBin = binList[midIdx];
+
+            int medianH = 20;
+            using (var lbl = new Mat())
+            using (var stats = new Mat())
+            using (var cents = new Mat())
+            {
+                int compN = Cv2.ConnectedComponentsWithStats(refBin, lbl, stats, cents, PixelConnectivity.Connectivity8, MatType.CV_32S);
+                var heights = new List<int>();
+                for (int i = 1; i < compN; i++)
+                {
+                    int h = stats.Get<int>(i, (int)ConnectedComponentsTypes.Height);
+                    if (h >= 1) heights.Add(h);
+                }
+                if (heights.Count > 0)
+                {
+                    heights.Sort();
+                    medianH = heights[heights.Count / 2];
+                }
+            }
+
+            int dotMax = Math.Max(1, (int)Math.Round(medianH * 0.35));
+            int dotAreaMax = Math.Max(4, dotMax * dotMax);
+
+            // unionSmall: collect small components from each bin (binList have text==255)
+            var unionSmall = Mat.Zeros(gray.Size(), MatType.CV_8UC1);
+            for (int bi = 0; bi < binList.Count; bi++)
+            {
+                using var lbl = new Mat();
+                using var stats = new Mat();
+                using var cents = new Mat();
+                int compN = Cv2.ConnectedComponentsWithStats(binList[bi], lbl, stats, cents, PixelConnectivity.Connectivity8, MatType.CV_32S);
+
+                for (int ci = 1; ci < compN; ci++)
+                {
+                    int area = stats.Get<int>(ci, (int)ConnectedComponentsTypes.Area);
+                    int h = stats.Get<int>(ci, (int)ConnectedComponentsTypes.Height);
+                    int w = stats.Get<int>(ci, (int)ConnectedComponentsTypes.Width);
+
+                    if (h <= dotMax && w <= dotMax && area <= dotAreaMax)
+                    {
+                        var tmp = new Mat();
+                        Cv2.InRange(lbl, new Scalar(ci), new Scalar(ci), tmp);
+
+                        var newUnion = new Mat();
+                        Cv2.BitwiseOr(unionSmall, tmp, newUnion);
+
+                        unionSmall.Dispose();
+                        unionSmall = newUnion; // теперь newUnion живёт дальше — освободите unionSmall позже
+                        tmp.Dispose();
+                    }
+                }
+            }
+
+            // unionSmall now marks small foreground components (255) -> set those pixels black (0) in result
+            result.SetTo(new Scalar(0), unionSmall);
+
+            // convert single-channel result (text==0) into 3-channel BGR to be compatible with pipeline
+            var colorResult = new Mat();
+            Cv2.CvtColor(result, colorResult, ColorConversionCodes.GRAY2BGR);
+
+            // cleanup
+            acc.Dispose();
+            unionSmall.Dispose();
+            foreach (var b in binList) b.Dispose();
+            result.Dispose();
+
+            // return 3-channel image (BGR) — pipeline expects 3 channels
+            return colorResult;
+        }
+
 
 
         private void Binarize(int threshold = 128)
@@ -956,7 +1871,6 @@ namespace ImgViewer.Models
             Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
 
             _currentImage = color.Clone(); // сохраняем результат как 3-канальную матрицу
-            updateImagePreview();
         }
 
         //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.

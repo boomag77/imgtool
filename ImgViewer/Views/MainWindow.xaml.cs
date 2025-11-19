@@ -474,12 +474,15 @@ namespace ImgViewer.Views
                 buttonText,
                 new[]
                 {
-                    new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Treshold", "Sauvola", "Adaptive"}, 0),
+                    new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
                     // Treshold alg
-                    new PipeLineParameter("Treshold", "BinarizeTreshold", 128, 0, 255, 1),
+                    new PipeLineParameter("Threshold", "binarizeThreshold", 128, 0, 255, 1),
                     // Adaptive alg
                     new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
                     new PipeLineParameter("Constant C", "C", 14, -50.0, 50.0, 1),
+
+                    // Majority
+                    new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
 
                      // new boolean checkbox parameters:
                     new PipeLineParameter("Use Gaussian", "useGaussian", false),
@@ -493,6 +496,76 @@ namespace ImgViewer.Views
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
             op4.Command = ProcessorCommand.Binarize;
             _pipeLineOperations.Add(op4);
+
+            var op5 = new PipeLineOperation(
+                "PunchRemoval",
+                buttonText,
+                new[]
+                {
+                    new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect"}, 0),
+                    // Circle
+                    new PipeLineParameter("Diameter", "diameter",20, 1, 500, 1),
+                    // Rect
+                    new PipeLineParameter("Height", "height", 20, 1, 500, 1),
+                    new PipeLineParameter("Width", "width", 20, 1, 100, 1),
+                   
+                    // common
+                    new PipeLineParameter("Density", "density", 0.50, 0.00, 1.00, 0.05),
+                    new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
+                    new PipeLineParameter("Left Offset", "leftOffset", 100, 1, 500, 1),
+                    new PipeLineParameter("Right Offset", "rightOffset", 100, 1, 500, 1),
+                    new PipeLineParameter("Top Offset", "topOffset", 100, 1, 500, 1),
+                    new PipeLineParameter("Bottom Offset", "bottomOffset", 100, 1, 500, 1),
+
+                     // new boolean checkbox parameters:
+                    //new PipeLineParameter("Use Gaussian", "useGaussian", false),
+                   
+
+
+                },
+                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.PunchHolesRemove, operation.CreateParameterDictionary()));
+                op5.Command = ProcessorCommand.PunchHolesRemove;
+                _pipeLineOperations.Add(op5);
+
+            var op6 = new PipeLineOperation(
+                "Despeckle",
+                buttonText,
+                new[]
+                {
+                        new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
+                        new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.25, 0.01, 2, 0.01),
+                        new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
+                        new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 1.00, 0.01),
+                        new PipeLineParameter("Proximity Radius Fraction", "ProximityRadiusFraction", 0.80, 0.01, 1.00, 0.01),
+                        new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 1.00, 0.05),
+                        new PipeLineParameter("KeepClusters", "keepClusters", true),
+                        new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", true),
+                        new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
+                        new PipeLineParameter("Dilate Iterations", "DilateIter", 1, 1, 5, 1),
+                        new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
+                        new PipeLineParameter("Show candidates", "showDespeckleDebug", true)
+                },
+            (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Despeckle, operation.CreateParameterDictionary()));
+            op6.Command = ProcessorCommand.Despeckle;
+            _pipeLineOperations.Add(op6);
+
+            var op7 = new PipeLineOperation(
+                "LinesRemove",
+                buttonText,
+                new[]
+                {
+                        new PipeLineParameter("Orientation", "orientation", Enum.GetNames(typeof(LineOrientation)), 1),
+                        new PipeLineParameter("Line width (px)", "lineWidthPx", 1, 1, 20, 1),
+                        new PipeLineParameter("Min Length Fraction", "minLengthFraction", 0.5, 0.05, 1, 0.01),
+                        new PipeLineParameter("Start offset (px)", "offsetStartPx", -1, -1, 500, 1),
+                        new PipeLineParameter("Line color (Red)", "lineColorRed", -1, -1, 255, 1),
+                        new PipeLineParameter("Line color (Green)", "lineColorGreen", -1, -1, 255, 1),
+                        new PipeLineParameter("Line color (Blue)", "lineColorBlue", -1, -1, 255, 1),
+                        new PipeLineParameter("Color tolerance", "colorTolerance", 40, 0, 255, 1)
+                },
+            (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.LineRemove, operation.CreateParameterDictionary()));
+            op7.Command = ProcessorCommand.LineRemove;
+            _pipeLineOperations.Add(op7);
 
         }
 
@@ -648,6 +721,9 @@ namespace ImgViewer.Views
                 "Deskew" => "Deskew",
                 "BordersRemove" => "Border Removal",
                 "Binarize" => "Binarize",
+                "Despeckle" => "Despeckle",
+                "PunchHolesRemove" => "PunchHoles Remove",
+                "LinesRemove" => "Lines Remove",
                 _ => command
             };
         }
@@ -658,7 +734,10 @@ namespace ImgViewer.Views
             {
                 "Deskew" => ProcessorCommand.Deskew,
                 "BordersRemove" => ProcessorCommand.BordersRemove,
-                "Binarize" => ProcessorCommand.Binarize
+                "Binarize" => ProcessorCommand.Binarize,
+                "Despeckle" => ProcessorCommand.Despeckle,
+                "PunchHolesRemove" => ProcessorCommand.PunchHolesRemove,
+                "LinesRemove" => ProcessorCommand.LineRemove
                 //_ => ProcessorCommand.None // добавьте None или обработку по умолчанию
             };
         }
@@ -1015,7 +1094,6 @@ namespace ImgViewer.Views
             var dlg = new Microsoft.Win32.OpenFileDialog();
             dlg.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tif;*.tiff|All Files|*.*";
             dlg.Multiselect = false;
-            dlg.InitialDirectory = _manager.LastOpenedFolder;
             if (dlg.ShowDialog() == true)
             {
                 try
@@ -1856,19 +1934,32 @@ namespace ImgViewer.Views
             // 1) prefer SelectedOption string if available
             // 2) otherwise fallback to SelectedIndex (index 2 means "Adaptive" in your options order)
             bool isAdaptive = false;
+            bool isMajority = false;
+            bool isThreshold = false;
+
             if (binAlgo != null)
             {
                 var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
                 if (!string.IsNullOrEmpty(opt))
+                {
                     isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+                    isMajority = opt.Equals("Majority", StringComparison.OrdinalIgnoreCase);
+                    isThreshold = opt.Equals("Threshold", StringComparison.OrdinalIgnoreCase);
+                }
                 else
-                    isAdaptive = binAlgo.SelectedIndex == 2; // defensive fallback: index 2 = Adaptive
+                {
+                    isAdaptive = true;
+                }
+                    
+                
             }
             else
             {
                 // fallback if binAlgo missing — keep previous behaviour
                 isAdaptive = (selectedOption ?? "").Trim().Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
             }
+
+
 
             // find useMorphology flag once
             var morphFlag = _parameters.FirstOrDefault(x => x.Key == "useMorphology");
@@ -1882,11 +1973,11 @@ namespace ImgViewer.Views
                         p.IsVisible = true;
                         break;
 
-                    case "BinarizeTreshold":
-                        p.IsVisible = (binAlgo != null)
-                            ? ((binAlgo.SelectedOption ?? "").Equals("Treshold", StringComparison.OrdinalIgnoreCase)
-                                || binAlgo.SelectedIndex == 0)
-                            : (selectedOption ?? "").Trim().Equals("Treshold", StringComparison.OrdinalIgnoreCase);
+                    case "binarizeThreshold":
+                        p.IsVisible = isThreshold || isMajority;
+                        break;
+                    case "majorityOffset":
+                        p.IsVisible = isMajority;
                         break;
 
                     case "blockSize":

@@ -494,9 +494,18 @@
                          DragLeave="PipelineListBox_DragLeave"
                          Drop="PipelineListBox_Drop"
                          GiveFeedback="PipelineListBox_GiveFeedback"
+                         
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.CanContentScroll="True">
+                         ScrollViewer.CanContentScroll="True"
+                         VirtualizingStackPanel.IsVirtualizing="True"
+                         VirtualizingStackPanel.VirtualizationMode="Recycling"
+                         VirtualizingStackPanel.ScrollUnit="Pixel"   
+                         VirtualizingStackPanel.CacheLength="2"
+                         VirtualizingStackPanel.CacheLengthUnit="Page"
+                         VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                         ScrollViewer.PanningMode="VerticalOnly"
+                         ScrollViewer.IsDeferredScrollingEnabled="False" >
                     <ListBox.Resources>
                         <Style TargetType="ScrollViewer">
                             <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>

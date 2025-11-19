@@ -52,7 +52,24 @@ namespace ImgViewer.Models
         public double Step;
     }
 
+    public enum PunchShape
+    {
+        Circle,
+        Rect
+    }
 
+    public class PunchSpec
+    {
+        public PunchShape Shape { get; set; }
+        // For Circle: use Diameter; for Rect: use Size
+        public int Diameter { get; set; } = 20; // px, for circle
+        public OpenCvSharp.Size RectSize { get; set; } = new OpenCvSharp.Size(20, 20); // for rect
+        public int Count { get; set; } = 1; // expected count (best-effort)
+                                            // density: 0..1 where 0 -> light hole, 1 -> dark hole (helps validation)
+        public double Density { get; set; } = 0.5;
+        // if you want extra tolerance in size matching (fraction)
+        public double SizeToleranceFraction { get; set; } = 0.4; // ±40%
+    }
 
     public class DeskewOperation
     {

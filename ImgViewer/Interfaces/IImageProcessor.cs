@@ -51,7 +51,9 @@ namespace ImgViewer.Interfaces
         Despeckle,
         AutoCropRectangle,
         LineRemove,
-        DotsRemove
+        DotsRemove,
+        PunchHolesRemove,
+        ChannelsCorrection
     }
 
     //public enum TiffCompression

@@ -71,7 +71,7 @@ namespace ImgViewer.Models
             }, System.Windows.Threading.DispatcherPriority.Render);
         }
 
-        public async Task SetBmpImageAsOriginal(ImageSource bmp)
+        private async Task SetBmpImageAsOriginal(ImageSource bmp)
         {
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
@@ -95,8 +95,8 @@ namespace ImgViewer.Models
 
         public void ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
         {
-            _mainViewModel.Status = $"Processing image...";
-            
+            _mainViewModel.Status = $"Processing image ({command})";
+            Debug.WriteLine(command.ToString());
             _imageProcessor.ApplyCommandToCurrent(command, parameters);
             _mainViewModel.Status = $"Standby";
         }
