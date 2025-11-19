@@ -318,8 +318,24 @@ namespace ImgViewer.Models
                         }
                         outMat = srcGray;
 
+
+                        if (debug)
+                        {
+                            // для отладки — красим спеклы в средне-серый, чтобы видно было
+                            Mat maskToDraw = intersect;
+                            using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
+                            maskToDraw = intersect.Clone();
+                            Cv2.Dilate(maskToDraw, maskToDraw, k, iterations: 2);
+                            outMat.SetTo(new Scalar(128), maskToDraw);
+                            maskToDraw.Dispose();
+                        }
+                        else
+                        {
+                            // боевой режим: спеклы -> белый фон
+                            outMat.SetTo(new Scalar(255), intersect);
+                        }
                         // отбеливаем именно speckles
-                        outMat.SetTo(new Scalar(255), intersect);
+                        //outMat.SetTo(new Scalar(0), intersect);
                         //if (removedPixels > 0)
                         //    outMat.SetTo(new Scalar(0));
                     }
@@ -367,10 +383,19 @@ namespace ImgViewer.Models
                             (alpha ?? new Mat(outMat.Size(), MatType.CV_8UC1, Scalar.All(255)))
                         }, outMat);
 
-                        // отбеливаем speckles c полной альфой
-                        outMat.SetTo(new Scalar(255, 255, 255, 255), intersect);
-                        //if (removedPixels > 0)
-                        //    outMat.SetTo(new Scalar(0, 0, 255, 255)); // ВЕСЬ кадр в красный
+                        if (debug)
+                        {
+                            Mat maskToDraw = intersect.Clone();
+                            using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
+                            Cv2.Dilate(maskToDraw, maskToDraw, k, iterations: 2);
+                            outMat.SetTo(new Scalar(0, 0, 255, 255), maskToDraw);
+                            maskToDraw.Dispose();
+                        }
+                        else
+                        {
+                            // боевой режим: белый с полной альфой
+                            outMat.SetTo(new Scalar(255, 255, 255, 255), intersect);
+                        }
 
                         if (alpha != null) alpha.Dispose();
                         foreach (var m in chs) m.Dispose();
