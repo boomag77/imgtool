@@ -95,6 +95,7 @@ namespace ImgViewer.Models
 
         public void ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
         {
+            if (_mainViewModel.OriginalImage == null) return;
             _mainViewModel.Status = $"Processing image ({command})";
             Debug.WriteLine(command.ToString());
 

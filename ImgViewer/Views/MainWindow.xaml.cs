@@ -1,25 +1,17 @@
-﻿using BitMiracle.LibTiff.Classic;
-using ImgViewer.Interfaces;
+﻿using ImgViewer.Interfaces;
 using ImgViewer.Models;
-using System;
-using System.CodeDom;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 
 using Brush = System.Windows.Media.Brush;
@@ -59,7 +51,11 @@ namespace ImgViewer.Views
         private InsertionIndicatorAdorner? _insertionAdorner;
 
         private bool _livePipelineRunning = false;
+        private readonly HashSet<PipeLineOperation> _liveRunning = new();
 
+        // debounce для Live-пайплайна
+        private CancellationTokenSource? _liveDebounceCts;
+        private readonly TimeSpan _liveDebounceDelay = AppSettings.ParametersChangedDebounceDelay;
 
         public IViewModel ViewModel
         {
@@ -82,7 +78,7 @@ namespace ImgViewer.Views
 
         //private string _lastOpenedFolder = string.Empty;
 
-        private readonly HashSet<PipeLineOperation> _liveRunning = new();
+        
 
 
         private static readonly string[] DeskewAlgorithmOptions = new[] { "Auto", "ByBorders", "Hough", "Projection", "PCA" };
@@ -111,7 +107,7 @@ namespace ImgViewer.Views
             };
 
             InitializePipeLineOperations();
-            
+
             SubscribeParameterChangedHandlers();
             HookLiveHandlers();
 
@@ -122,8 +118,46 @@ namespace ImgViewer.Views
             InitializePipeLineOperations(ops);
         }
 
+        private void ScheduleLivePipelineRun()
+        {
+            // отменяем предыдущий запланированный запуск
+            _liveDebounceCts?.Cancel();
+
+            var cts = new CancellationTokenSource();
+            _liveDebounceCts = cts;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // ждём паузу между изменениями
+                    await Task.Delay(_liveDebounceDelay, cts.Token);
+                    cts.Token.ThrowIfCancellationRequested();
+
+                    // если в этот момент уже идёт прогон — ждём, пока закончится
+                    //while (_livePipelineRunning)
+                    //{
+                    //    await Task.Delay(50, cts.Token);
+                    //    cts.Token.ThrowIfCancellationRequested();
+                    //}
+
+                    await RunLivePipelineFromOriginalAsync();
+                }
+                catch (TaskCanceledException)
+                {
+                    // это нормально — сработал debounce
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Debounced live pipeline run failed: {ex}");
+                }
+            });
+        }
+
+
         private async Task RunLivePipelineFromOriginalAsync()
         {
+            if (_viewModel.OriginalImage == null) return;
             // защита от повторных запусков, пока предыдущий ещё работает
             if (_livePipelineRunning)
                 return;
@@ -202,11 +236,12 @@ namespace ImgViewer.Views
             }
         }
 
-        private async void OnOperationLiveChanged(PipeLineOperation op)
+        private void OnOperationLiveChanged(PipeLineOperation op)
         {
 
             // при ЛЮБОМ изменении Live (ON/OFF) пересобираем весь pipeline
-            await RunLivePipelineFromOriginalAsync();
+            ScheduleLivePipelineRun();
+            //await RunLivePipelineFromOriginalAsync();
 
             //// only react when Live turned ON
             //if (!op.Live) return;
@@ -282,12 +317,13 @@ namespace ImgViewer.Views
         }
 
         // --- Replace this existing method with the code below ---
-        private async void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
+        private void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
         {
             // если операция не включена в pipeline, игнорируем изменение параметров
             if (!op.InPipeline || !op.Live)
                 return;
-            await RunLivePipelineFromOriginalAsync();
+            ScheduleLivePipelineRun();
+            //await RunLivePipelineFromOriginalAsync();
 
             //// avoid re-entrancy: if a pipeline-run is already applying, ignore subsequent rapid changes
             //if (_livePipelineRunning) return;
@@ -595,8 +631,8 @@ namespace ImgViewer.Views
 
                 },
                 (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.PunchHolesRemove, operation.CreateParameterDictionary()));
-                op5.Command = ProcessorCommand.PunchHolesRemove;
-                _pipeLineOperations.Add(op5);
+            op5.Command = ProcessorCommand.PunchHolesRemove;
+            _pipeLineOperations.Add(op5);
 
             var op6 = new PipeLineOperation(
                 "Despeckle",
@@ -1158,7 +1194,7 @@ namespace ImgViewer.Views
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.StreamSource = stream;
             bitmap.EndInit();
-            bitmap.Freeze(); 
+            bitmap.Freeze();
 
             return bitmap;
         }
@@ -1274,8 +1310,8 @@ namespace ImgViewer.Views
                 SavePipelineToJSON(path, json);
                 _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(path);
             }
-            
-            
+
+
         }
 
         private void SavePipelineToJSON(string path, string json)
@@ -1288,15 +1324,15 @@ namespace ImgViewer.Views
             try
             {
                 File.WriteAllText(System.IO.Path.Combine(folder, fileName), pipeLineForSave);
-                #if DEBUG
+#if DEBUG
                 Debug.WriteLine("Pipeline saved to " + fileName);
-                #endif
+#endif
             }
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show(ex.Message, "Error!", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-            
+
         }
 
         private void ResetPipelineToDefaults_Click(object sender, RoutedEventArgs e)
@@ -1350,7 +1386,7 @@ namespace ImgViewer.Views
                 int i = Array.IndexOf(files, _viewModel.CurrentImagePath);
                 if (i == -1)
                     return;
-                int newIdx = next ? i+1 : i-1;
+                int newIdx = next ? i + 1 : i - 1;
                 if (newIdx < 0 || newIdx >= files.Length) return;
 
                 var target = files[newIdx];
@@ -1450,7 +1486,7 @@ namespace ImgViewer.Views
         //}
 
         private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
-            {
+        {
             var pipeline = PipeLineOperations
                     .Where(op => op.InPipeline && op.Command.HasValue)
                     .Select(op => (op.Command.Value, op.CreateParameterDictionary()))
@@ -1485,8 +1521,8 @@ namespace ImgViewer.Views
                                                      MessageBoxButton.OKCancel,
                                                      MessageBoxImage.Question);
             if (res != MessageBoxResult.OK) return;
-           
-           
+
+
             try
             {
                 _manager.ProcessRootFolder(rootFolder, pipeline, true);
@@ -1507,7 +1543,7 @@ namespace ImgViewer.Views
             {
                 // попытка взять папку  из пути текущего файла
                 //string? folder = _viewModel?.LastOpenedFolder;
-                
+
 
                 var pipeline = GetPipelineParameters();
 
@@ -1552,7 +1588,7 @@ namespace ImgViewer.Views
                 //    return;
                 //}
 
-                
+
 
 
                 // вызываем менеджер, передавая команды
@@ -1629,7 +1665,7 @@ namespace ImgViewer.Views
 
         private void SavingOptions_Click(object sender, RoutedEventArgs e)
         {
-            
+
 
             var tiffOptionsWindow = new TiffSavingOptionsWindow();
             tiffOptionsWindow.Owner = this;
@@ -1859,7 +1895,7 @@ namespace ImgViewer.Views
     //            {
     //                // forward (operation, parameter) to listeners
     //                ParameterChanged?.Invoke(this, p);
-                    
+
     //            };
     //        }
     //    }
@@ -2121,7 +2157,7 @@ namespace ImgViewer.Views
     //                    p.IsVisible = isAuto && autoThresh;
     //                    break;
     //                case "threshFrac":
-                        
+
     //                case "contrastThr":
     //                case "centralSample":
     //                case "maxRemoveFrac":

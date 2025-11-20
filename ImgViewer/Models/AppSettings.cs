@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace ImgViewer.Models
 {
@@ -15,7 +11,7 @@ namespace ImgViewer.Models
         private TiffCompression _tiffCompression;
         private string _lastOpenedFolder;
 
-        private readonly TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
+        private static readonly TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
 
         // cancellation for scheduled save
         private CancellationTokenSource? _saveCts;
@@ -39,7 +35,15 @@ namespace ImgViewer.Models
             }
         }
 
-        public AppSettings() 
+        public static TimeSpan ParametersChangedDebounceDelay
+        {
+            get
+            {
+                return _debounceDelay;
+            }
+        }
+
+        public AppSettings()
         {
             _tiffCompression = TiffCompression.CCITTG4;
 
