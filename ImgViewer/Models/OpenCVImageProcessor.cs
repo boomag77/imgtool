@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Point = OpenCvSharp.Point;
@@ -21,13 +23,36 @@ namespace ImgViewer.Models
         private Mat _blurred;
         private readonly IAppManager _appManager;
 
+        private readonly object _imageLock = new();
+
+        private Mat WorkingImage
+        {
+            get
+            {
+                lock (_imageLock)
+                    return _currentImage.Clone();
+            }
+            set
+            {
+                Mat old;
+                lock (_imageLock)
+                {
+                    old = _currentImage;
+                    _currentImage = value;
+                }
+                
+                old?.Dispose();
+                if (_appManager == null) return;
+                _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
+            }
+        }
         public ImageSource CurrentImage
         {
             set
             {
                 using var mat = BitmapSourceToMat((BitmapSource)value);
                 if (mat == null || mat.Empty()) return;
-                _currentImage = mat.Clone();
+                WorkingImage = mat.Clone();
 
             }
         }
@@ -175,7 +200,7 @@ namespace ImgViewer.Models
         public Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
             //throw new NotImplementedException();
-            if (_currentImage != null && !_currentImage.Empty())
+            if (WorkingImage != null && !WorkingImage.Empty())
             {
                 if (format == ImageFormat.Tiff)
                 {
@@ -187,7 +212,7 @@ namespace ImgViewer.Models
                             paramsList.Add((int)TiffCompression.None);
                             break;
                         case TiffCompression.CCITTG4:
-                            if (_currentImage.Channels() != 1)
+                            if (WorkingImage.Channels() != 1)
                             {
                                 // для G4 нужно 1-битное изображение
                                 //using var gray = new Mat();
@@ -229,13 +254,13 @@ namespace ImgViewer.Models
                             break;
                     }
                     //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
-                    byte[] pngData = _currentImage.ImEncode(".png");
+                    byte[] pngData = WorkingImage.ImEncode(".png");
                     return new MemoryStream(pngData);
                 }
                 else
                 {
                     // для других форматов просто PNG
-                    return MatToStream(_currentImage);
+                    return MatToStream(WorkingImage);
                 }
             }
             return null;
@@ -522,108 +547,239 @@ namespace ImgViewer.Models
             return outMat;
         }
 
-
-        public void ApplyCommandToCurrent(ProcessorCommand command, Dictionary<string, object> parameters = null)
+        private void ApplyBinarize(BinarizeMethod method, BinarizeParameters parameters)
         {
-
-            if (_currentImage != null)
+            switch (method)
             {
+                case BinarizeMethod.Threshold:
+                    break;
+                case BinarizeMethod.Adaptive:
+                    break;
+                case BinarizeMethod.Sauvola:
+                    break;
+                case BinarizeMethod.Majority:
+                    break;
+            }
+        }
 
+        private T ToStruct<T>(Dictionary<string, object> dict)
+        where T : struct
+        {
+            var type = typeof(T);
+
+            // если хочешь дефолтные значения — можешь здесь задать их руками
+            object boxed = new T(); // boxed struct
+
+            foreach (var kv in dict)
+            {
+                // ищем public поле с таким именем (Method, Threshold, ...)
+                var field = type.GetField(
+                    kv.Key,
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+
+                if (field == null)
+                    continue; // нет такого поля — пропускаем
+
+                var targetType = field.FieldType;
+                var value = kv.Value;
+
+                var isNullable =
+                    targetType.IsGenericType &&
+                    targetType.GetGenericTypeDefinition() == typeof(Nullable<>);
+
+                var underlyingType = isNullable
+                    ? Nullable.GetUnderlyingType(targetType)!
+                    : targetType;
+
+                if (targetType.IsEnum)
+                {
+                    // Enum: поддерживаем строку и числовые значения
+                    if (value is string s)
+                    {
+                        value = Enum.Parse(underlyingType, s, ignoreCase: true);
+                    }
+                    else
+                    {
+                        value = Enum.ToObject(
+                            underlyingType,
+                            Convert.ToInt32(value, CultureInfo.InvariantCulture));
+                    }
+                }
+                else
+                {
+                    // обычные типы: int, bool, double и т.п.
+                    if (!underlyingType.IsAssignableFrom(value.GetType()))
+                    {
+                        value = Convert.ChangeType(
+                            value,
+                            underlyingType,
+                            CultureInfo.InvariantCulture);
+                    }
+                }
+
+                if (isNullable)
+                {
+                    var nullableValue = Activator.CreateInstance(targetType, value);
+                    field.SetValue(boxed, nullableValue);
+                }
+                else
+                {
+                    field.SetValue(boxed, value);
+                }
+            }
+
+            return (T)boxed;
+        }
+
+        public void DumpStruct<T>(T value) where T : struct
+        {
+            var type = typeof(T);
+            var sb = new StringBuilder();
+
+            sb.Append(type.Name);
+            sb.Append(" { ");
+
+            bool first = true;
+
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!first)
+                    sb.Append(", ");
+
+                sb.Append(field.Name);
+                sb.Append("=");
+
+                var fieldValue = field.GetValue(value);
+                sb.Append(fieldValue?.ToString() ?? "null");
+
+                first = false;
+            }
+
+            sb.Append(" }");
+
+            Debug.WriteLine(sb.ToString());
+        }
+
+        public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)
+        {
+            using var src = WorkingImage;
+            if (src != null)
+            {
+                
                 switch (command)
                 {
                     case ProcessorCommand.Binarize:
 
-                        int threshold = 128;
-                        int blockSize = 3;
-                        double c = 14;
-                        bool useGaussian = false;
-                        bool useMorphology = false;
-                        int morphKernel = 3;
-                        int morphIters = 1;
-                        int majorityOffset = 20;
+                        //int threshold = 128;
+                        //int blockSize = 3;
+                        //double c = 14;
+                        //bool useGaussian = false;
+                        //bool useMorphology = false;
+                        //int morphKernel = 3;
+                        //int morphIters = 1;
+                        //int majorityOffset = 20;
 
-                        foreach (var kv in parameters)
+                        var binParams = ToStruct<BinarizeParameters>(parameters);
+
+                        switch (binParams.Method)
                         {
-                            switch (kv.Key)
-                            {
-                                case "binarizeThreshold":
-                                    threshold = SafeInt(kv.Value, threshold);
-                                    break;
-                                case "blockSize":
-                                    blockSize = SafeInt(kv.Value, blockSize);
-                                    break;
-                                case "C":
-                                    {
-                                        var v = kv.Value;
-                                        if (v is double dv) { c = dv; break; }
-                                        if (v is float fv) { c = fv; break; }
-                                        if (v is int iv) { c = iv; break; }
-                                        var s = v?.ToString()?.Trim();
-                                        if (string.IsNullOrEmpty(s)) break;
-                                        if (s.EndsWith("%", StringComparison.Ordinal))
-                                        {
-                                            var p = s.TrimEnd('%').Trim();
-                                            if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
-                                                c = pd / 100.0;
-                                            else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
-                                                c = pd / 100.0;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-                                        {
-                                            c = d;
-                                        }
-                                        else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
-                                        {
-                                            c = d;
-                                        }
-                                    }
-                                    break;
-                                case "useGaussian":
-                                    useGaussian = SafeBool(kv.Value, useGaussian);
-                                    break;
-                                case "useMorphology":
-                                    useMorphology = SafeBool(kv.Value, useMorphology);
-                                    break;
-                                case "morphKernelBinarize":
-                                    morphKernel = SafeInt(kv.Value, morphKernel);
-                                    break;
-                                case "morphIterationsBinarize":
-                                    morphIters = SafeInt(kv.Value, morphIters);
-                                    break;
-                                case "majorityOffset":
-                                    majorityOffset = SafeInt(kv.Value, majorityOffset);
-                                    break;
-
-                            }
+                            case BinarizeMethod.Threshold:
+                                //DumpStruct(binParams);
+                                WorkingImage = BinarizeThreshold(src, binParams.Threshold);
+                                break;
+                            case BinarizeMethod.Adaptive:
+                                WorkingImage = BinarizeAdaptive(src, binParams, invert: false);
+                                break;
+                            case BinarizeMethod.Sauvola:
+                                WorkingImage = SauvolaBinarize(src, binParams);
+                                break;
+                            case BinarizeMethod.Majority:
+                                WorkingImage = MajorityBinarize(src, binParams);
+                                break;
                         }
-                        foreach (var kv in parameters)
-                        {
 
-                            if (kv.Key == "binarizeAlgorithm")
-                            {
-                                Debug.WriteLine(kv.Value.ToString());
-                                switch (kv.Value.ToString())
-                                {
-                                    case "Threshold":
-                                        Debug.WriteLine(threshold);
-                                        Binarize(threshold);
-                                        break;
-                                    case "Adaptive":
-                                        BinarizeAdaptive(blockSize, c, useGaussian, useMorphology, morphKernel, morphIters);
-                                        break;
-                                    case "Sauvola":
-                                        SauvolaBinarize();
-                                        break;
-                                    case "Majority":
-                                        Debug.WriteLine(threshold.ToString() + " " + majorityOffset.ToString());
+                        //foreach (var kv in parameters)
+                        //{
+                        //    switch (kv.Key)
+                        //    {
+                        //        case "binarizeThreshold":
+                        //            threshold = SafeInt(kv.Value, threshold);
+                        //            break;
+                        //        case "blockSize":
+                        //            blockSize = SafeInt(kv.Value, blockSize);
+                        //            break;
+                        //        case "C":
+                        //            {
+                        //                var v = kv.Value;
+                        //                if (v is double dv) { c = dv; break; }
+                        //                if (v is float fv) { c = fv; break; }
+                        //                if (v is int iv) { c = iv; break; }
+                        //                var s = v?.ToString()?.Trim();
+                        //                if (string.IsNullOrEmpty(s)) break;
+                        //                if (s.EndsWith("%", StringComparison.Ordinal))
+                        //                {
+                        //                    var p = s.TrimEnd('%').Trim();
+                        //                    if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
+                        //                        c = pd / 100.0;
+                        //                    else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
+                        //                        c = pd / 100.0;
+                        //                }
+                        //                else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                        //                {
+                        //                    c = d;
+                        //                }
+                        //                else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
+                        //                {
+                        //                    c = d;
+                        //                }
+                        //            }
+                        //            break;
+                        //        case "useGaussian":
+                        //            useGaussian = SafeBool(kv.Value, useGaussian);
+                        //            break;
+                        //        case "useMorphology":
+                        //            useMorphology = SafeBool(kv.Value, useMorphology);
+                        //            break;
+                        //        case "morphKernelBinarize":
+                        //            morphKernel = SafeInt(kv.Value, morphKernel);
+                        //            break;
+                        //        case "morphIterationsBinarize":
+                        //            morphIters = SafeInt(kv.Value, morphIters);
+                        //            break;
+                        //        case "majorityOffset":
+                        //            majorityOffset = SafeInt(kv.Value, majorityOffset);
+                        //            break;
 
-                                        MajorityBinarize(threshold, majorityOffset);
-                                        break;
+                        //    }
+                        //}
+                        //foreach (var kv in parameters)
+                        //{
 
-                                }
-                            }
+                        //    if (kv.Key == "binarizeAlgorithm")
+                        //    {
+                        //        Debug.WriteLine(kv.Value.ToString());
+                        //        switch (kv.Value.ToString())
+                        //        {
+                        //            case "Threshold":
+                                        
+                        //                Binarize(threshold);
+                        //                break;
+                        //            case "Adaptive":
+                        //                BinarizeAdaptive(blockSize, c, useGaussian, useMorphology, morphKernel, morphIters);
+                        //                break;
+                        //            case "Sauvola":
+                        //                SauvolaBinarize();
+                        //                break;
+                        //            case "Majority":
+                        //                Debug.WriteLine(threshold.ToString() + " " + majorityOffset.ToString());
 
-                        }
+                        //                MajorityBinarize(threshold, majorityOffset);
+                        //                break;
+
+                        //        }
+                        //    }
+
+                        //}
                         break;
                     case ProcessorCommand.Deskew:
                         //Deskewer.Parameters p = new Deskewer.Parameters();
@@ -633,7 +789,7 @@ namespace ImgViewer.Models
                             Debug.WriteLine(kv.Value.ToString());
 
                         }
-                        NewDeskew(parameters);
+                        WorkingImage = NewDeskew(src, parameters);
                         //Deskew();
                         break;
                     case ProcessorCommand.BordersRemove:
@@ -682,7 +838,7 @@ namespace ImgViewer.Models
                                         int color = Math.Max(0, Math.Min(255, i));
                                         //bgColor = new Scalar(0, 0, 255);
                                         //bgColor = new Scalar(color, color, color);
-                                        bgColor = SampleCentralGrayScalar(_currentImage, 0, 0.1);
+                                        bgColor = SampleCentralGrayScalar(WorkingImage, 0, 0.1);
                                         Debug.WriteLine("bgColor:", bgColor.ToString());
                                         break;
                                     case "darkThreshold":
@@ -726,7 +882,6 @@ namespace ImgViewer.Models
                                 }
                             }
 
-
                             foreach (var kv in parameters)
                             {
                                 if (kv.Key == "borderRemovalAlgorithm")
@@ -737,10 +892,9 @@ namespace ImgViewer.Models
                                         case "Auto":
                                             if (autoThresh)
                                             {
-                                                darkThresh = EstimateBlackThreshold(_currentImage, marginPercentForThresh, shiftFactorForTresh);
+                                                darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
                                             }
-
-                                                _currentImage = RemoveBorderArtifactsGeneric_Safe(_currentImage,
+                                                WorkingImage = RemoveBorderArtifactsGeneric_Safe(src,
                                                     darkThresh,
                                                     bgColor,
                                                     minAreaPx,
@@ -751,7 +905,7 @@ namespace ImgViewer.Models
                                                 );
                                             break;
                                         case "By Contrast":
-                                            RemoveBordersByRowColWhite(
+                                            WorkingImage = RemoveBordersByRowColWhite(src,
                                                     threshFrac: treshFrac,
                                                     contrastThr: contrastThr,
                                                     centralSample: centralSample,
@@ -764,8 +918,6 @@ namespace ImgViewer.Models
                             }
 
                         }
-                        //var thr = EstimateBlackThreshold(_currentImage);
-                        //RemoveBorderArtifactsGeneric_Safe(_currentImage, 255);
                         break;
                     case ProcessorCommand.Despeckle:
                         //applyDespeckleCurrent();
@@ -828,12 +980,12 @@ namespace ImgViewer.Models
                         }
 
                         //_currentImage = DespeckleApplyToSource(_currentImage, settings, true, false, true);
-                        Despeckle(settings);
+                        WorkingImage = Despeckle(src, settings);
                         //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
 
                         break;
                     case ProcessorCommand.AutoCropRectangle:
-                        AutoCrop();
+                        WorkingImage = AutoCrop(src);
                         //applyAutoCropRectangleCurrent();
                         break;
                     case ProcessorCommand.LineRemove:
@@ -890,7 +1042,7 @@ namespace ImgViewer.Models
                             }
                         }
 
-                        RemoveLines(lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
+                        WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
 
                         
 
@@ -1011,25 +1163,26 @@ namespace ImgViewer.Models
                         }
                         specs.Add(spec1);
                         specs.Add(spec2);
-                        PunchHolesRemove(specs, topOffset, bottomOffset, leftOffset, rightOffset);
+                        Mat result = PunchHolesRemove(src, specs, topOffset, bottomOffset, leftOffset, rightOffset);
 
-                        
+                        WorkingImage = result;
 
 
                         break;
 
                 }
-                updateImagePreview();
+                //updateImagePreview();
             }
         }
 
-        private void Despeckle(DespeckleSettings settings)
+        private Mat Despeckle(Mat src, DespeckleSettings settings)
         {
-            _currentImage = Despeckler.DespeckleApplyToSource(_currentImage, settings, settings.ShowDespeckleDebug, true, true);
-            updateImagePreview();
+            if (src == null || src.Empty()) return new Mat();
+            Mat result = Despeckler.DespeckleApplyToSource(src, settings, settings.ShowDespeckleDebug, true, true);
+            return result;
         }
 
-        private void RemoveLines(
+        private Mat RemoveLines(Mat src,
             int lineWidthPx,
             double minLengthFraction,
             LineOrientation orientation,
@@ -1042,16 +1195,7 @@ namespace ImgViewer.Models
             Scalar lineColorRgb = new Scalar(lineColorRed, lineColorGreen, lineColorBlue);
             bool inverColorMeaning = false;
             Mat mask;
-            //_currentImage = LinesRemover.RemoveLongLines(_currentImage,
-            //    lineWidthPx,
-            //    minLengthFraction,
-            //    orientation,
-            //    offsetStartPx,
-            //    lineColorRgb,
-            //    out mask,
-            //    colorTolerance,
-            //    inverColorMeaning);
-            _currentImage = LinesRemover.RemoveEdgeStripes(_currentImage,
+            Mat result = LinesRemover.RemoveEdgeStripes(src,
                 lineWidthPx,
                 minLengthFraction,
                 orientation,
@@ -1060,16 +1204,18 @@ namespace ImgViewer.Models
                 out mask,
                 colorTolerance,
                 inverColorMeaning);
+            
+            return result;
         }
 
-        private void MajorityBinarize(int threshold, int offset)
+        private Mat MajorityBinarize(Mat src, BinarizeParameters p)
         {
             int step = 10; // 5 or 10
-            int range = offset; // max absolute offset
+            int range = p.MajorityOffset; // max absolute offset
             var deltas = Enumerable.Range(-10, (range * 2) / step + 1)
                                    .Select(i => i * step)
                                    .ToArray();
-            _currentImage = MajorityVotingBinarize(_currentImage, threshold, deltas);
+            return MajorityVotingBinarize(src, p.Threshold, deltas);
         }
 
 
@@ -1141,10 +1287,11 @@ namespace ImgViewer.Models
             return grayU8;
         }
 
-        private void PunchHolesRemove(List<PunchSpec> specs, int offsetTop, int offsetBottom, int offsetLeft, int offsetRight)
+        private Mat PunchHolesRemove(Mat src, List<PunchSpec> specs, int offsetTop, int offsetBottom, int offsetLeft, int offsetRight)
         {
-            _currentImage = PunchHoleRemover.RemovePunchHoles(_currentImage, specs, offsetTop, offsetBottom, offsetLeft, offsetRight);
-            //updateImagePreview();
+            if (src == null || src.Empty()) return new Mat();
+            Mat result = PunchHoleRemover.RemovePunchHoles(src, specs, offsetTop, offsetBottom, offsetLeft, offsetRight);
+            return result;
         }
 
 
@@ -1354,38 +1501,19 @@ namespace ImgViewer.Models
             return work;
         }
 
-        private void AutoCrop()
+        private Mat AutoCrop(Mat src)
         {
 
-            //var cropped = Cropper.AutoCropMixedText(_currentImage);
             string eastPath = Path.Combine(AppContext.BaseDirectory, "Models", "frozen_east_text_detection.pb");
             string tessData = Path.Combine(AppContext.BaseDirectory, "tessdata");
             string tessLang = "eng"; // или "eng"
             var cropper = new TextAwareCropper(eastPath, tessData, tessLang);
-            //var cropped = cropper.CropKeepingText(_currentImage);
-            var cropped = cropper.ShowDetectedAreas(_currentImage);
-            _currentImage = cropped;
-            updateImagePreview();
+            //var cropped = cropper.CropKeepingText(src);
+            Mat cropped = cropper.ShowDetectedAreas(src);
+            return cropped;
         }
 
-        private void SetBlurredWhenProcessing()
-        {
-            if (_currentImage != null)
-            {
-                _blurred = ApplyProcessingBlur(_blurred);
-                _appManager.SetBmpImageOnPreview(MatToBitmapSource(_blurred));
-            }
-        }
-
-        private void updateImagePreview()
-        {
-            if (_blurred != null) _blurred.Dispose();
-            if (_currentImage != null)
-            {
-                if (_appManager == null) return;
-                _appManager.SetBmpImageOnPreview(MatToBitmapSource(_currentImage));
-            }
-        }
+        
 
         private Stream MatToStream(Mat mat)
         {
@@ -1625,21 +1753,11 @@ namespace ImgViewer.Models
 
 
 
-        //public void Binarize(int threshold = 128)
-        //{
-        //    //using var mat = BitmapSourceConverter.ToMat(src); // конвертация (может быть из OpenCvSharp.Extensions)
-        //    using var gray = new Mat();
-        //    Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
-        //    Cv2.Threshold(gray, gray, threshold, 255, ThresholdTypes.Binary);
-        //    _currentImage = gray.Clone();
-        //    updateImagePreview();
-        //    //return MatToBitmapSource(gray);
-        //}
 
         private Mat? MatToGray(Mat src)
         {
             if (src == null || src.Empty()) return null; // уже в градациях серого
-            using var gray = new Mat();
+            var gray = new Mat();
             switch (src.Channels())
             {
                 case 1:
@@ -1661,31 +1779,25 @@ namespace ImgViewer.Models
                     }
                     break;
             }
-            src.Dispose();
-            src = gray.Clone();
-            return src;
+            
+            return gray;
         }
 
-        private void BinarizeAdaptive(int? blockSize = null, double C = 14, bool useGaussian = false, bool useMorphology = false, int morphKernel = 3, int morphIterations = 1, bool invert = false)
+        private Mat? BinarizeAdaptive(Mat src, BinarizeParameters p, bool invert = false)
         {
-            if (_currentImage == null || _currentImage.Empty()) return;
+            if (src == null || src.Empty()) return null;
 
             // Debug all args
-            Debug.WriteLine("BlockSize - ", blockSize);
-            Debug.WriteLine("C - ", C);
-            Debug.WriteLine("Use Gaussian - ", useGaussian.ToString());
-            Debug.WriteLine("Use Morphology - ", useMorphology.ToString());
-            Debug.WriteLine("Morph kernel - ", morphKernel);
-            Debug.WriteLine("Morph iterations - ", morphIterations);
+            DumpStruct(p);
 
-            using var gray = MatToGray(_currentImage);
-            if (gray == null) return;
+            using var gray = MatToGray(src);
+            if (gray == null) return null;
 
 
             int bs;
-            if (blockSize.HasValue && blockSize > 0)
+            if (p.BlockSize.HasValue && p.BlockSize > 0)
             {
-                bs = blockSize.Value;
+                bs = p.BlockSize.Value;
             }
             else
             {
@@ -1701,27 +1813,20 @@ namespace ImgViewer.Models
             Cv2.GaussianBlur(gray, blur, new OpenCvSharp.Size(1, 1), 0);
 
             using var bin = new Mat();
-            var adaptiveType = useGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
+            var adaptiveType = p.UseGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
             var threshType = invert ? ThresholdTypes.BinaryInv : ThresholdTypes.Binary;
-            Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, C);
+            Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, p.MeanC);
 
-            if (useMorphology)
+            if (p.UseMorphology)
             {
-                using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(morphKernel, morphKernel));
-                Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: morphIterations);
+                using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(p.MorphKernelBinarize, p.MorphKernelBinarize));
+                Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: p.MorphIterationsBinarize);
             }
 
             using var color = new Mat();
             Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
 
-            var result = color.Clone();
-            Mat old = null;
-            lock (this)
-            {
-                old = _currentImage;
-                _currentImage = result;
-            }
-            old?.Dispose();
+            return color.Clone();
 
         }
 
@@ -1858,19 +1963,19 @@ namespace ImgViewer.Models
 
 
 
-        private void Binarize(int threshold = 128)
+        private Mat? BinarizeThreshold(Mat src, int threshold = 128)
         {
-            if (_currentImage == null || _currentImage.Empty()) return;
+            if (src == null || src.Empty()) return null;
 
             using var gray = new Mat();
-            Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
             Cv2.Threshold(gray, gray, threshold, 255, ThresholdTypes.Binary);
 
             // Конвертируем обратно в BGR — тогда весь pipeline, ожидающий 3 канала, продолжит работать
             using var color = new Mat();
             Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
 
-            _currentImage = color.Clone(); // сохраняем результат как 3-канальную матрицу
+            return color.Clone(); // сохраняем результат как 3-канальную матрицу
         }
 
         //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
@@ -1880,20 +1985,20 @@ namespace ImgViewer.Models
         //либо используйте более устойчивую выборку(несколько областей).
         //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
 
-        public void RemoveBordersByRowColWhite(
+        public Mat RemoveBordersByRowColWhite(Mat src,
         double threshFrac = 0.60,
         int contrastThr = 30,
         double centralSample = 0.30,
         double maxRemoveFrac = 0.25)
         {
             Debug.WriteLine("RemoveBordersByRowColWhite started. Before checking _currentImage");
-            if (_currentImage == null || _currentImage.Empty())
-                return;
+            if (src == null || src.Empty())
+                return new Mat();
 
             Debug.WriteLine("RemoveBordersByRowColWhite started.");
 
             // Подготовка источника (убедиться, что BGR CV_8UC3)
-            Mat src = _currentImage;
+            //Mat src = _currentImage;
             Mat srcBgr = src;
             bool converted = false;
             if (src.Type() != MatType.CV_8UC3)
@@ -2000,23 +2105,22 @@ namespace ImgViewer.Models
             int row1 = h - bottom;
             int col0 = left;
             int col1 = w - right;
-            if (row1 <= row0 || col1 <= col0) return;
+            if (row1 <= row0 || col1 <= col0) return new Mat();
             result = srcBgr.RowRange(row0, row1).ColRange(col0, col1).Clone();
 
 
             // Заменяем поле _currentImage на result (освобождая прежний Mat)
-            var old = _currentImage;
-            _currentImage = result;
-            updateImagePreview();
+            //WorkingImage = result;
 
             // Освобождаем временные объекты
             central.Dispose();
             gray.Dispose();
             if (converted) srcBgr.Dispose(); // если создали новый Mat при конвертации
-            old?.Dispose();
+            //old?.Dispose();
 
             // (опционально) логирование — можно убрать
             Debug.WriteLine($"RemoveBordersByRowColWhite applied: cuts(top,bottom,left,right) = ({top},{bottom},{left},{right}), centralMedian={centralMedian}");
+            return result;
         }
 
         /// <summary>
@@ -2132,69 +2236,69 @@ namespace ImgViewer.Models
             return result;
         }
 
-        public void NewDeskew(Dictionary<string, object> parameters)
+        public Mat NewDeskew(Mat src, Dictionary<string, object> parameters)
         {
-            if (_currentImage == null || _currentImage.Empty()) return;
-            using var src = _currentImage.Clone();
+            if (src == null || src.Empty()) return new Mat();
 
 
             var p = new Deskewer.Parameters();
 
             p = ParseParametersSimple(parameters);
 
-            _currentImage = Deskewer.Deskew(src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
+            Mat result = Deskewer.Deskew(src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
+            return result;
         }
 
-        private void BordersDeskew()
-        {
-            if (_currentImage == null || _currentImage.Empty()) return;
-            using var src = _currentImage.Clone();
-            //_currentImage = Deskewer.Deskew(src, true);
-        }
+        //private void BordersDeskew()
+        //{
+        //    if (_currentImage == null || _currentImage.Empty()) return;
+        //    using var src = _currentImage.Clone();
+        //    //_currentImage = Deskewer.Deskew(src, true);
+        //}
 
-        public void Deskew()
-        {
-            if (_currentImage == null || _currentImage.Empty()) return;
-
-
+        //public void Deskew()
+        //{
+        //    if (_currentImage == null || _currentImage.Empty()) return;
 
 
-            double angle = GetSkewAngleByHough(_currentImage, cannyThresh1: 50, cannyThresh2: 150, houghThreshold: 80, minLineLength: Math.Min(_currentImage.Width, 200), maxLineGap: 20);
-            Debug.WriteLine($"Deskew: angle by Hough = {angle}");
-
-            if (double.IsNaN(angle))
-            {
-                angle = GetSkewAngleByProjection(_currentImage, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
-            }
 
 
-            if (double.IsNaN(angle) || Math.Abs(angle) < 0.005) // если угол ~0 — не поворачивать
-            {
-                Debug.WriteLine($"Deskew: angle is zero or NaN ({angle}), skipping rotation.");
-                return;
-            }
+        //    double angle = GetSkewAngleByHough(_currentImage, cannyThresh1: 50, cannyThresh2: 150, houghThreshold: 80, minLineLength: Math.Min(_currentImage.Width, 200), maxLineGap: 20);
+        //    Debug.WriteLine($"Deskew: angle by Hough = {angle}");
+
+        //    if (double.IsNaN(angle))
+        //    {
+        //        angle = GetSkewAngleByProjection(_currentImage, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
+        //    }
 
 
-            using var src = _currentImage.Clone();
-            double rotation = -angle;
-            double rad = rotation * Math.PI / 180.0;
-            double absCos = Math.Abs(Math.Cos(rad));
-            double absSin = Math.Abs(Math.Sin(rad));
-            int newW = (int)Math.Round(src.Width * absCos + src.Height * absSin);
-            int newH = (int)Math.Round(src.Width * absSin + src.Height * absCos);
-
-            var center = new Point2f(src.Width / 2f, src.Height / 2f);
-            var M = Cv2.GetRotationMatrix2D(center, rotation, 1.0);
-            M.Set(0, 2, M.Get<double>(0, 2) + (newW / 2.0 - center.X));
-            M.Set(1, 2, M.Get<double>(1, 2) + (newH / 2.0 - center.Y));
-
-            using var rotated = new Mat();
-            Cv2.WarpAffine(src, rotated, M, new OpenCvSharp.Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
+        //    if (double.IsNaN(angle) || Math.Abs(angle) < 0.005) // если угол ~0 — не поворачивать
+        //    {
+        //        Debug.WriteLine($"Deskew: angle is zero or NaN ({angle}), skipping rotation.");
+        //        return;
+        //    }
 
 
-            var result = rotated.Clone();
-            _currentImage = result;
-        }
+        //    using var src = _currentImage.Clone();
+        //    double rotation = -angle;
+        //    double rad = rotation * Math.PI / 180.0;
+        //    double absCos = Math.Abs(Math.Cos(rad));
+        //    double absSin = Math.Abs(Math.Sin(rad));
+        //    int newW = (int)Math.Round(src.Width * absCos + src.Height * absSin);
+        //    int newH = (int)Math.Round(src.Width * absSin + src.Height * absCos);
+
+        //    var center = new Point2f(src.Width / 2f, src.Height / 2f);
+        //    var M = Cv2.GetRotationMatrix2D(center, rotation, 1.0);
+        //    M.Set(0, 2, M.Get<double>(0, 2) + (newW / 2.0 - center.X));
+        //    M.Set(1, 2, M.Get<double>(1, 2) + (newH / 2.0 - center.Y));
+
+        //    using var rotated = new Mat();
+        //    Cv2.WarpAffine(src, rotated, M, new OpenCvSharp.Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
+
+
+        //    var result = rotated.Clone();
+        //    _currentImage = result;
+        //}
 
 
 
@@ -3109,9 +3213,13 @@ namespace ImgViewer.Models
         // k: обычно 0.2..0.5 (0.34 хороший старт)
         // R: динамический диапазон (обычно 128)
 
-        public static Mat Sauvola(Mat srcGray, int windowSize = 25, double k = 0.34, double R = 128.0)
+        private Mat Sauvola(Mat srcGray, int windowSize = 25, double k = 0.34, double R = 128.0)
         {
+
             if (srcGray.Empty()) throw new ArgumentException("srcGray is empty");
+
+
+
             Mat gray = srcGray;
             if (gray.Type() != MatType.CV_8UC1)
             {
@@ -3160,9 +3268,9 @@ namespace ImgViewer.Models
             return bin;
         }
 
-        private void SauvolaBinarize()
+        private Mat SauvolaBinarize(Mat src, BinarizeParameters p)
         {
-            using var binMat = BinarizeForHandwritten(_currentImage);
+            using var binMat = BinarizeForHandwritten(src, p.SauvolaUseClahe, p.SauvolaClaheClip, claheGrid: default, p.SauvolaWindowSize, p.SauvolaK, p.SauvolaR, p.SauvolaMorphRadius);
 
             Mat bin8;
             if (binMat.Type() != MatType.CV_8UC1)
@@ -3175,32 +3283,23 @@ namespace ImgViewer.Models
                 bin8 = binMat.Clone(); // сделаем клон, чтобы безопасно Dispose оригинала ниже
             }
 
-
-
-            var colorMat = new Mat();
-            Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
-
-
-
             try
             {
-                var old = _currentImage;
-                _currentImage = colorMat; // теперь _currentImage — CV_8UC3, готово для MatToBitmapSource
-                old?.Dispose();
+                var colorMat = new Mat();
+                Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
+                return colorMat;
             }
             finally
             {
-                // освобождаем временные буферы
                 bin8.Dispose();
-                if (!ReferenceEquals(binMat, bin8)) binMat.Dispose(); // если binMat был клоном — уже освобождён, но safe-guard
             }
-
+            
         }
 
 
 
-        public static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, OpenCvSharp.Size claheGrid = default,
-                                             int sauvolaWindow = 35, double sauvolaK = 0.34, int morphRadius = 0)
+        private Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, OpenCvSharp.Size claheGrid = default,
+                                             int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0)
         {
             if (claheGrid == default) claheGrid = new OpenCvSharp.Size(8, 8);
             Mat gray = src;
@@ -3219,7 +3318,7 @@ namespace ImgViewer.Models
                 if (!ReferenceEquals(gray, src)) gray.Dispose();
             }
 
-            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, R: 180.0);
+            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR);
 
             // optional morphological cleaning (open to remove small noise, close to fill holes)
             if (morphRadius > 0)

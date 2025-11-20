@@ -15,7 +15,7 @@ namespace ImgViewer.Interfaces
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
-        void ApplyCommandToCurrent(ProcessorCommand commandName, Dictionary<string, object> parameters);
+        void ApplyCommand(ProcessorCommand commandName, Dictionary<string, object> parameters);
 
         event Action<Stream> ImageUpdated;
         event Action<string> ErrorOccured;

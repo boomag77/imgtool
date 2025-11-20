@@ -1,6 +1,7 @@
 ﻿using ImgViewer.Interfaces;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Web.UI;
 using System.Web.UI.WebControls;
 
 namespace ImgViewer.Models
@@ -31,6 +32,57 @@ namespace ImgViewer.Models
         Int,
         Double,
         String
+    }
+
+    internal struct BinarizeParameters
+    {
+        public BinarizeMethod Method;
+        public double SauvolaK;
+        public double SauvolaR;
+        public double SauvolaClaheClip;
+        public int SauvolaMorphRadius;
+        public int SauvolaWindowSize;
+        public int Threshold;
+        public int? BlockSize;
+        public int MeanC;
+        public int MorphKernelBinarize;
+        public int MorphIterationsBinarize;
+        public int MajorityOffset;
+        public bool UseGaussian;
+        public bool UseMorphology;
+        public bool SauvolaUseClahe;
+
+        
+
+        public static BinarizeParameters Default => new BinarizeParameters
+        {
+            Method = BinarizeMethod.Threshold,
+            SauvolaK = 0.34,
+            SauvolaR = 180.0,
+            SauvolaClaheClip = 12.0,
+            SauvolaWindowSize = 25,
+            SauvolaMorphRadius = 0,
+            Threshold = 128,
+            BlockSize = null,
+            MeanC = 14,
+            MorphKernelBinarize = 3,
+            MorphIterationsBinarize = 1,
+            MajorityOffset = 20,
+            UseGaussian = false,
+            UseMorphology = false,
+            SauvolaUseClahe = true,
+
+        };
+
+
+    }
+
+    public enum BinarizeMethod
+    {
+        Threshold,
+        Adaptive,
+        Sauvola,
+        Majority
     }
 
     public struct DoubleOperationParameter
@@ -86,12 +138,6 @@ namespace ImgViewer.Models
 
     }
 
-    public class Pipeline
-    {
-        private PipeLineStep[] _operations;
-
-
-    }
 
     public struct Operation
     {
@@ -149,13 +195,6 @@ namespace ImgViewer.Models
     {
         Auto,
         ByContrast
-    }
-
-    enum BinarizationAlgorithm
-    {
-        Treshold,
-        Sauvola,
-        Adaptive
     }
 
 }

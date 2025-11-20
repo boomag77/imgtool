@@ -109,7 +109,7 @@ namespace ImgViewer.Models
                         token.ThrowIfCancellationRequested();
                         try
                         {
-                            imgProc.ApplyCommandToCurrent(op.command, op.parameters ?? new Dictionary<string, object>());
+                            imgProc.ApplyCommand(op.command, op.parameters ?? new Dictionary<string, object>());
                         }
                         catch (OperationCanceledException)
                         {

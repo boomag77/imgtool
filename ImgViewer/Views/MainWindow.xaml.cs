@@ -87,7 +87,7 @@ namespace ImgViewer.Views
 
         private static readonly string[] DeskewAlgorithmOptions = new[] { "Auto", "ByBorders", "Hough", "Projection", "PCA" };
         private static readonly string[] BorderRemovalOptions = new[] { "Auto", "By Contrast" };
-        private static readonly string[] BinarizeAlgorithmOptions = new[] { "Treshold", "Sauvola", "Adaptive" };
+        private static readonly string[] BinarizeAlgorithmOptions = new[] { "Treshold", "Sauvola", "Adaptive", "Majority" };
 
         public MainWindow()
         {
@@ -474,13 +474,20 @@ namespace ImgViewer.Views
                 buttonText,
                 new[]
                 {
-                    new PipeLineParameter("Algorithm", "binarizeAlgorithm", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
+                    new PipeLineParameter("Method", "method", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
                     // Treshold alg
-                    new PipeLineParameter("Threshold", "binarizeThreshold", 128, 0, 255, 1),
+                    new PipeLineParameter("Threshold", "threshold", 128, 0, 255, 1),
                     // Adaptive alg
                     new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
-                    new PipeLineParameter("Constant C", "C", 14, -50.0, 50.0, 1),
+                    new PipeLineParameter("Mean C", "meanC", 14, -50.0, 50.0, 1),
 
+                    // Sauvola
+                    new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
+                    new PipeLineParameter("K: ", "sauvolaK", 0.34, 0.01, 1.00, 0.01),
+                    new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 255.0, 1.00),
+                    new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
+                    new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 12.0, 0.01, 255.0, 1.0),
+                    new PipeLineParameter("Morph radius", "sauvolaMorphRadius", 0, 0, 7, 1),
                     // Majority
                     new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
 
@@ -777,7 +784,10 @@ namespace ImgViewer.Views
                 if (_viewModel?.OriginalImage == null) return;
 
                 // Сброс к оригиналу (на UI-потоке)
-                Dispatcher.Invoke(() => ResetPreview());
+                Dispatcher.Invoke(() =>
+                {
+                    _manager.SetImageForProcessing(_viewModel.OriginalImage);
+                });
 
                 // Выполняем последовательно в порядке PipeLineOperations все операции с Live == true
                 foreach (var op in PipeLineOperations)
@@ -1041,7 +1051,7 @@ namespace ImgViewer.Views
 
         private void ExecuteProcessorCommand(ProcessorCommand command, Dictionary<string, object> parameters)
         {
-            _processor?.ApplyCommandToCurrent(command, parameters);
+            _processor?.ApplyCommand(command, parameters);
         }
 
         private Dictionary<string, object> GetParametersFromSender(object sender)
@@ -1505,13 +1515,10 @@ namespace ImgViewer.Views
             Dispatcher.Invoke(() => ResetPreview());
         }
 
-        private void ResetPreview()
+        private async void ResetPreview()
         {
             if (_viewModel.OriginalImage == null) return;
-            var originalImage = _viewModel.OriginalImage;
-
-            _viewModel.ImageOnPreview = originalImage;
-            _manager.SetImageForProcessing(originalImage);
+            await _manager.SetImageForProcessing(_viewModel.OriginalImage);
         }
 
         private void SaveAs_Click(object sender, RoutedEventArgs e)
@@ -1718,607 +1725,621 @@ namespace ImgViewer.Views
         }
     }
 
-    public class PipeLineOperation : INotifyPropertyChanged
-    {
-        private readonly ObservableCollection<PipeLineParameter> _parameters;
-        private readonly Action<MainWindow, PipeLineOperation>? _execute;
+    //public class PipeLineOperation : INotifyPropertyChanged
+    //{
+    //    private readonly ObservableCollection<PipeLineParameter> _parameters;
+    //    private readonly Action<MainWindow, PipeLineOperation>? _execute;
 
-        public event Action<PipeLineOperation, PipeLineParameter?>? ParameterChanged;
+    //    public event Action<PipeLineOperation, PipeLineParameter?>? ParameterChanged;
 
-        public ProcessorCommand? Command { get; set; }
+    //    public ProcessorCommand? Command { get; set; }
 
-        private bool _inPipeline = false;
-        private bool _live = false;
+    //    private bool _inPipeline = false;
+    //    private bool _live = false;
 
-        public PipeLineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<MainWindow, PipeLineOperation> execute)
-        {
-            DisplayName = displayName;
-            ActionLabel = actionLabel;
-            _parameters = new ObservableCollection<PipeLineParameter>(parameters ?? Enumerable.Empty<PipeLineParameter>());
-            _execute = execute;
-            _inPipeline = false;
+    //    public PipeLineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<MainWindow, PipeLineOperation> execute)
+    //    {
+    //        DisplayName = displayName;
+    //        ActionLabel = actionLabel;
+    //        _parameters = new ObservableCollection<PipeLineParameter>(parameters ?? Enumerable.Empty<PipeLineParameter>());
+    //        _execute = execute;
+    //        _inPipeline = false;
 
 
-            InitializeParameterVisibilityRules();
-            HookParameterChanges();
-        }
+    //        InitializeParameterVisibilityRules();
+    //        HookParameterChanges();
+    //    }
 
-        public event Action<PipeLineOperation>? LiveChanged;
+    //    public event Action<PipeLineOperation>? LiveChanged;
 
-        public string DisplayName { get; }
+    //    public string DisplayName { get; }
 
-        public string ActionLabel { get; }
+    //    public string ActionLabel { get; }
 
-        public ObservableCollection<PipeLineParameter> Parameters => _parameters;
+    //    public ObservableCollection<PipeLineParameter> Parameters => _parameters;
 
-        public bool InPipeline
-        {
-            get => _inPipeline;
-            set
-            {
-                if (_inPipeline != value)
-                {
-                    _inPipeline = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
+    //    public bool InPipeline
+    //    {
+    //        get => _inPipeline;
+    //        set
+    //        {
+    //            if (_inPipeline != value)
+    //            {
+    //                _inPipeline = value;
+    //                OnPropertyChanged();
+    //            }
+    //        }
+    //    }
 
-        public bool Live
-        {
-            get => _live;
-            set
-            {
-                if (_live != value)
-                {
-                    _live = value;
-                    OnPropertyChanged();
-                    LiveChanged?.Invoke(this); // notify subscribers (optional)
-                }
-            }
-        }
+    //    public bool Live
+    //    {
+    //        get => _live;
+    //        set
+    //        {
+    //            if (_live != value)
+    //            {
+    //                _live = value;
+    //                OnPropertyChanged();
+    //                LiveChanged?.Invoke(this); // notify subscribers (optional)
+    //            }
+    //        }
+    //    }
 
-        private void HookParameterChanges()
-        {
-            foreach (var p in _parameters)
-            {
-                // attach a lightweight handler to forward notifications
-                p.PropertyChanged += (s, e) =>
-                {
-                    // forward (operation, parameter) to listeners
-                    ParameterChanged?.Invoke(this, p);
+    //    private void HookParameterChanges()
+    //    {
+    //        foreach (var p in _parameters)
+    //        {
+    //            // attach a lightweight handler to forward notifications
+    //            p.PropertyChanged += (s, e) =>
+    //            {
+    //                // forward (operation, parameter) to listeners
+    //                ParameterChanged?.Invoke(this, p);
                     
-                };
-            }
-        }
+    //            };
+    //        }
+    //    }
 
-        public void Execute(MainWindow window)
-        {
-            _execute?.Invoke(window, this);
-        }
+    //    public void Execute(MainWindow window)
+    //    {
+    //        _execute?.Invoke(window, this);
+    //    }
 
-        private void InitializeParameterVisibilityRules()
-        {
-            // Deskew algorithm rules
-            var algo = _parameters.FirstOrDefault(p => p.Key == "deskewAlgorithm");
-            if (algo != null)
-            {
-                // apply initial visibility
-                ApplyDeskewVisibility(algo.SelectedOption);
+    //    private void InitializeParameterVisibilityRules()
+    //    {
+    //        // Deskew algorithm rules
+    //        var algo = _parameters.FirstOrDefault(p => p.Key == "deskewAlgorithm");
+    //        if (algo != null)
+    //        {
+    //            // apply initial visibility
+    //            ApplyDeskewVisibility(algo.SelectedOption);
 
-                // listen for changes on the combo parameter
-                algo.PropertyChanged += (s, e) =>
-                {
-                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
-                        e.PropertyName == nameof(PipeLineParameter.SelectedOption))
-                    {
-                        ApplyDeskewVisibility(algo.SelectedOption);
-                    }
-                };
-            }
+    //            // listen for changes on the combo parameter
+    //            algo.PropertyChanged += (s, e) =>
+    //            {
+    //                if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
+    //                    e.PropertyName == nameof(PipeLineParameter.SelectedOption))
+    //                {
+    //                    ApplyDeskewVisibility(algo.SelectedOption);
+    //                }
+    //            };
+    //        }
 
-            // Binarize algorithm rules example
-            var binAlgo = _parameters.FirstOrDefault(p => p.Key == "binarizeAlgorithm");
-            if (binAlgo != null)
-            {
-                // initial apply
-                ApplyBinarizeVisibility(binAlgo.SelectedOption);
+    //        // Binarize algorithm rules example
+    //        var binAlgo = _parameters.FirstOrDefault(p => p.Key == "method");
+    //        if (binAlgo != null)
+    //        {
+    //            // initial apply
+    //            ApplyBinarizeVisibility(binAlgo.SelectedOption);
 
-                // ensure morph fields reflect the current state right away
-                var morphFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "useMorphology");
-                if (morphFlagImmediate != null)
-                {
-                    // set initial visibility of morph fields based on current checkbox value
-                    ApplyMorphVisibility(morphFlagImmediate.BoolValue);
-                    // subscribe once so further toggles update visibility
-                    morphFlagImmediate.PropertyChanged -= MorphFlag_PropertyChanged;
-                    morphFlagImmediate.PropertyChanged += MorphFlag_PropertyChanged;
-                }
+    //            // ensure morph fields reflect the current state right away
+    //            var morphFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "useMorphology");
+    //            if (morphFlagImmediate != null)
+    //            {
+    //                // set initial visibility of morph fields based on current checkbox value
+    //                ApplyMorphVisibility(morphFlagImmediate.BoolValue);
+    //                // subscribe once so further toggles update visibility
+    //                morphFlagImmediate.PropertyChanged -= MorphFlag_PropertyChanged;
+    //                morphFlagImmediate.PropertyChanged += MorphFlag_PropertyChanged;
+    //            }
 
-                // Also listen for changes of the algorithm selection and re-evaluate
-                binAlgo.PropertyChanged += (s, e) =>
-                {
-                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
-                        e.PropertyName == nameof(PipeLineParameter.SelectedOption))
-                    {
-                        // re-evaluate which controls are visible based on chosen algorithm
-                        ApplyBinarizeVisibility(binAlgo.SelectedOption);
-                    }
-                };
-            }
+    //            // Also listen for changes of the algorithm selection and re-evaluate
+    //            binAlgo.PropertyChanged += (s, e) =>
+    //            {
+    //                if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
+    //                    e.PropertyName == nameof(PipeLineParameter.SelectedOption))
+    //                {
+    //                    // re-evaluate which controls are visible based on chosen algorithm
+    //                    ApplyBinarizeVisibility(binAlgo.SelectedOption);
+    //                }
+    //            };
+    //        }
 
-            // Border removal algorithm rules
-            var bordersAlgo = _parameters.FirstOrDefault(p => p.Key == "borderRemovalAlgorithm");
-            if (bordersAlgo != null)
-            {
-                ApplyBorderRemovalVisibility(bordersAlgo.SelectedOption);
+    //        // Border removal algorithm rules
+    //        var bordersAlgo = _parameters.FirstOrDefault(p => p.Key == "borderRemovalAlgorithm");
+    //        if (bordersAlgo != null)
+    //        {
+    //            ApplyBorderRemovalVisibility(bordersAlgo.SelectedOption);
 
-                var autoThreshFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "autoThresh");
-                if (autoThreshFlagImmediate != null)
-                {
-                    ApplyAutoThreshVisibility(autoThreshFlagImmediate.BoolValue);
-                    autoThreshFlagImmediate.PropertyChanged -= AutoThreshFlag_PropertyChanged;
-                    autoThreshFlagImmediate.PropertyChanged += AutoThreshFlag_PropertyChanged;
-                }
+    //            var autoThreshFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "autoThresh");
+    //            if (autoThreshFlagImmediate != null)
+    //            {
+    //                ApplyAutoThreshVisibility(autoThreshFlagImmediate.BoolValue);
+    //                autoThreshFlagImmediate.PropertyChanged -= AutoThreshFlag_PropertyChanged;
+    //                autoThreshFlagImmediate.PropertyChanged += AutoThreshFlag_PropertyChanged;
+    //            }
 
-                bordersAlgo.PropertyChanged += (s, e) =>
-                {
-                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
-                        e.PropertyName == nameof(PipeLineParameter.SelectedOption))
-                    {
-                        // re-evaluate which controls are visible based on chosen algorithm
-                        ApplyBorderRemovalVisibility(bordersAlgo.SelectedOption);
-                    }
-                };
-            }
-        }
+    //            bordersAlgo.PropertyChanged += (s, e) =>
+    //            {
+    //                if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex) ||
+    //                    e.PropertyName == nameof(PipeLineParameter.SelectedOption))
+    //                {
+    //                    // re-evaluate which controls are visible based on chosen algorithm
+    //                    ApplyBorderRemovalVisibility(bordersAlgo.SelectedOption);
+    //                }
+    //            };
+    //        }
+    //    }
 
-        private void ApplyMorphVisibility(bool enabled)
-        {
-            foreach (var p in _parameters)
-            {
-                if (p.Key == "morphKernelBinarize" || p.Key == "morphIterationsBinarize")
-                    p.IsVisible = enabled;
-            }
-        }
+    //    private void ApplyMorphVisibility(bool enabled)
+    //    {
+    //        foreach (var p in _parameters)
+    //        {
+    //            if (p.Key == "morphKernelBinarize" || p.Key == "morphIterationsBinarize")
+    //                p.IsVisible = enabled;
+    //        }
+    //    }
 
-        private void ApplyAutoThreshVisibility(bool enabled)
-        {
-            foreach (var p in _parameters)
-            {
-                if (p.Key == "marginPercent" || p.Key == "shiftFactor")
-                    p.IsVisible = enabled;
-            }
-        }
+    //    private void ApplyAutoThreshVisibility(bool enabled)
+    //    {
+    //        foreach (var p in _parameters)
+    //        {
+    //            if (p.Key == "marginPercent" || p.Key == "shiftFactor")
+    //                p.IsVisible = enabled;
+    //        }
+    //    }
 
-        private void ApplyDeskewVisibility(string? selectedOption)
-        {
-            // default to Auto if null
-            var selected = (selectedOption ?? "Auto").Trim();
+    //    private void ApplyDeskewVisibility(string? selectedOption)
+    //    {
+    //        // default to Auto if null
+    //        var selected = (selectedOption ?? "Auto").Trim();
 
-            foreach (var p in _parameters)
-            {
-                switch (p.Key)
-                {
-                    case "deskewAlgorithm":
-                        p.IsVisible = true; // algorithm selector always visible
-                        break;
+    //        foreach (var p in _parameters)
+    //        {
+    //            switch (p.Key)
+    //            {
+    //                case "deskewAlgorithm":
+    //                    p.IsVisible = true; // algorithm selector always visible
+    //                    break;
 
-                    // show these only for ByBorders
-                    case "cannyTresh1":
-                    case "cannyTresh2":
-                    case "morphKernel":
-                        p.IsVisible = selected.Equals("ByBorders", StringComparison.OrdinalIgnoreCase);
-                        break;
+    //                // show these only for ByBorders
+    //                case "cannyTresh1":
+    //                case "cannyTresh2":
+    //                case "morphKernel":
+    //                    p.IsVisible = selected.Equals("ByBorders", StringComparison.OrdinalIgnoreCase);
+    //                    break;
 
-                    // show these only for Hough
-                    case "minLineLength":
-                    case "houghTreshold":
-                        p.IsVisible = selected.Equals("Hough", StringComparison.OrdinalIgnoreCase);
-                        break;
+    //                // show these only for Hough
+    //                case "minLineLength":
+    //                case "houghTreshold":
+    //                    p.IsVisible = selected.Equals("Hough", StringComparison.OrdinalIgnoreCase);
+    //                    break;
 
-                    default:
-                        // keep other parameters visible by default
-                        p.IsVisible = true;
-                        break;
-                }
-            }
-        }
+    //                default:
+    //                    // keep other parameters visible by default
+    //                    p.IsVisible = true;
+    //                    break;
+    //            }
+    //        }
+    //    }
 
-        private void ApplyBinarizeVisibility(string? selectedOption)
-        {
-            // find the binarizeAlgorithm parameter (source of truth)
-            var binAlgo = _parameters.FirstOrDefault(x => x.Key == "binarizeAlgorithm");
+    //    private void ApplyBinarizeVisibility(string? selectedOption)
+    //    {
+    //        // find the binarizeAlgorithm parameter (source of truth)
+    //        var binAlgo = _parameters.FirstOrDefault(x => x.Key == "method");
 
-            // robust "isAdaptive" detection:
-            // 1) prefer SelectedOption string if available
-            // 2) otherwise fallback to SelectedIndex (index 2 means "Adaptive" in your options order)
-            bool isAdaptive = false;
-            bool isMajority = false;
-            bool isThreshold = false;
+    //        // robust "isAdaptive" detection:
+    //        // 1) prefer SelectedOption string if available
+    //        // 2) otherwise fallback to SelectedIndex (index 2 means "Adaptive" in your options order)
+    //        bool isAdaptive = false;
+    //        bool isMajority = false;
+    //        bool isThreshold = false;
+    //        bool isSauvola = false;
 
-            if (binAlgo != null)
-            {
-                var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
-                if (!string.IsNullOrEmpty(opt))
-                {
-                    isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
-                    isMajority = opt.Equals("Majority", StringComparison.OrdinalIgnoreCase);
-                    isThreshold = opt.Equals("Threshold", StringComparison.OrdinalIgnoreCase);
-                }
-                else
-                {
-                    isAdaptive = true;
-                }
-                    
-                
-            }
-            else
-            {
-                // fallback if binAlgo missing — keep previous behaviour
-                isAdaptive = (selectedOption ?? "").Trim().Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
-            }
+    //        if (binAlgo != null)
+    //        {
+    //            var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
+    //            if (!string.IsNullOrEmpty(opt))
+    //            {
+    //                isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+    //                isMajority = opt.Equals("Majority", StringComparison.OrdinalIgnoreCase);
+    //                isThreshold = opt.Equals("Threshold", StringComparison.OrdinalIgnoreCase);
+    //                isSauvola = opt.Equals("Sauvola", StringComparison.OrdinalIgnoreCase);
+    //            }
+    //            else
+    //            {
+    //                isAdaptive = true;
+    //            }
 
 
+    //        }
+    //        else
+    //        {
+    //            // fallback if binAlgo missing — keep previous behaviour
+    //            isAdaptive = (selectedOption ?? "").Trim().Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+    //        }
 
-            // find useMorphology flag once
-            var morphFlag = _parameters.FirstOrDefault(x => x.Key == "useMorphology");
-            bool useMorph = morphFlag != null && morphFlag.IsBool && morphFlag.BoolValue;
 
-            foreach (var p in _parameters)
-            {
-                switch (p.Key)
-                {
-                    case "binarizeAlgorithm":
-                        p.IsVisible = true;
-                        break;
 
-                    case "binarizeThreshold":
-                        p.IsVisible = isThreshold || isMajority;
-                        break;
-                    case "majorityOffset":
-                        p.IsVisible = isMajority;
-                        break;
+    //        // find useMorphology flag once
+    //        var morphFlag = _parameters.FirstOrDefault(x => x.Key == "useMorphology");
+    //        bool useMorph = morphFlag != null && morphFlag.IsBool && morphFlag.BoolValue;
 
-                    case "blockSize":
-                    case "C":
-                    case "useGaussian":
-                    case "useMorphology":
-                        p.IsVisible = isAdaptive;
-                        break;
+    //        var sauvolaClaheFlag = _parameters.FirstOrDefault(x => x.Key == "sauvolaUseClahe");
+    //        bool useClahe = sauvolaClaheFlag != null && sauvolaClaheFlag.IsBool && sauvolaClaheFlag.BoolValue;
 
-                    case "morphKernelBinarize":
-                    case "morphIterationsBinarize":
-                        // visible only when algorithm == Adaptive AND ApplyMorphology checked
-                        p.IsVisible = isAdaptive && useMorph;
-                        break;
+    //        foreach (var p in _parameters)
+    //        {
+    //            switch (p.Key)
+    //            {
+    //                case "method":
+    //                    p.IsVisible = true;
+    //                    break;
 
-                    default:
-                        p.IsVisible = true;
-                        break;
-                }
-            }
-        }
+    //                case "threshold":
+    //                    p.IsVisible = isThreshold || isMajority;
+    //                    break;
+    //                case "majorityOffset":
+    //                    p.IsVisible = isMajority;
+    //                    break;
 
-        private void ApplyBorderRemovalVisibility(string? selectedOption)
-        {
-            var bordersAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
-            bool isAuto = false;
-            var autoThreshFlag = _parameters.FirstOrDefault(x => x.Key == "autoThresh");
-            bool autoThresh = autoThreshFlag != null && autoThreshFlag.IsBool && autoThreshFlag.BoolValue;
-            if (bordersAlgo != null)
-            {
-                var opt = (bordersAlgo.SelectedOption ?? string.Empty).Trim();
-                if (!string.IsNullOrEmpty(opt))
-                    isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
-                else
-                    isAuto = bordersAlgo.SelectedIndex == 0; // defensive fallback: index 0 = Auto
-            }
-            else
-            {
-                // fallback if bordersAlgo missing — keep previous behaviour
-                isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
-            }
-            Debug.WriteLine("Borders Algo - ", bordersAlgo);
-            foreach (var p in _parameters)
-            {
-                switch (p.Key)
-                {
-                    case "borderRemovalAlgorithm":
-                        p.IsVisible = true;
-                        break;
-                    case "autoThresh":
-                        p.IsVisible = isAuto;
-                        break;
-                    case "marginPercent":
-                    case "shiftFactor":
-                        p.IsVisible = isAuto && autoThresh;
-                        break;
-                    case "threshFrac":
+    //                case "blockSize":
+    //                case "C":
+    //                case "useGaussian":
+    //                case "useMorphology":
+    //                    p.IsVisible = isAdaptive;
+    //                    break;
+
+    //                case "morphKernelBinarize":
+    //                case "morphIterationsBinarize":
+    //                    // visible only when algorithm == Adaptive AND ApplyMorphology checked
+    //                    p.IsVisible = isAdaptive && useMorph;
+    //                    break;
+    //                case "sauvolaWindowSize":
+    //                case "sauvolaK":
+    //                case "sauvolaR":
+    //                case "sauvolaUseClahe":
+    //                case "sauvolaMorphRadius":
+    //                    p.IsVisible = isSauvola;
+    //                    break;
+    //                case "sauvolaClaheClip":
+    //                    p.IsVisible = isSauvola && useClahe;
+    //                    break;
+    //                default:
+    //                    p.IsVisible = false;
+    //                    break;
+    //            }
+    //        }
+    //    }
+
+    //    private void ApplyBorderRemovalVisibility(string? selectedOption)
+    //    {
+    //        var bordersAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
+    //        bool isAuto = false;
+    //        var autoThreshFlag = _parameters.FirstOrDefault(x => x.Key == "autoThresh");
+    //        bool autoThresh = autoThreshFlag != null && autoThreshFlag.IsBool && autoThreshFlag.BoolValue;
+    //        if (bordersAlgo != null)
+    //        {
+    //            var opt = (bordersAlgo.SelectedOption ?? string.Empty).Trim();
+    //            if (!string.IsNullOrEmpty(opt))
+    //                isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+    //            else
+    //                isAuto = bordersAlgo.SelectedIndex == 0; // defensive fallback: index 0 = Auto
+    //        }
+    //        else
+    //        {
+    //            // fallback if bordersAlgo missing — keep previous behaviour
+    //            isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
+    //        }
+    //        Debug.WriteLine("Borders Algo - ", bordersAlgo);
+    //        foreach (var p in _parameters)
+    //        {
+    //            switch (p.Key)
+    //            {
+    //                case "borderRemovalAlgorithm":
+    //                    p.IsVisible = true;
+    //                    break;
+    //                case "autoThresh":
+    //                    p.IsVisible = isAuto;
+    //                    break;
+    //                case "marginPercent":
+    //                case "shiftFactor":
+    //                    p.IsVisible = isAuto && autoThresh;
+    //                    break;
+    //                case "threshFrac":
                         
-                    case "contrastThr":
-                    case "centralSample":
-                    case "maxRemoveFrac":
-                        p.IsVisible = (bordersAlgo != null)
-                            ? ((bordersAlgo.SelectedOption ?? "").Equals("By Contrast", StringComparison.OrdinalIgnoreCase)
-                                || bordersAlgo.SelectedIndex == 1)
-                            : (selectedOption ?? "").Trim().Equals("By Contrast", StringComparison.OrdinalIgnoreCase);
-                        break;
-                    case "darkThreshold":
-                        p.IsVisible = isAuto && !autoThresh;
-                        break;
-                    case "bgColor":
-                    case "minAreaPx":
-                    case "minSpanFraction":
-                    case "solidityThreshold":
-                    case "minDepthFraction":
-                    case "featherPx":
-                        p.IsVisible = isAuto;
-                        break;
-                    default:
-                        p.IsVisible = true;
-                        break;
-                }
-            }
-        }
+    //                case "contrastThr":
+    //                case "centralSample":
+    //                case "maxRemoveFrac":
+    //                    p.IsVisible = (bordersAlgo != null)
+    //                        ? ((bordersAlgo.SelectedOption ?? "").Equals("By Contrast", StringComparison.OrdinalIgnoreCase)
+    //                            || bordersAlgo.SelectedIndex == 1)
+    //                        : (selectedOption ?? "").Trim().Equals("By Contrast", StringComparison.OrdinalIgnoreCase);
+    //                    break;
+    //                case "darkThreshold":
+    //                    p.IsVisible = isAuto && !autoThresh;
+    //                    break;
+    //                case "bgColor":
+    //                case "minAreaPx":
+    //                case "minSpanFraction":
+    //                case "solidityThreshold":
+    //                case "minDepthFraction":
+    //                case "featherPx":
+    //                    p.IsVisible = isAuto;
+    //                    break;
+    //                default:
+    //                    p.IsVisible = true;
+    //                    break;
+    //            }
+    //        }
+    //    }
 
 
-        private void MorphFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
-            if (sender is not PipeLineParameter morphParam) return;
+    //    private void MorphFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    //    {
+    //        if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+    //        if (sender is not PipeLineParameter morphParam) return;
 
-            // compute current algorithm -> isAdaptive (same logic as ApplyBinarizeVisibility)
-            var binAlgo = _parameters.FirstOrDefault(x => x.Key == "binarizeAlgorithm");
-            bool isAdaptive = false;
-            if (binAlgo != null)
-            {
-                var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
-                if (!string.IsNullOrEmpty(opt))
-                    isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
-                else
-                    isAdaptive = binAlgo.SelectedIndex == 2;
-            }
+    //        // compute current algorithm -> isAdaptive (same logic as ApplyBinarizeVisibility)
+    //        var binAlgo = _parameters.FirstOrDefault(x => x.Key == "binarizeAlgorithm");
+    //        bool isAdaptive = false;
+    //        if (binAlgo != null)
+    //        {
+    //            var opt = (binAlgo.SelectedOption ?? string.Empty).Trim();
+    //            if (!string.IsNullOrEmpty(opt))
+    //                isAdaptive = opt.Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
+    //            else
+    //                isAdaptive = binAlgo.SelectedIndex == 2;
+    //        }
 
-            bool useMorph = morphParam.BoolValue;
+    //        bool useMorph = morphParam.BoolValue;
 
-            foreach (var q in _parameters)
-            {
-                if (q.Key == "morphKernelBinarize" || q.Key == "morphIterationsBinarize")
-                    q.IsVisible = isAdaptive && useMorph;
-            }
-        }
+    //        foreach (var q in _parameters)
+    //        {
+    //            if (q.Key == "morphKernelBinarize" || q.Key == "morphIterationsBinarize")
+    //                q.IsVisible = isAdaptive && useMorph;
+    //        }
+    //    }
 
-        private void AutoThreshFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
-            if (sender is not PipeLineParameter autoThreshParam) return;
+    //    private void AutoThreshFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    //    {
+    //        if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+    //        if (sender is not PipeLineParameter autoThreshParam) return;
 
-            // compute current algorithm -> isAdaptive (same logic as ApplyBinarizeVisibility)
-            var bordersRemoveAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
-            bool isAuto = false;
-            if (bordersRemoveAlgo != null)
-            {
-                var opt = (bordersRemoveAlgo.SelectedOption ?? string.Empty).Trim();
-                if (!string.IsNullOrEmpty(opt))
-                    isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
-                else
-                    isAuto = bordersRemoveAlgo.SelectedIndex == 0;
-            }
+    //        // compute current algorithm -> isAdaptive (same logic as ApplyBinarizeVisibility)
+    //        var bordersRemoveAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
+    //        bool isAuto = false;
+    //        if (bordersRemoveAlgo != null)
+    //        {
+    //            var opt = (bordersRemoveAlgo.SelectedOption ?? string.Empty).Trim();
+    //            if (!string.IsNullOrEmpty(opt))
+    //                isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+    //            else
+    //                isAuto = bordersRemoveAlgo.SelectedIndex == 0;
+    //        }
 
-            bool autoThresh = autoThreshParam.BoolValue;
+    //        bool autoThresh = autoThreshParam.BoolValue;
 
-            foreach (var q in _parameters)
-            {
-                if (q.Key == "marginPercent" || q.Key == "shiftFactor")
-                    q.IsVisible = isAuto && autoThresh;
-                if (q.Key == "darkThreshold")
-                {
-                    q.IsVisible = isAuto && !autoThresh;
-                }
-            }
-        }
-
-
-        public Dictionary<string, object> CreateParameterDictionary()
-        {
-            return _parameters.ToDictionary(
-                parameter => parameter.Key,
-                parameter => (object)(
-                    parameter.IsCombo ? (object?)parameter.SelectedOption ?? string.Empty :
-                    parameter.IsBool ? (object)parameter.BoolValue :
-                                        (object)parameter.Value
-                )
-            );
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
-
-    public class PipeLineParameter : INotifyPropertyChanged
-    {
-        private readonly double _min;
-        private readonly double _max;
-        private double _value;
-
-        private bool _isVisible = true;
-        private bool _isBool = false;
-        private bool _boolValue = false;
-
-        private IList<string>? _options;
-        private int _selectedIndex;
-
-        public PipeLineParameter(string label, string key, double value, double min, double max, double step)
-        {
-            Label = label;
-            Key = key;
-            _min = min;
-            _max = max;
-            Step = step <= 0 ? 1 : step;
-            _value = Clamp(value);
-            _options = null;
-            _selectedIndex = -1;
-        }
-
-        // constructor for ComboBox parameter
-        public PipeLineParameter(string label, string key, IEnumerable<string> options, int selectedIndex = 0)
-        {
-            Label = label;
-            Key = key;
-            Step = 1;
-            _min = double.NaN;
-            _max = double.NaN;
-            _value = double.NaN;
-
-            _options = options?.ToList() ?? new List<string>();
-            SelectedIndex = Math.Max(0, Math.Min(_options.Count - 1, selectedIndex));
-        }
-
-        // constructor for CheckBox
-        public PipeLineParameter(string label, string key, bool boolValue)
-        {
-            Label = label;
-            Key = key;
-            Step = 1;
-            _min = double.NaN;
-            _max = double.NaN;
-            _value = double.NaN;
-            _options = null;
-            _selectedIndex = -1;
-
-            _isBool = true;
-            _boolValue = boolValue;
-        }
-
-        public bool IsBool => _isBool;
+    //        foreach (var q in _parameters)
+    //        {
+    //            if (q.Key == "marginPercent" || q.Key == "shiftFactor")
+    //                q.IsVisible = isAuto && autoThresh;
+    //            if (q.Key == "darkThreshold")
+    //            {
+    //                q.IsVisible = isAuto && !autoThresh;
+    //            }
+    //        }
+    //    }
 
 
+    //    public Dictionary<string, object> CreateParameterDictionary()
+    //    {
+    //        return _parameters.ToDictionary(
+    //            parameter => parameter.Key,
+    //            parameter => (object)(
+    //                parameter.IsCombo ? (object?)parameter.SelectedOption ?? string.Empty :
+    //                parameter.IsBool ? (object)parameter.BoolValue :
+    //                                    (object)parameter.Value
+    //            )
+    //        );
+    //    }
 
-        public string Label { get; }
+    //    public event PropertyChangedEventHandler? PropertyChanged;
+    //    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    //        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    //}
 
-        public string Key { get; }
+    //public class PipeLineParameter : INotifyPropertyChanged
+    //{
+    //    private readonly double _min;
+    //    private readonly double _max;
+    //    private double _value;
 
-        public double Step { get; }
+    //    private bool _isVisible = true;
+    //    private bool _isBool = false;
+    //    private bool _boolValue = false;
 
-        public double Value
-        {
-            get => _value;
-            set
-            {
-                var clamped = Clamp(value);
-                if (!AreClose(_value, clamped))
-                {
-                    _value = clamped;
-                    OnPropertyChanged();
-                }
-            }
-        }
+    //    private IList<string>? _options;
+    //    private int _selectedIndex;
 
-        public bool BoolValue
-        {
-            get => _boolValue;
-            set
-            {
-                if (_boolValue != value)
-                {
-                    _boolValue = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
+    //    public PipeLineParameter(string label, string key, double value, double min, double max, double step)
+    //    {
+    //        Label = label;
+    //        Key = key;
+    //        _min = min;
+    //        _max = max;
+    //        Step = step <= 0 ? 1 : step;
+    //        _value = Clamp(value);
+    //        _options = null;
+    //        _selectedIndex = -1;
+    //    }
 
-        public bool IsVisible
-        {
-            get => _isVisible;
-            set
-            {
-                if (_isVisible != value)
-                {
-                    _isVisible = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
+    //    // constructor for ComboBox parameter
+    //    public PipeLineParameter(string label, string key, IEnumerable<string> options, int selectedIndex = 0)
+    //    {
+    //        Label = label;
+    //        Key = key;
+    //        Step = 1;
+    //        _min = double.NaN;
+    //        _max = double.NaN;
+    //        _value = double.NaN;
 
-        public void Increment()
-        {
-            Value += Step;
-        }
+    //        _options = options?.ToList() ?? new List<string>();
+    //        SelectedIndex = Math.Max(0, Math.Min(_options.Count - 1, selectedIndex));
+    //    }
 
-        public void Decrement()
-        {
-            Value -= Step;
-        }
+    //    // constructor for CheckBox
+    //    public PipeLineParameter(string label, string key, bool boolValue)
+    //    {
+    //        Label = label;
+    //        Key = key;
+    //        Step = 1;
+    //        _min = double.NaN;
+    //        _max = double.NaN;
+    //        _value = double.NaN;
+    //        _options = null;
+    //        _selectedIndex = -1;
 
-        // --- Combo properties ---
-        public IList<string>? Options
-        {
-            get => _options;
-            // rarely changed at runtime; if you set it, update IsCombo
-            set
-            {
-                _options = value;
-                OnPropertyChanged(nameof(Options));
-                OnPropertyChanged(nameof(IsCombo));
-            }
-        }
+    //        _isBool = true;
+    //        _boolValue = boolValue;
+    //    }
 
-        public int SelectedIndex
-        {
-            get => _selectedIndex;
-            set
-            {
-                if (_options == null || _options.Count == 0)
-                {
-                    _selectedIndex = -1;
-                }
-                else
-                {
-                    int idx = Math.Max(0, Math.Min(_options.Count - 1, value));
-                    if (_selectedIndex != idx)
-                    {
-                        _selectedIndex = idx;
-                        OnPropertyChanged();
-                        OnPropertyChanged(nameof(SelectedOption));
-                    }
-                }
-            }
-        }
-
-        public string? SelectedOption => (Options != null && SelectedIndex >= 0 && SelectedIndex < Options.Count) ? Options[SelectedIndex] : null;
-
-        // convenience flag for XAML
-        public bool IsCombo => Options != null && Options.Count > 0;
-
-        private double Clamp(double value)
-        {
-            if (!double.IsNaN(_min))
-            {
-                value = Math.Max(_min, value);
-            }
-
-            if (!double.IsNaN(_max))
-            {
-                value = Math.Min(_max, value);
-            }
-
-            return value;
-        }
+    //    public bool IsBool => _isBool;
 
 
 
-        private static bool AreClose(double value1, double value2)
-        {
-            return Math.Abs(value1 - value2) < 0.0001;
-        }
+    //    public string Label { get; }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
+    //    public string Key { get; }
 
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-    }
+    //    public double Step { get; }
+
+    //    public double Value
+    //    {
+    //        get => _value;
+    //        set
+    //        {
+    //            var clamped = Clamp(value);
+    //            if (!AreClose(_value, clamped))
+    //            {
+    //                _value = clamped;
+    //                OnPropertyChanged();
+    //            }
+    //        }
+    //    }
+
+    //    public bool BoolValue
+    //    {
+    //        get => _boolValue;
+    //        set
+    //        {
+    //            if (_boolValue != value)
+    //            {
+    //                _boolValue = value;
+    //                OnPropertyChanged();
+    //            }
+    //        }
+    //    }
+
+    //    public bool IsVisible
+    //    {
+    //        get => _isVisible;
+    //        set
+    //        {
+    //            if (_isVisible != value)
+    //            {
+    //                _isVisible = value;
+    //                OnPropertyChanged();
+    //            }
+    //        }
+    //    }
+
+    //    public void Increment()
+    //    {
+    //        Value += Step;
+    //    }
+
+    //    public void Decrement()
+    //    {
+    //        Value -= Step;
+    //    }
+
+    //    // --- Combo properties ---
+    //    public IList<string>? Options
+    //    {
+    //        get => _options;
+    //        // rarely changed at runtime; if you set it, update IsCombo
+    //        set
+    //        {
+    //            _options = value;
+    //            OnPropertyChanged(nameof(Options));
+    //            OnPropertyChanged(nameof(IsCombo));
+    //        }
+    //    }
+
+    //    public int SelectedIndex
+    //    {
+    //        get => _selectedIndex;
+    //        set
+    //        {
+    //            if (_options == null || _options.Count == 0)
+    //            {
+    //                _selectedIndex = -1;
+    //            }
+    //            else
+    //            {
+    //                int idx = Math.Max(0, Math.Min(_options.Count - 1, value));
+    //                if (_selectedIndex != idx)
+    //                {
+    //                    _selectedIndex = idx;
+    //                    OnPropertyChanged();
+    //                    OnPropertyChanged(nameof(SelectedOption));
+    //                }
+    //            }
+    //        }
+    //    }
+
+    //    public string? SelectedOption => (Options != null && SelectedIndex >= 0 && SelectedIndex < Options.Count) ? Options[SelectedIndex] : null;
+
+    //    // convenience flag for XAML
+    //    public bool IsCombo => Options != null && Options.Count > 0;
+
+    //    private double Clamp(double value)
+    //    {
+    //        if (!double.IsNaN(_min))
+    //        {
+    //            value = Math.Max(_min, value);
+    //        }
+
+    //        if (!double.IsNaN(_max))
+    //        {
+    //            value = Math.Min(_max, value);
+    //        }
+
+    //        return value;
+    //    }
+
+
+
+    //    private static bool AreClose(double value1, double value2)
+    //    {
+    //        return Math.Abs(value1 - value2) < 0.0001;
+    //    }
+
+    //    public event PropertyChangedEventHandler? PropertyChanged;
+
+    //    private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+    //    {
+    //        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    //    }
+    //}
 }

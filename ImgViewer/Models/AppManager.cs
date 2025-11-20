@@ -97,7 +97,8 @@ namespace ImgViewer.Models
         {
             _mainViewModel.Status = $"Processing image ({command})";
             Debug.WriteLine(command.ToString());
-            _imageProcessor.ApplyCommandToCurrent(command, parameters);
+
+            _imageProcessor.ApplyCommand(command, parameters);
             _mainViewModel.Status = $"Standby";
         }
 

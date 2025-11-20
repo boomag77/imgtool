@@ -315,8 +315,13 @@ namespace ImgViewer.Models
                         {
                             Cv2.CvtColor(src, srcGray,
                                 src.Channels() == 4 ? ColorConversionCodes.BGRA2GRAY : ColorConversionCodes.BGR2GRAY);
+                            outMat = srcGray;
                         }
-                        outMat = srcGray;
+                        else
+                        {
+                            outMat = src.Clone();
+                        }
+                            
 
 
                         if (debug)
