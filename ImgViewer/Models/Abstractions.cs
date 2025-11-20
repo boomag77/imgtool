@@ -130,6 +130,12 @@ namespace ImgViewer.Models
 
     }
 
+    public class Process
+    {
+        public string Name { get; set; }
+
+    }
+
 
 
     public class PipeLineStep
@@ -196,6 +202,11 @@ namespace ImgViewer.Models
         Auto,
         ByContrast
     }
+
+
+    
+
+
 
 }
 

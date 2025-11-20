@@ -515,7 +515,7 @@
                         </Style>
                     </ListBox.Resources>
                     <ListBox.ItemTemplate>
-                        <DataTemplate DataType="{x:Type models:PipeLineOperation}">
+                        <DataTemplate DataType="{x:Type models:PipelineOperation}">
                             <Border Background="{StaticResource PipelineCardBackgroundBrush}"
                                     BorderBrush="{StaticResource PipelineCardBorderBrush}"
                                     BorderThickness="1"

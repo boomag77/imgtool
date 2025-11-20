@@ -1,9 +1,10 @@
 ﻿using ImgViewer.Interfaces;
 using System.Diagnostics;
-using System.Windows.Media;
-using System.Text.Json;
-using System.Text;
 using System.Diagnostics.Eventing.Reader;
+using System.Text;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Media;
 
 namespace ImgViewer.Models
 {
@@ -112,6 +113,27 @@ namespace ImgViewer.Models
             string json = "{\"pipeline\":\"Deskew+Binarize\",\"version\":1}";
 
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
+        }
+
+        public void SavePipelineToJSON(string path, string json)
+        {
+            // TODO async
+
+            var folder = System.IO.Path.GetDirectoryName(path);
+            string pipeLineForSave = json;
+            string fileName = System.IO.Path.GetFileName(path);
+            try
+            {
+                System.IO.File.WriteAllText(System.IO.Path.Combine(folder, fileName), pipeLineForSave);
+#if DEBUG
+                Debug.WriteLine("Pipeline saved to " + fileName);
+#endif
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(ex.Message, "Error!", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
         }
 
         public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline, bool fullTree = true)
@@ -270,80 +292,14 @@ namespace ImgViewer.Models
             }
         }
 
-        public string BuildPipelineForSave((ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
-        {
-            if (pipeline == null) return "[]";
-
-            // Проектируем каждый шаг в объект с параметрами string->string
-            var items = pipeline.Select(step => new
-            {
-                command = step.command.ToString(), // или (int)step.command если хочешь числовой код
-                parameters = (step.parameters == null || step.parameters.Count == 0)
-                    ? new Dictionary<string, string>()
-                    : step.parameters.ToDictionary(
-                        kv => kv.Key,
-                        kv => FormatParamValue(kv.Value) ?? "null"  // FormatParamValue уже у тебя есть
-                    )
-            }).ToList();
-
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true
-            };
-
-            return JsonSerializer.Serialize(items, options);
-        }
+        
 
         public void Dispose()
         {
             GC.SuppressFinalize(this);
         }
 
-        static string FormatParamValue(object? v)
-        {
-            if (v == null) return "null";
-
-            // primitives and strings
-            var t = v.GetType();
-            if (t.IsPrimitive || v is decimal || v is string || v is DateTime || v is Guid)
-                return v.ToString() ?? "<empty>";
-
-            // IDictionary
-            if (v is System.Collections.IDictionary dict)
-            {
-                var items = new List<string>();
-                foreach (var key in dict.Keys)
-                {
-                    var val = dict[key];
-                    items.Add($"{key}={FormatParamValue(val)}");
-                    if (items.Count >= 10) { items.Add("..."); break; } // limit length
-                }
-                return "{" + string.Join(", ", items) + "}";
-            }
-
-            // IEnumerable (but not string)
-            if (v is System.Collections.IEnumerable ie && !(v is string))
-            {
-                var items = new List<string>();
-                int i = 0;
-                foreach (var it in ie)
-                {
-                    items.Add(FormatParamValue(it));
-                    if (++i >= 8) { items.Add("..."); break; } // limit items
-                }
-                return "[" + string.Join(", ", items) + "]";
-            }
-
-            // Common heavy/complex types: show type name and some hint instead of trying to serialize them
-            var typeName = t.Name;
-            if (typeName.Contains("Mat") || typeName.Contains("Image") || typeName.Contains("Bitmap") || typeName.Contains("ImageSource"))
-            {
-                return $"<{typeName}>";
-            }
-
-            // Last resort: ToString (may be type name)
-            try { return v.ToString() ?? $"<{typeName}>"; } catch { return $"<{typeName}>"; }
-        }
+        
 
     }
 }

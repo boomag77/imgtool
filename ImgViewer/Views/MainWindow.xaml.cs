@@ -37,10 +37,10 @@ namespace ImgViewer.Views
         private readonly IFileProcessor _explorer;
 
         //private readonly ObservableCollection<PipeLineOperation> _pipeLineOperations = new();
-        private readonly HashSet<PipeLineOperation> _handlingOps = new();
+        private readonly HashSet<PipelineOperation> _handlingOps = new();
 
-        private PipeLineOperation? _draggedOperation;
-        private PipeLineOperation? _activeOperation;
+        private PipelineOperation? _draggedOperation;
+        private PipelineOperation? _activeOperation;
         private ListBoxItem? _activeContainer;
         private int _originalPipelineIndex = -1;
         private int _currentInsertionIndex = -1;
@@ -51,7 +51,7 @@ namespace ImgViewer.Views
         private InsertionIndicatorAdorner? _insertionAdorner;
 
         private bool _livePipelineRunning = false;
-        private readonly HashSet<PipeLineOperation> _liveRunning = new();
+        private readonly HashSet<PipelineOperation> _liveRunning = new();
 
         // debounce для Live-пайплайна
         private CancellationTokenSource? _liveDebounceCts;
@@ -158,6 +158,8 @@ namespace ImgViewer.Views
         }
 
 
+
+
         private async Task RunLivePipelineFromOriginalAsync()
         {
             if (_viewModel.OriginalImage == null) return;
@@ -194,7 +196,7 @@ namespace ImgViewer.Views
                         {
                             try
                             {
-                                pipelineOp.Execute(this);
+                                pipelineOp.Execute();
                             }
                             catch (Exception exExec)
                             {
@@ -227,19 +229,19 @@ namespace ImgViewer.Views
                 {
                     if (e.NewItems != null)
                     {
-                        foreach (PipeLineOperation added in e.NewItems)
+                        foreach (PipelineOperation added in e.NewItems)
                             added.LiveChanged += OnOperationLiveChanged;
                     }
                     if (e.OldItems != null)
                     {
-                        foreach (PipeLineOperation removed in e.OldItems)
+                        foreach (PipelineOperation removed in e.OldItems)
                             removed.LiveChanged -= OnOperationLiveChanged;
                     }
                 };
             }
         }
 
-        private void OnOperationLiveChanged(PipeLineOperation op)
+        private void OnOperationLiveChanged(PipelineOperation op)
         {
 
             // при ЛЮБОМ изменении Live (ON/OFF) пересобираем весь pipeline
@@ -307,12 +309,12 @@ namespace ImgViewer.Views
                 {
                     if (e.NewItems != null)
                     {
-                        foreach (PipeLineOperation added in e.NewItems)
+                        foreach (PipelineOperation added in e.NewItems)
                             added.ParameterChanged += OnOperationParameterChanged;
                     }
                     if (e.OldItems != null)
                     {
-                        foreach (PipeLineOperation removed in e.OldItems)
+                        foreach (PipelineOperation removed in e.OldItems)
                             removed.ParameterChanged -= OnOperationParameterChanged;
                     }
                 };
@@ -320,7 +322,7 @@ namespace ImgViewer.Views
         }
 
         // --- Replace this existing method with the code below ---
-        private void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
+        private void OnOperationParameterChanged(PipelineOperation op, PipeLineParameter? param)
         {
             // если операция не включена в pipeline, игнорируем изменение параметров
             if (!op.InPipeline || !op.Live)
@@ -774,9 +776,9 @@ namespace ImgViewer.Views
 
         private void PipelineRunButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement element && element.DataContext is PipeLineOperation operation)
+            if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
             {
-                operation.Execute(this);
+                operation.Execute();
                 e.Handled = true;
             }
         }
@@ -851,7 +853,7 @@ namespace ImgViewer.Views
         {
             _dragStartPoint = e.GetPosition(PipelineListBox);
             _activeContainer = ItemsControl.ContainerFromElement(PipelineListBox, (DependencyObject)e.OriginalSource) as ListBoxItem;
-            _activeOperation = _activeContainer?.DataContext as PipeLineOperation;
+            _activeOperation = _activeContainer?.DataContext as PipelineOperation;
             _isDragging = false;
             _dropHandled = false;
         }
@@ -878,7 +880,7 @@ namespace ImgViewer.Views
 
         private void PipelineListBox_DragEnter(object sender, DragEventArgs e)
         {
-            if (!e.Data.GetDataPresent(typeof(PipeLineOperation)) || _draggedOperation == null)
+            if (!e.Data.GetDataPresent(typeof(PipelineOperation)) || _draggedOperation == null)
             {
                 e.Effects = DragDropEffects.None;
                 return;
@@ -892,7 +894,7 @@ namespace ImgViewer.Views
 
         private void PipelineListBox_DragOver(object sender, DragEventArgs e)
         {
-            if (!e.Data.GetDataPresent(typeof(PipeLineOperation)) || _draggedOperation == null)
+            if (!e.Data.GetDataPresent(typeof(PipelineOperation)) || _draggedOperation == null)
             {
                 e.Effects = DragDropEffects.None;
                 return;
@@ -917,7 +919,7 @@ namespace ImgViewer.Views
 
         private async void PipelineListBox_Drop(object sender, DragEventArgs e)
         {
-            if (!e.Data.GetDataPresent(typeof(PipeLineOperation)) || _draggedOperation == null)
+            if (!e.Data.GetDataPresent(typeof(PipelineOperation)) || _draggedOperation == null)
             {
                 e.Effects = DragDropEffects.None;
                 return;
@@ -981,7 +983,7 @@ namespace ImgViewer.Views
 
             _pipeline.Remove(_activeOperation);
 
-            var dragData = new DataObject(typeof(PipeLineOperation), _activeOperation);
+            var dragData = new DataObject(typeof(PipelineOperation), _activeOperation);
             var effect = DragDrop.DoDragDrop(PipelineListBox, dragData, DragDropEffects.Move);
 
             CompleteDrag(effect != DragDropEffects.Move);
@@ -1080,7 +1082,7 @@ namespace ImgViewer.Views
 
         private Dictionary<string, object> GetParametersFromSender(object sender)
         {
-            if (sender is FrameworkElement element && element.DataContext is PipeLineOperation operation)
+            if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
             {
                 return operation.CreateParameterDictionary();
             }
@@ -1168,6 +1170,11 @@ namespace ImgViewer.Views
             LoadPipelineFromFile();
         }
 
+        private void AddPipelineOperation_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
         private void LoadPipelineFromFile()
         {
 
@@ -1229,34 +1236,15 @@ namespace ImgViewer.Views
             if (dlg.ShowDialog() == true)
             {
                 var path = dlg.FileName + ".igpreset";
-                var json = _manager.BuildPipelineForSave(pipeline);
-                SavePipelineToJSON(path, json);
+                var json = _pipeline.BuildPipelineForSave(pipeline);
+                _manager.SavePipelineToJSON(path, json);
                 _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(path);
             }
 
 
         }
 
-        private void SavePipelineToJSON(string path, string json)
-        {
-            // TODO async
-
-            var folder = System.IO.Path.GetDirectoryName(path);
-            string pipeLineForSave = json;
-            string fileName = System.IO.Path.GetFileName(path);
-            try
-            {
-                File.WriteAllText(System.IO.Path.Combine(folder, fileName), pipeLineForSave);
-#if DEBUG
-                Debug.WriteLine("Pipeline saved to " + fileName);
-#endif
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show(ex.Message, "Error!", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-
-        }
+        
 
         private void ResetPipelineToDefaults_Click(object sender, RoutedEventArgs e)
         {

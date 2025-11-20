@@ -8,19 +8,19 @@ using System.Runtime.CompilerServices;
 
 namespace ImgViewer.Models
 {
-    public class PipeLineOperation : INotifyPropertyChanged
+    public class PipelineOperation : INotifyPropertyChanged
     {
         private readonly ObservableCollection<PipeLineParameter> _parameters;
-        private readonly Action<MainWindow, PipeLineOperation>? _execute;
+        private readonly Action<PipelineOperation>? _execute;
 
-        public event Action<PipeLineOperation, PipeLineParameter?>? ParameterChanged;
+        public event Action<PipelineOperation, PipeLineParameter?>? ParameterChanged;
 
         public ProcessorCommand? Command { get; set; }
 
         private bool _inPipeline = true;
         private bool _live = false;
 
-        public PipeLineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<MainWindow, PipeLineOperation> execute)
+        public PipelineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<PipelineOperation>? execute = null)
         {
             DisplayName = displayName;
             ActionLabel = actionLabel;
@@ -32,7 +32,7 @@ namespace ImgViewer.Models
             HookParameterChanges();
         }
 
-        public event Action<PipeLineOperation>? LiveChanged;
+        public event Action<PipelineOperation>? LiveChanged;
 
         public string DisplayName { get; }
 
@@ -81,9 +81,9 @@ namespace ImgViewer.Models
             }
         }
 
-        public void Execute(MainWindow window)
+        public void Execute()
         {
-            _execute?.Invoke(window, this);
+            _execute?.Invoke(this);
         }
 
         private void InitializeParameterVisibilityRules()
