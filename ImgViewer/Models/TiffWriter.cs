@@ -27,7 +27,7 @@ namespace ImgViewer.Models
             // nothing to dispose
         }
         // public entry point
-        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true)
+        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true, string? metadataJson = null)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
@@ -73,7 +73,14 @@ namespace ImgViewer.Models
                         InvertBinary(binPixels);
 
                     // write via LibTiff.NET
-                    SaveBinaryBytesAsCcitt(binPixels, width, height, path, dpi, compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4, photometricMinIsWhite: false);
+                    SaveBinaryBytesAsCcitt(
+                        binPixels,
+                        width, height,
+                        path,
+                        dpi,
+                        compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
+                        photometricMinIsWhite: false,
+                        metadataJson: metadataJson);
                 }
                 else
                 {
@@ -247,7 +254,14 @@ namespace ImgViewer.Models
         }
 
         // Save binary via LibTiff.NET with chosen compression (CCITT G3/G4)
-        private static void SaveBinaryBytesAsCcitt(byte[] binPixels, int width, int height, string outPath, int dpi, Compression compressionMethod, bool photometricMinIsWhite = true)
+        private static void SaveBinaryBytesAsCcitt(
+            byte[] binPixels,
+            int width, int height,
+            string outPath,
+            int dpi,
+            Compression compressionMethod,
+            bool photometricMinIsWhite = true,
+            string? metadataJson = null)
         {
             if (binPixels.Length != width * height)
                 throw new ArgumentException("binPixels length mismatch");
@@ -269,6 +283,11 @@ namespace ImgViewer.Models
                 tif.SetField(TiffTag.XRESOLUTION, (double)dpi);
                 tif.SetField(TiffTag.YRESOLUTION, (double)dpi);
                 tif.SetField(TiffTag.RESOLUTIONUNIT, ResUnit.INCH);
+            }
+
+            if (!string.IsNullOrEmpty(metadataJson))
+            {
+                tif.SetField(TiffTag.IMAGEDESCRIPTION, metadataJson);
             }
 
             int packedStride = (width + 7) / 8;

@@ -103,11 +103,15 @@ namespace ImgViewer.Models
             _mainViewModel.Status = $"Standby";
         }
 
-        public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression)
+        public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
         {
             var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
             Debug.WriteLine($"Stream length: {stream.Length}");
-            _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true);
+
+            // test JSON
+            string json = "{\"pipeline\":\"Deskew+Binarize\",\"version\":1}";
+
+            _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
         }
 
         public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline, bool fullTree = true)

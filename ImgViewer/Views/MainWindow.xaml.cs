@@ -98,7 +98,6 @@ namespace ImgViewer.Views
 
             DataContext = _viewModel;
 
-            //ImgListBox.ItemsSource = Files;
 
             _explorer = new FileProcessor(_cts.Token);
             _explorer.ErrorOccured += (msg) =>
@@ -110,8 +109,6 @@ namespace ImgViewer.Views
             };
 
 
-
-            //InitializePipeLineOperations();
 
             SubscribeParameterChangedHandlers();
             HookLiveHandlers();
@@ -1270,15 +1267,9 @@ namespace ImgViewer.Views
                                                          MessageBoxImage.Warning);
             if (res == MessageBoxResult.Cancel) return;
 
-            ResetPipelineToDefaults();
+            _pipeline.ResetToDefault();
         }
 
-        private void ResetPipelineToDefaults()
-        {
-            //TODO
-            _pipeline.InitializeDefault();
-            Debug.WriteLine("Pipeline has been reset.");
-        }
 
         private async void OpenNextFile_Click(object sender, RoutedEventArgs e)
         {

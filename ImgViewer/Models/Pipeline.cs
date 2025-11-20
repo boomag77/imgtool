@@ -198,6 +198,11 @@ namespace ImgViewer.Models
         //    return null;
         //}
 
+        public void ResetToDefault()
+        {
+            InitializeDefault();
+        }
+
         public void InitializeDefault()
         {
 

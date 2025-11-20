@@ -216,14 +216,14 @@ namespace ImgViewer.Models
 
 
 
-        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true)
+        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true, string? metadataJson = null)
         {
             if (!IsValidPath(path))
             {
                 return;
             }
             using var tiffSaver = new TiffWriter();
-            tiffSaver.SaveTiff(stream, path, compression, dpi, overwrite);
+            tiffSaver.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
         }
 
 

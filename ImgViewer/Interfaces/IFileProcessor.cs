@@ -15,7 +15,7 @@ namespace ImgViewer.Interfaces
 
         SourceImageFolder[]? GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath);
 
-        void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite);
+        void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite, string? metadataJson = null);
         void Save(Stream stream, string path);
 
 
