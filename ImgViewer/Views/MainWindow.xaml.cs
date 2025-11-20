@@ -122,6 +122,61 @@ namespace ImgViewer.Views
             InitializePipeLineOperations(ops);
         }
 
+        private async Task RunLivePipelineFromOriginalAsync()
+        {
+            // защита от повторных запусков, пока предыдущий ещё работает
+            if (_livePipelineRunning)
+                return;
+
+            _livePipelineRunning = true;
+            try
+            {
+                // 1) сброс к оригиналу на UI-потоке
+                try
+                {
+                    Dispatcher.Invoke(() => ResetPreview());
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Reset failed in RunLivePipelineFromOriginalAsync: {ex}");
+                }
+
+                // 2) пройти по всем операциям в порядке списка
+                foreach (var pipelineOp in PipeLineOperations)
+                {
+                    if (!pipelineOp.InPipeline || !pipelineOp.Live)
+                        continue;
+
+                    // защита от параллельных запусков одной и той же операции
+                    if (!_liveRunning.Add(pipelineOp))
+                        continue;
+
+                    try
+                    {
+                        await Task.Run(() =>
+                        {
+                            try
+                            {
+                                pipelineOp.Execute(this);
+                            }
+                            catch (Exception exExec)
+                            {
+                                Debug.WriteLine($"Live execution failed for {pipelineOp.DisplayName}: {exExec}");
+                            }
+                        });
+                    }
+                    finally
+                    {
+                        _liveRunning.Remove(pipelineOp);
+                    }
+                }
+            }
+            finally
+            {
+                _livePipelineRunning = false;
+            }
+        }
+
         private void HookLiveHandlers()
         {
             // attach to existing operations
@@ -149,51 +204,55 @@ namespace ImgViewer.Views
 
         private async void OnOperationLiveChanged(PipeLineOperation op)
         {
-            // only react when Live turned ON
-            if (!op.Live) return;
 
-            // avoid duplicate parallel runs for same op
-            if (!_liveRunning.Add(op)) return;
+            // при ЛЮБОМ изменении Live (ON/OFF) пересобираем весь pipeline
+            await RunLivePipelineFromOriginalAsync();
 
-            try
-            {
-                // 1) reset preview to original on UI thread
-                // Prefer a ResetImage() helper if you have it, otherwise call ResetButton_Click safely.
-                Dispatcher.Invoke(() =>
-                {
-                    try
-                    {
-                        // If you have ResetImage() helper, call it instead:
-                        
-                        ResetPreview();
+            //// only react when Live turned ON
+            //if (!op.Live) return;
 
-                        // Otherwise call reset button handler (you earlier had ResetButton_Click)
-                        //ResetButton_Click(/*sender*/ ResetButton /*if you have the button reference*/, new RoutedEventArgs());
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Reset failed before live run: {ex}");
-                    }
-                });
+            //// avoid duplicate parallel runs for same op
+            //if (!_liveRunning.Add(op)) return;
 
-                // 2) execute operation on background thread
-                await Task.Run(() =>
-                {
-                    try
-                    {
-                        // if Execute modifies UI, you must update UI via Dispatcher inside Execute
-                        op.Execute(this);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Live execution failed for {op.DisplayName}: {ex}");
-                    }
-                });
-            }
-            finally
-            {
-                _liveRunning.Remove(op);
-            }
+            //try
+            //{
+            //    // 1) reset preview to original on UI thread
+            //    // Prefer a ResetImage() helper if you have it, otherwise call ResetButton_Click safely.
+            //    Dispatcher.Invoke(() =>
+            //    {
+            //        try
+            //        {
+            //            // If you have ResetImage() helper, call it instead:
+
+            //            ResetPreview();
+
+            //            // Otherwise call reset button handler (you earlier had ResetButton_Click)
+            //            //ResetButton_Click(/*sender*/ ResetButton /*if you have the button reference*/, new RoutedEventArgs());
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            Debug.WriteLine($"Reset failed before live run: {ex}");
+            //        }
+            //    });
+
+            //    // 2) execute operation on background thread
+            //    await Task.Run(() =>
+            //    {
+            //        try
+            //        {
+            //            // if Execute modifies UI, you must update UI via Dispatcher inside Execute
+            //            op.Execute(this);
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            Debug.WriteLine($"Live execution failed for {op.DisplayName}: {ex}");
+            //        }
+            //    });
+            //}
+            //finally
+            //{
+            //    _liveRunning.Remove(op);
+            //}
         }
 
         private void SubscribeParameterChangedHandlers()
@@ -225,58 +284,63 @@ namespace ImgViewer.Views
         // --- Replace this existing method with the code below ---
         private async void OnOperationParameterChanged(PipeLineOperation op, PipeLineParameter? param)
         {
-            // avoid re-entrancy: if a pipeline-run is already applying, ignore subsequent rapid changes
-            if (_livePipelineRunning) return;
+            // если операция не включена в pipeline, игнорируем изменение параметров
+            if (!op.InPipeline || !op.Live)
+                return;
+            await RunLivePipelineFromOriginalAsync();
 
-            _livePipelineRunning = true;
-            try
-            {
-                // 1) Reset preview to original on UI thread (same behavior as Reset button)
-                try
-                {
-                    Dispatcher.Invoke(() => ResetPreview());
+            //// avoid re-entrancy: if a pipeline-run is already applying, ignore subsequent rapid changes
+            //if (_livePipelineRunning) return;
 
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Reset failed in parameter-change handler: {ex}");
-                }
+            //_livePipelineRunning = true;
+            //try
+            //{
+            //    // 1) Reset preview to original on UI thread (same behavior as Reset button)
+            //    try
+            //    {
+            //        Dispatcher.Invoke(() => ResetPreview());
 
-                // 2) Execute ALL operations from the start that are marked InPipeline && Live
-                //    Execute sequentially in pipeline order to accumulate effects predictably.
-                foreach (var pipelineOp in PipeLineOperations)
-                {
-                    // only run operations that are both InPipeline and Live
-                    if (!pipelineOp.InPipeline || !pipelineOp.Live) continue;
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        Debug.WriteLine($"Reset failed in parameter-change handler: {ex}");
+            //    }
 
-                    // avoid duplicate parallel runs for the same operation
-                    if (!_liveRunning.Add(pipelineOp)) continue;
+            //    // 2) Execute ALL operations from the start that are marked InPipeline && Live
+            //    //    Execute sequentially in pipeline order to accumulate effects predictably.
+            //    foreach (var pipelineOp in PipeLineOperations)
+            //    {
+            //        // only run operations that are both InPipeline and Live
+            //        if (!pipelineOp.InPipeline || !pipelineOp.Live) continue;
 
-                    try
-                    {
-                        // run heavy work off UI thread; op.Execute(...) should marshal to UI if it updates UI.
-                        await Task.Run(() =>
-                        {
-                            try
-                            {
-                                pipelineOp.Execute(this);
-                            }
-                            catch (Exception exExec)
-                            {
-                                Debug.WriteLine($"Live execution failed for {pipelineOp.DisplayName}: {exExec}");
-                            }
-                        });
-                    }
-                    finally
-                    {
-                        _liveRunning.Remove(pipelineOp);
-                    }
-                }
-            }
-            finally
-            {
-                _livePipelineRunning = false;
-            }
+            //        // avoid duplicate parallel runs for the same operation
+            //        if (!_liveRunning.Add(pipelineOp)) continue;
+
+            //        try
+            //        {
+            //            // run heavy work off UI thread; op.Execute(...) should marshal to UI if it updates UI.
+            //            await Task.Run(() =>
+            //            {
+            //                try
+            //                {
+            //                    pipelineOp.Execute(this);
+            //                }
+            //                catch (Exception exExec)
+            //                {
+            //                    Debug.WriteLine($"Live execution failed for {pipelineOp.DisplayName}: {exExec}");
+            //                }
+            //            });
+            //        }
+            //        finally
+            //        {
+            //            _liveRunning.Remove(pipelineOp);
+            //        }
+            //    }
+            //}
+            //finally
+            //{
+            //    _livePipelineRunning = false;
+            //}
         }
 
         private void StopProcessing_Click(object sender, RoutedEventArgs e)
@@ -778,49 +842,50 @@ namespace ImgViewer.Views
 
         private async Task RunLiveOperationsForNewImageAsync()
         {
-            try
-            {
-                // Если оригинального изображения нет — ничего не делать
-                if (_viewModel?.OriginalImage == null) return;
+            await RunLivePipelineFromOriginalAsync();
+            //try
+            //{
+            //    // Если оригинального изображения нет — ничего не делать
+            //    if (_viewModel?.OriginalImage == null) return;
 
-                // Сброс к оригиналу (на UI-потоке)
-                Dispatcher.Invoke(() =>
-                {
-                    _manager.SetImageForProcessing(_viewModel.OriginalImage);
-                });
+            //    // Сброс к оригиналу (на UI-потоке)
+            //    Dispatcher.Invoke(() =>
+            //    {
+            //        _manager.SetImageForProcessing(_viewModel.OriginalImage);
+            //    });
 
-                // Выполняем последовательно в порядке PipeLineOperations все операции с Live == true
-                foreach (var op in PipeLineOperations)
-                {
-                    if (!op.Live || !op.InPipeline) continue;
+            //    // Выполняем последовательно в порядке PipeLineOperations все операции с Live == true
+            //    foreach (var op in PipeLineOperations)
+            //    {
+            //        if (!op.Live || !op.InPipeline) continue;
 
-                    // защита от повторного параллельного запуска одной и той же операции
-                    if (!_liveRunning.Add(op)) continue;
+            //        // защита от повторного параллельного запуска одной и той же операции
+            //        if (!_liveRunning.Add(op)) continue;
 
-                    try
-                    {
-                        await Task.Run(() =>
-                        {
-                            try
-                            {
-                                op.Execute(this);
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.WriteLine($"RunLiveOperations: execution failed for {op.DisplayName}: {ex}");
-                            }
-                        });
-                    }
-                    finally
-                    {
-                        _liveRunning.Remove(op);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"RunLiveOperationsForNewImageAsync failed: {ex}");
-            }
+            //        try
+            //        {
+            //            await Task.Run(() =>
+            //            {
+            //                try
+            //                {
+            //                    op.Execute(this);
+            //                }
+            //                catch (Exception ex)
+            //                {
+            //                    Debug.WriteLine($"RunLiveOperations: execution failed for {op.DisplayName}: {ex}");
+            //                }
+            //            });
+            //        }
+            //        finally
+            //        {
+            //            _liveRunning.Remove(op);
+            //        }
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    Debug.WriteLine($"RunLiveOperationsForNewImageAsync failed: {ex}");
+            //}
         }
 
         private void PipelineListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
