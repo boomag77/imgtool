@@ -481,7 +481,8 @@
                          Grid.Row="2"
                          Margin="0"
                          Padding="5,10,5,10"
-                         ItemsSource="{Binding PipeLineOperations, RelativeSource={RelativeSource AncestorType=Window}}"
+                         ItemsSource="{Binding Pipeline.Operations,
+                                        RelativeSource={RelativeSource AncestorType=Window}}"
                          Background="Transparent"
                          BorderThickness="0"
                          AllowDrop="True"

@@ -17,7 +17,7 @@ namespace ImgViewer.Models
 
         public ProcessorCommand? Command { get; set; }
 
-        private bool _inPipeline = false;
+        private bool _inPipeline = true;
         private bool _live = false;
 
         public PipeLineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<MainWindow, PipeLineOperation> execute)
@@ -26,7 +26,6 @@ namespace ImgViewer.Models
             ActionLabel = actionLabel;
             _parameters = new ObservableCollection<PipeLineParameter>(parameters ?? Enumerable.Empty<PipeLineParameter>());
             _execute = execute;
-            _inPipeline = false;
 
 
             InitializeParameterVisibilityRules();

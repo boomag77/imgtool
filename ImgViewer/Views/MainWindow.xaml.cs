@@ -36,7 +36,7 @@ namespace ImgViewer.Views
         private readonly IImageProcessor _processor;
         private readonly IFileProcessor _explorer;
 
-        private readonly ObservableCollection<PipeLineOperation> _pipeLineOperations = new();
+        //private readonly ObservableCollection<PipeLineOperation> _pipeLineOperations = new();
         private readonly HashSet<PipeLineOperation> _handlingOps = new();
 
         private PipeLineOperation? _draggedOperation;
@@ -66,9 +66,12 @@ namespace ImgViewer.Views
             }
         }
 
-        public ObservableCollection<PipeLineOperation> PipeLineOperations => _pipeLineOperations;
+        public Pipeline Pipeline => _pipeline;
+
+        //public ObservableCollection<PipeLineOperation> PipeLineOperations => _pipeLineOperations;
 
         private readonly IAppManager _manager;
+        private readonly Pipeline _pipeline;
         private IViewModel _viewModel;
 
 
@@ -90,8 +93,8 @@ namespace ImgViewer.Views
             InitializeComponent();
 
             _cts = new CancellationTokenSource();
-
             _manager = new AppManager(this, _cts);
+            _pipeline = new Pipeline(_manager);
 
             DataContext = _viewModel;
 
@@ -106,7 +109,9 @@ namespace ImgViewer.Views
                 });
             };
 
-            InitializePipeLineOperations();
+
+
+            //InitializePipeLineOperations();
 
             SubscribeParameterChangedHandlers();
             HookLiveHandlers();
@@ -115,7 +120,8 @@ namespace ImgViewer.Views
 
         private void UpdatePipeline(List<Operation> ops)
         {
-            InitializePipeLineOperations(ops);
+            //_pipeline.SetOperationsToPipeline(ops);
+            //InitializePipeLineOperations(ops);
         }
 
         private void ScheduleLivePipelineRun()
@@ -176,7 +182,7 @@ namespace ImgViewer.Views
                 }
 
                 // 2) пройти по всем операциям в порядке списка
-                foreach (var pipelineOp in PipeLineOperations)
+                foreach (var pipelineOp in _pipeline.Operations)
                 {
                     if (!pipelineOp.InPipeline || !pipelineOp.Live)
                         continue;
@@ -214,11 +220,11 @@ namespace ImgViewer.Views
         private void HookLiveHandlers()
         {
             // attach to existing operations
-            foreach (var op in PipeLineOperations)
+            foreach (var op in _pipeline.Operations)
                 op.LiveChanged += OnOperationLiveChanged;
 
             // attach to future additions/removals if collection changes
-            if (PipeLineOperations is INotifyCollectionChanged coll)
+            if (_pipeline.Operations is INotifyCollectionChanged coll)
             {
                 coll.CollectionChanged += (s, e) =>
                 {
@@ -292,13 +298,13 @@ namespace ImgViewer.Views
 
         private void SubscribeParameterChangedHandlers()
         {
-            foreach (var op in PipeLineOperations)
+            foreach (var op in _pipeline.Operations)
             {
                 op.ParameterChanged += OnOperationParameterChanged;
             }
 
             // If PipeLineOperations can change at runtime, hook new items as well:
-            if (PipeLineOperations is INotifyCollectionChanged coll)
+            if (_pipeline.Operations is INotifyCollectionChanged coll)
             {
                 coll.CollectionChanged += (s, e) =>
                 {
@@ -505,217 +511,217 @@ namespace ImgViewer.Views
             }
         }
 
-        private void InitializeDefaultPipeline()
-        {
+        //private void InitializeDefaultPipeline()
+        //{
 
-            _pipeLineOperations.Clear();
+        //    _pipeline.Clear();
 
-            string buttonText = "Preview";
+        //    string buttonText = "Preview";
 
-            var op1 = new PipeLineOperation(
-                "Deskew",
-                buttonText,
-                new[]
-                {
-                    new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] {"Auto", "ByBorders", "Hough", "Projection", "PCA" }, 0),
-                    new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
-                    new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
-                    new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
-                    new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
-                    new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1)
-                },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Deskew, operation.CreateParameterDictionary()));
+        //    var op1 = new PipeLineOperation(
+        //        "Deskew",
+        //        buttonText,
+        //        new[]
+        //        {
+        //            new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] {"Auto", "ByBorders", "Hough", "Projection", "PCA" }, 0),
+        //            new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
+        //            new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
+        //            new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
+        //            new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
+        //            new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1)
+        //        },
+        //        (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Deskew, operation.CreateParameterDictionary()));
 
 
-            op1.Command = ProcessorCommand.Deskew;
-            _pipeLineOperations.Add(op1);
+        //    op1.Command = ProcessorCommand.Deskew;
+        //    _pipeline.Add(op1);
 
-            var op2 = new PipeLineOperation(
-                "Border Removal",
-                buttonText,
-                new[]
-                {
-                    new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast"}, 0),
-                    // By contrast
-                    new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
-                    new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 250, 1),
-                    new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
-                    new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
-                    // Auto
-                    new PipeLineParameter("Auto Threshold", "autoThresh", true),
-                    new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
-                    new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 1.0, 0.01),
-                    new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 5, 250, 1),
-                    new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
-                    new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 100, 2_000_000, 1),
-                    new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
-                    new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
-                    new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
-                    new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 20, 1),
+        //    var op2 = new PipeLineOperation(
+        //        "Border Removal",
+        //        buttonText,
+        //        new[]
+        //        {
+        //            new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast"}, 0),
+        //            // By contrast
+        //            new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
+        //            new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 250, 1),
+        //            new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
+        //            new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
+        //            // Auto
+        //            new PipeLineParameter("Auto Threshold", "autoThresh", true),
+        //            new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
+        //            new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 1.0, 0.01),
+        //            new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 5, 250, 1),
+        //            new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
+        //            new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 100, 2_000_000, 1),
+        //            new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
+        //            new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
+        //            new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
+        //            new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 20, 1),
 
-                },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));
-            op2.Command = ProcessorCommand.BordersRemove;
-            _pipeLineOperations.Add(op2);
+        //        },
+        //        (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));
+        //    op2.Command = ProcessorCommand.BordersRemove;
+        //    _pipeline.Add(op2);
 
-            //var op3 = new PipeLineOperation(
-            //    "Auto Crop",
-            //    buttonText,
-            //    new[]
-            //    {
-            //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
-            //    },
-            //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary()));
-            //op3.Command = ProcessorCommands.AutoCropRectangle;
-            //_pipeLineOperations.Add(op3);
+        //    //var op3 = new PipeLineOperation(
+        //    //    "Auto Crop",
+        //    //    buttonText,
+        //    //    new[]
+        //    //    {
+        //    //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
+        //    //    },
+        //    //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary()));
+        //    //op3.Command = ProcessorCommands.AutoCropRectangle;
+        //    //_pipeLineOperations.Add(op3);
 
-            var op4 = new PipeLineOperation(
-                "Binarize",
-                buttonText,
-                new[]
-                {
-                    new PipeLineParameter("Method", "method", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
-                    // Treshold alg
-                    new PipeLineParameter("Threshold", "threshold", 128, 0, 255, 1),
-                    // Adaptive alg
-                    new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
-                    new PipeLineParameter("Mean C", "meanC", 14, -50.0, 50.0, 1),
+        //    var op4 = new PipeLineOperation(
+        //        "Binarize",
+        //        buttonText,
+        //        new[]
+        //        {
+        //            new PipeLineParameter("Method", "method", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
+        //            // Treshold alg
+        //            new PipeLineParameter("Threshold", "threshold", 128, 0, 255, 1),
+        //            // Adaptive alg
+        //            new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
+        //            new PipeLineParameter("Mean C", "meanC", 14, -50.0, 50.0, 1),
 
-                    // Sauvola
-                    new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
-                    new PipeLineParameter("K: ", "sauvolaK", 0.34, 0.01, 1.00, 0.01),
-                    new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 255.0, 1.00),
-                    new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
-                    new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 12.0, 0.01, 255.0, 1.0),
-                    new PipeLineParameter("Morph radius", "sauvolaMorphRadius", 0, 0, 7, 1),
-                    // Majority
-                    new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
+        //            // Sauvola
+        //            new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
+        //            new PipeLineParameter("K: ", "sauvolaK", 0.34, 0.01, 1.00, 0.01),
+        //            new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 255.0, 1.00),
+        //            new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
+        //            new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 12.0, 0.01, 255.0, 1.0),
+        //            new PipeLineParameter("Morph radius", "sauvolaMorphRadius", 0, 0, 7, 1),
+        //            // Majority
+        //            new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
 
-                     // new boolean checkbox parameters:
-                    new PipeLineParameter("Use Gaussian", "useGaussian", false),
-                    new PipeLineParameter("Apply Morphology", "useMorphology", false),
+        //             // new boolean checkbox parameters:
+        //            new PipeLineParameter("Use Gaussian", "useGaussian", false),
+        //            new PipeLineParameter("Apply Morphology", "useMorphology", false),
 
-                    // morphology-specific numeric params (visible only if Apply Morphology == true — see ниже how to hide/show)
-                    new PipeLineParameter("Morph kernel", "morphKernelBinarize", 3, 1, 21, 2),
-                    new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
+        //            // morphology-specific numeric params (visible only if Apply Morphology == true — see ниже how to hide/show)
+        //            new PipeLineParameter("Morph kernel", "morphKernelBinarize", 3, 1, 21, 2),
+        //            new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
 
-                },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
-            op4.Command = ProcessorCommand.Binarize;
-            _pipeLineOperations.Add(op4);
+        //        },
+        //        (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
+        //    op4.Command = ProcessorCommand.Binarize;
+        //    _pipeline.Add(op4);
 
-            var op5 = new PipeLineOperation(
-                "PunchRemoval",
-                buttonText,
-                new[]
-                {
-                    new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect"}, 0),
-                    // Circle
-                    new PipeLineParameter("Diameter", "diameter",20, 1, 500, 1),
-                    // Rect
-                    new PipeLineParameter("Height", "height", 20, 1, 500, 1),
-                    new PipeLineParameter("Width", "width", 20, 1, 100, 1),
+        //    var op5 = new PipeLineOperation(
+        //        "PunchRemoval",
+        //        buttonText,
+        //        new[]
+        //        {
+        //            new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect"}, 0),
+        //            // Circle
+        //            new PipeLineParameter("Diameter", "diameter",20, 1, 500, 1),
+        //            // Rect
+        //            new PipeLineParameter("Height", "height", 20, 1, 500, 1),
+        //            new PipeLineParameter("Width", "width", 20, 1, 100, 1),
                    
-                    // common
-                    new PipeLineParameter("Density", "density", 0.50, 0.00, 1.00, 0.05),
-                    new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
-                    new PipeLineParameter("Left Offset", "leftOffset", 100, 1, 500, 1),
-                    new PipeLineParameter("Right Offset", "rightOffset", 100, 1, 500, 1),
-                    new PipeLineParameter("Top Offset", "topOffset", 100, 1, 500, 1),
-                    new PipeLineParameter("Bottom Offset", "bottomOffset", 100, 1, 500, 1),
+        //            // common
+        //            new PipeLineParameter("Density", "density", 0.50, 0.00, 1.00, 0.05),
+        //            new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
+        //            new PipeLineParameter("Left Offset", "leftOffset", 100, 1, 500, 1),
+        //            new PipeLineParameter("Right Offset", "rightOffset", 100, 1, 500, 1),
+        //            new PipeLineParameter("Top Offset", "topOffset", 100, 1, 500, 1),
+        //            new PipeLineParameter("Bottom Offset", "bottomOffset", 100, 1, 500, 1),
 
-                     // new boolean checkbox parameters:
-                    //new PipeLineParameter("Use Gaussian", "useGaussian", false),
+        //             // new boolean checkbox parameters:
+        //            //new PipeLineParameter("Use Gaussian", "useGaussian", false),
                    
 
 
-                },
-                (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.PunchHolesRemove, operation.CreateParameterDictionary()));
-            op5.Command = ProcessorCommand.PunchHolesRemove;
-            _pipeLineOperations.Add(op5);
+        //        },
+        //        (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.PunchHolesRemove, operation.CreateParameterDictionary()));
+        //    op5.Command = ProcessorCommand.PunchHolesRemove;
+        //    _pipeline.Add(op5);
 
-            var op6 = new PipeLineOperation(
-                "Despeckle",
-                buttonText,
-                new[]
-                {
-                        new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
-                        new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.25, 0.01, 2, 0.01),
-                        new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
-                        new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 1.00, 0.01),
-                        new PipeLineParameter("Proximity Radius Fraction", "ProximityRadiusFraction", 0.80, 0.01, 1.00, 0.01),
-                        new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 1.00, 0.05),
-                        new PipeLineParameter("KeepClusters", "keepClusters", true),
-                        new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", true),
-                        new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
-                        new PipeLineParameter("Dilate Iterations", "DilateIter", 1, 1, 5, 1),
-                        new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
-                        new PipeLineParameter("Show candidates", "showDespeckleDebug", true)
-                },
-            (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Despeckle, operation.CreateParameterDictionary()));
-            op6.Command = ProcessorCommand.Despeckle;
-            _pipeLineOperations.Add(op6);
+        //    var op6 = new PipeLineOperation(
+        //        "Despeckle",
+        //        buttonText,
+        //        new[]
+        //        {
+        //                new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
+        //                new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.25, 0.01, 2, 0.01),
+        //                new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
+        //                new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 1.00, 0.01),
+        //                new PipeLineParameter("Proximity Radius Fraction", "ProximityRadiusFraction", 0.80, 0.01, 1.00, 0.01),
+        //                new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 1.00, 0.05),
+        //                new PipeLineParameter("KeepClusters", "keepClusters", true),
+        //                new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", true),
+        //                new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
+        //                new PipeLineParameter("Dilate Iterations", "DilateIter", 1, 1, 5, 1),
+        //                new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
+        //                new PipeLineParameter("Show candidates", "showDespeckleDebug", true)
+        //        },
+        //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.Despeckle, operation.CreateParameterDictionary()));
+        //    op6.Command = ProcessorCommand.Despeckle;
+        //    _pipeline.Add(op6);
 
-            var op7 = new PipeLineOperation(
-                "LinesRemove",
-                buttonText,
-                new[]
-                {
-                        new PipeLineParameter("Orientation", "orientation", Enum.GetNames(typeof(LineOrientation)), 1),
-                        new PipeLineParameter("Line width (px)", "lineWidthPx", 1, 1, 20, 1),
-                        new PipeLineParameter("Min Length Fraction", "minLengthFraction", 0.5, 0.05, 1, 0.01),
-                        new PipeLineParameter("Start offset (px)", "offsetStartPx", -1, -1, 500, 1),
-                        new PipeLineParameter("Line color (Red)", "lineColorRed", -1, -1, 255, 1),
-                        new PipeLineParameter("Line color (Green)", "lineColorGreen", -1, -1, 255, 1),
-                        new PipeLineParameter("Line color (Blue)", "lineColorBlue", -1, -1, 255, 1),
-                        new PipeLineParameter("Color tolerance", "colorTolerance", 40, 0, 255, 1)
-                },
-            (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.LineRemove, operation.CreateParameterDictionary()));
-            op7.Command = ProcessorCommand.LineRemove;
-            _pipeLineOperations.Add(op7);
+        //    var op7 = new PipeLineOperation(
+        //        "LinesRemove",
+        //        buttonText,
+        //        new[]
+        //        {
+        //                new PipeLineParameter("Orientation", "orientation", Enum.GetNames(typeof(LineOrientation)), 1),
+        //                new PipeLineParameter("Line width (px)", "lineWidthPx", 1, 1, 20, 1),
+        //                new PipeLineParameter("Min Length Fraction", "minLengthFraction", 0.5, 0.05, 1, 0.01),
+        //                new PipeLineParameter("Start offset (px)", "offsetStartPx", -1, -1, 500, 1),
+        //                new PipeLineParameter("Line color (Red)", "lineColorRed", -1, -1, 255, 1),
+        //                new PipeLineParameter("Line color (Green)", "lineColorGreen", -1, -1, 255, 1),
+        //                new PipeLineParameter("Line color (Blue)", "lineColorBlue", -1, -1, 255, 1),
+        //                new PipeLineParameter("Color tolerance", "colorTolerance", 40, 0, 255, 1)
+        //        },
+        //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommand.LineRemove, operation.CreateParameterDictionary()));
+        //    op7.Command = ProcessorCommand.LineRemove;
+        //    _pipeline.Add(op7);
 
-        }
+        //}
 
-        private void InitializePipeLineOperations(List<Operation> ops = null)
-        {
-            _pipeLineOperations.Clear();
+        //private void InitializePipeLineOperations(List<Operation> ops = null)
+        //{
+        //    _pipeline.Clear();
 
-            if (ops == null)
-            {
-                InitializeDefaultPipeline();
-                return;
-            }
+        //    if (ops == null)
+        //    {
+        //        _pipeline.InitializeDefault();
+        //        return;
+        //    }
 
-            foreach (var op in ops)
-            {
-                // Определяем заголовок и режим (Preview / Run) — можно настроить по команде
-                string displayName = PrettyCommandName(op.Command);
-                string buttonText = "Preview";
-                var parameters = new List<PipeLineParameter>();
+        //    foreach (var op in ops)
+        //    {
+        //        // Определяем заголовок и режим (Preview / Run) — можно настроить по команде
+        //        string displayName = PrettyCommandName(op.Command);
+        //        string buttonText = "Preview";
+        //        var parameters = new List<PipeLineParameter>();
 
-                foreach (var p in op.Parameters)
-                {
-                    // p.Name - ключ в JSON; p.Value - object (int/double/bool/string)
-                    var plParam = CreatePipeLineParameterFromParsed(p.Name, p.Value);
-                    if (plParam != null) parameters.Add(plParam);
-                }
+        //        foreach (var p in op.Parameters)
+        //        {
+        //            // p.Name - ключ в JSON; p.Value - object (int/double/bool/string)
+        //            var plParam = CreatePipeLineParameterFromParsed(p.Name, p.Value);
+        //            if (plParam != null) parameters.Add(plParam);
+        //        }
 
-                // Лямбда-обработчик: переводит PipeLineOperation в запуск существующего менеджера
-                Action<MainWindow, PipeLineOperation> handler = (window, operation) =>
-                {
-                    // предполагается, что CreateParameterDictionary существует у PipeLineOperation
-                    window.ExecuteManagerCommand(MapToProcessorCommand(op.Command), operation.CreateParameterDictionary());
-                };
+        //        // Лямбда-обработчик: переводит PipeLineOperation в запуск существующего менеджера
+        //        Action<MainWindow, PipeLineOperation> handler = (window, operation) =>
+        //        {
+        //            // предполагается, что CreateParameterDictionary существует у PipeLineOperation
+        //            window.ExecuteManagerCommand(MapToProcessorCommand(op.Command), operation.CreateParameterDictionary());
+        //        };
 
-                var plo = new PipeLineOperation(displayName, buttonText, parameters.ToArray(), handler)
-                {
-                    Command = MapToProcessorCommand(op.Command)
-                };
-                _pipeLineOperations.Add(plo);
-            }
+        //        var plo = new PipeLineOperation(displayName, buttonText, parameters.ToArray(), handler)
+        //        {
+        //            Command = MapToProcessorCommand(op.Command)
+        //        };
+        //        _pipeline.Add(plo);
+        //    }
 
 
-        }
+        //}
 
         private string PrettyLabelFromKey(string key)
         {
@@ -738,87 +744,7 @@ namespace ImgViewer.Views
             return res;
         }
 
-        private PipeLineParameter? CreatePipeLineParameterFromParsed(string key, object? value)
-        {
-            // Уберём лишние пробелы и приведём к lower для ключей сопоставления
-            string lk = key.Trim();
-
-            // Специфичные опции для известных ключей (воспользуйтесь теми массивами, что выше)
-            if (string.Equals(lk, "deskewAlgorithm", StringComparison.OrdinalIgnoreCase))
-                return new PipeLineParameter("Algorithm", "deskewAlgorithm", DeskewAlgorithmOptions, Array.IndexOf(DeskewAlgorithmOptions, (value?.ToString() ?? "Auto")));
-
-            if (string.Equals(lk, "borderRemovalAlgorithm", StringComparison.OrdinalIgnoreCase))
-                return new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", BorderRemovalOptions, Array.IndexOf(BorderRemovalOptions, (value?.ToString() ?? "Auto")));
-
-            if (string.Equals(lk, "binarizeAlgorithm", StringComparison.OrdinalIgnoreCase))
-                return new PipeLineParameter("Algorithm", "binarizeAlgorithm", BinarizeAlgorithmOptions, Array.IndexOf(BinarizeAlgorithmOptions, (value?.ToString() ?? "Treshold")));
-
-            // Булевы параметры
-            if (value is bool bv)
-            {
-                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, bv);
-            }
-
-            // Целые числа
-            if (value is int iv)
-            {
-                // Подбор sensible bounds по имени параметра (если нужны особые min/max для некоторых ключей)
-                if (string.Equals(lk, "BinarizeTreshold", StringComparison.OrdinalIgnoreCase) ||
-                    lk.IndexOf("Threshold", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    lk.IndexOf("Tresh", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 0, 255, 1);
-                }
-
-                if (string.Equals(lk, "bgColor", StringComparison.OrdinalIgnoreCase))
-                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 0, 255, 1);
-
-                if (string.Equals(lk, "minAreaPx", StringComparison.OrdinalIgnoreCase))
-                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 100, 2_000_000, 1);
-
-                // default для int
-                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, Math.Max(0, iv - 100), iv + Math.Max(100, iv), 1);
-            }
-
-            // Вещественные числа (double)
-            if (value is double dv)
-            {
-                // если значение явно в диапазоне [0..1], подставим такие границы
-                if (dv >= 0.0 && dv <= 1.0)
-                    return new PipeLineParameter(PrettyLabelFromKey(lk), lk, dv, 0.0, 1.0, 0.01);
-
-                // стандартный fallback: min=0, max=dv*10 (чтобы можно было настраивать)
-                double max = Math.Max(1.0, dv * 10.0);
-                double step = dv < 1.0 ? 0.01 : 1.0;
-                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, dv, 0.0, max, step);
-            }
-
-            // Если значение boxed как System.Text.Json.JsonElement, попробуем обработать:
-            if (value is System.Text.Json.JsonElement je)
-            {
-                // простая попытка извлечь тип
-                if (je.ValueKind == System.Text.Json.JsonValueKind.Number)
-                {
-                    if (je.TryGetInt32(out var jjInt)) return CreatePipeLineParameterFromParsed(lk, jjInt);
-                    if (je.TryGetDouble(out var jjDbl)) return CreatePipeLineParameterFromParsed(lk, jjDbl);
-                }
-                if (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False)
-                    return CreatePipeLineParameterFromParsed(lk, je.GetBoolean());
-                if (je.ValueKind == System.Text.Json.JsonValueKind.String)
-                    return CreatePipeLineParameterFromParsed(lk, je.GetString());
-            }
-
-            // Строковые значения: создаём текстовый (строковый) параметр, если у вас есть конструктор для строк
-            if (value is string sv)
-            {
-                // Если у вас нет явного string-конструктора — можно создать выбора с одним элементом
-                // Использую конструктор (label, key, options[], selectedIndex)
-                return new PipeLineParameter(PrettyLabelFromKey(lk), lk, new[] { sv }, 0);
-            }
-
-            // Null или неизвестный тип — возвращаем null (не будем создавать параметр)
-            return null;
-        }
+        
 
         private string PrettyCommandName(string command)
         {
@@ -1000,8 +926,8 @@ namespace ImgViewer.Views
                 return;
             }
 
-            int insertionIndex = Math.Max(0, Math.Min(_pipeLineOperations.Count, _currentInsertionIndex));
-            _pipeLineOperations.Insert(insertionIndex, _draggedOperation);
+            int insertionIndex = Math.Max(0, Math.Min(_pipeline.Count, _currentInsertionIndex));
+            _pipeline.Insert(insertionIndex, _draggedOperation);
             _dropHandled = true;
 
             e.Effects = DragDropEffects.Move;
@@ -1045,7 +971,7 @@ namespace ImgViewer.Views
 
             _isDragging = true;
             _draggedOperation = _activeOperation;
-            _originalPipelineIndex = _pipeLineOperations.IndexOf(_activeOperation);
+            _originalPipelineIndex = _pipeline.IndexOf(_activeOperation);
             _currentInsertionIndex = _originalPipelineIndex;
 
             var bitmap = CaptureElementBitmap(_activeContainer);
@@ -1056,7 +982,7 @@ namespace ImgViewer.Views
                 _draggedItemAdorner.Update(Mouse.GetPosition(PipelineListBox));
             }
 
-            _pipeLineOperations.Remove(_activeOperation);
+            _pipeline.Remove(_activeOperation);
 
             var dragData = new DataObject(typeof(PipeLineOperation), _activeOperation);
             var effect = DragDrop.DoDragDrop(PipelineListBox, dragData, DragDropEffects.Move);
@@ -1075,8 +1001,8 @@ namespace ImgViewer.Views
                 if (!_dropHandled || cancelled)
                 {
                     int index = cancelled ? _originalPipelineIndex : _currentInsertionIndex;
-                    index = Math.Max(0, Math.Min(_pipeLineOperations.Count, index));
-                    _pipeLineOperations.Insert(index, _draggedOperation);
+                    index = Math.Max(0, Math.Min(_pipeline.Count, index));
+                    _pipeline.Insert(index, _draggedOperation);
                 }
             }
 
@@ -1350,7 +1276,7 @@ namespace ImgViewer.Views
         private void ResetPipelineToDefaults()
         {
             //TODO
-            InitializeDefaultPipeline();
+            _pipeline.InitializeDefault();
             Debug.WriteLine("Pipeline has been reset.");
         }
 
@@ -1487,12 +1413,12 @@ namespace ImgViewer.Views
 
         private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
         {
-            var pipeline = PipeLineOperations
+            var pl = _pipeline.Operations
                     .Where(op => op.InPipeline && op.Command.HasValue)
                     .Select(op => (op.Command.Value, op.CreateParameterDictionary()))
                     .ToArray();
 
-            return pipeline;
+            return pl;
         }
 
         private void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
@@ -1624,6 +1550,7 @@ namespace ImgViewer.Views
 
         private void SaveAs_Click(object sender, RoutedEventArgs e)
         {
+            if (_viewModel.OriginalImage == null) return;
             var dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.InitialDirectory = _manager.LastOpenedFolder;
             //dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";

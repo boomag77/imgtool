@@ -55,7 +55,7 @@ namespace ImgViewer.Models
                     if (v == null || v.Length == 0) return defaultValue;
                     try { return v[0].ToDouble(); } catch { return defaultValue; }
                 }
-
+#if DEBUG
                 Debug.WriteLine($"ImageWidth: {GetInt(TiffTag.IMAGEWIDTH)}");
                 Debug.WriteLine($"ImageLength: {GetInt(TiffTag.IMAGELENGTH)}");
                 Debug.WriteLine($"RowsPerStrip: {GetInt(TiffTag.ROWSPERSTRIP)}");
@@ -64,7 +64,7 @@ namespace ImgViewer.Models
                 Debug.WriteLine($"PlanarConfiguration: {GetInt(TiffTag.PLANARCONFIG)}");
                 Debug.WriteLine($"SamplesPerPixel: {GetInt(TiffTag.SAMPLESPERPIXEL)}");
                 Debug.WriteLine($"BitsPerSample: {GetInt(TiffTag.BITSPERSAMPLE)}");
-
+#endif
                 // Try to print STRIPOFFSETS and STRIPBYTECOUNTS if present
                 FieldValue[]? off = tif.GetField(TiffTag.STRIPOFFSETS);
                 if (off != null && off.Length > 0)
