@@ -418,7 +418,7 @@ namespace ImgViewer.Views
                 return;
             }
 
-            PipelineListBox.UpdateLayout();
+            //PipelineListBox.UpdateLayout();
             _currentInsertionIndex = GetInsertionIndex(PipelineListBox, rawPos); // для индекса используем сырую позицию
             EnsureInsertionAdorner();
             _insertionAdorner?.Update(PipelineListBox, _currentInsertionIndex);
@@ -507,6 +507,15 @@ namespace ImgViewer.Views
             if (_draggedItemAdorner != null)
             {
                 e.UseDefaultCursors = false;
+
+                //var rawPos = Mouse.GetPosition(PipelineListBox);
+                //double width = PipelineListBox.ActualWidth;
+
+                //double clampedX = Math.Max(EraseOffset, Math.Min(rawPos.X, width - EraseOffset));
+                //var clampedPos = new Point(clampedX, rawPos.Y);
+
+                //_draggedItemAdorner.Update(clampedPos);
+
                 //_draggedItemAdorner.Update(Mouse.GetPosition(RootGrid));
                 //_draggedItemAdorner.Update(e.GetPosition(PipelineListBox)); // вместо Mouse.GetPosition
                 //Mouse.SetCursor(Cursors.Arrow);
@@ -532,12 +541,15 @@ namespace ImgViewer.Views
             _originalPipelineIndex = _pipeline.IndexOf(_activeOperation);
             _currentInsertionIndex = _originalPipelineIndex;
 
+            PipelineListBox.UpdateLayout();
+
+
             var bitmap = CaptureElementBitmap(_activeContainer);
             var layer = AdornerLayer.GetAdornerLayer(PipelineListBox);
             if (bitmap != null && layer != null)
             {
                 _draggedItemAdorner = new DraggedItemAdorner(PipelineListBox, layer, bitmap);
-                _draggedItemAdorner.Update(Mouse.GetPosition(RootGrid));
+                _draggedItemAdorner.Update(Mouse.GetPosition(PipelineListBox));
             }
 
             _pipeline.Remove(_activeOperation);
@@ -546,6 +558,7 @@ namespace ImgViewer.Views
             var effect = DragDrop.DoDragDrop(PipelineListBox, dragData, DragDropEffects.Move);
 
             CompleteDrag(effect != DragDropEffects.Move);
+
         }
 
         private void CompleteDrag(bool cancelled)
@@ -1227,7 +1240,7 @@ namespace ImgViewer.Views
                 }
                 else
                 {
-                    drawingContext.PushOpacity(0.8);
+                    drawingContext.PushOpacity(0.7);
                     drawingContext.DrawImage(_bitmap, rect);
                     drawingContext.Pop(); // важно!
                 }
