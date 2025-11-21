@@ -456,24 +456,56 @@
                     Text="Pipeline"/>
                 <!-- Load/Save preset buttons -->
                 <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
                             Grid.Row="1">
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="120"
+                            MinWidth="100"
                             Click="LoadPipelinePreset_Click">
                         Load preset
                     </Button>
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="120"
+                            MinWidth="100"
                             Click="SavePipelinePreset_Click">
                         Save preset
                     </Button>
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="120"
+                            MinWidth="100"
                             Click="ResetPipelineToDefaults_Click">
                             Reset to defauts
+                    </Button>
+                    <Button Style="{StaticResource ElevatedRoundedButton}"
+                            Margin="5,5,5,5"
+                            MinWidth="100"
+                            Click="AddPipelineOperation_Click">      
+                        Add operation
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="AddOperationContextMenu">
+                                <MenuItem Header="Deskew"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Deskew}"
+                                      Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Border Removal"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.BorderRemove}"
+                                      Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Binarize"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Binarize}"
+                                      Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Punch holes"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.PunchholesRemove}"
+                                      Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Despeckle"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Despeckle}"
+                                      Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Lines remove"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.LinesRemove}"
+                                      Click="AddOperationMenuItem_Click" />
+                                    <MenuItem Header="Crop"
+                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Crop}"
+                                      Click="AddOperationMenuItem_Click" /> 
+                            </ContextMenu>
+                        </Button.ContextMenu>
                     </Button>
                 </StackPanel>
                 <!-- Pipeline steps cards -->

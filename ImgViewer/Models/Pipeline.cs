@@ -74,7 +74,10 @@ namespace ImgViewer.Models
         public void Insert(int index, PipelineOperation operation)
         {
             lock (_operationsLock)
+            {
                 _operations.Insert(index, operation);
+            }
+               
         }
 
         public void Remove(PipelineOperation operation)
@@ -100,7 +103,7 @@ namespace ImgViewer.Models
             _manager.ApplyCommandToProcessingImage(command, parameters);
         }
 
-        private PipelineOperation CreatePipelineOperation(PipelineOperationType type, string? nameSuffix = null)
+        public PipelineOperation CreatePipelineOperation(PipelineOperationType type, string? nameSuffix = null)
         {
 
             PipelineOperation operation;

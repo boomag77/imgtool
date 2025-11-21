@@ -1172,7 +1172,29 @@ namespace ImgViewer.Views
 
         private void AddPipelineOperation_Click(object sender, RoutedEventArgs e)
         {
+            if (sender is System.Windows.Controls.Button btn && btn.ContextMenu != null)
+            {
+                btn.ContextMenu.PlacementTarget = btn;
+                btn.ContextMenu.IsOpen = true;
+            }
+        }
 
+        private void AddOperationMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem)
+                return;
+
+            if (menuItem.Tag is not Pipeline.PipelineOperationType type)
+                return;
+
+            // создаём новую операцию нужного типа
+            var op = _pipeline.CreatePipelineOperation(type);  // см. шаг 4
+
+            // вставляем в начало pipeline (индекс 0)
+            _pipeline.Insert(0, op);
+
+            // опционально: сразу пересчитать live-pipeline
+            ScheduleLivePipelineRun();
         }
 
         private void LoadPipelineFromFile()
