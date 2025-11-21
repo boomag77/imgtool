@@ -674,10 +674,10 @@ namespace ImgViewer.Views
             _manager?.ApplyCommandToProcessingImage(command, parameters);
         }
 
-        private void ExecuteProcessorCommand(ProcessorCommand command, Dictionary<string, object> parameters)
-        {
-            _processor?.ApplyCommand(command, parameters);
-        }
+        //private void ExecuteProcessorCommand(ProcessorCommand command, Dictionary<string, object> parameters)
+        //{
+        //    _processor?.ApplyCommand(command, parameters);
+        //}
 
         private Dictionary<string, object> GetParametersFromSender(object sender)
         {
@@ -946,7 +946,8 @@ namespace ImgViewer.Views
 
         private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteProcessorCommand(ProcessorCommand.Despeckle, GetParametersFromSender(sender));
+            //ExecuteProcessorCommand(ProcessorCommand.Despeckle, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.Despeckle, GetParametersFromSender(sender));
         }
 
 
@@ -963,12 +964,14 @@ namespace ImgViewer.Views
 
         private void ApplyLineRemoveCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteProcessorCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
+            //ExecuteProcessorCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
         }
 
         private void ApplyPunchesRemoveCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteProcessorCommand(ProcessorCommand.DotsRemove, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.DotsRemove, GetParametersFromSender(sender));
+            //ExecuteProcessorCommand(ProcessorCommand.DotsRemove, GetParametersFromSender(sender));
         }
 
 
@@ -1208,6 +1211,7 @@ namespace ImgViewer.Views
                 var rect = new Rect(
                     new Point(_position.X - size.Width / 2, _position.Y - size.Height / 2),
                     size);
+                
 
                 if (_eraseMode)
                 {
@@ -1217,7 +1221,9 @@ namespace ImgViewer.Views
                     drawingContext.Pop();
 
                     var redBrush = new SolidColorBrush(Color.FromArgb(160, 255, 0, 0));
-                    drawingContext.DrawRectangle(redBrush, null, rect);
+                    double radius = 4;
+                    drawingContext.DrawRoundedRectangle(redBrush, null, rect, radius, radius);
+                    
                 }
                 else
                 {

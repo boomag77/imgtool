@@ -38,6 +38,7 @@
                             <Style TargetType="ContentControl">
                                 <!-- Default editor: numeric/text -->
                                 <Setter Property="Content">
+                                    
                                     <Setter.Value>
                                         <TextBox Width="100"
                                              VerticalAlignment="Center"
@@ -102,6 +103,7 @@
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -202,7 +204,8 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="6,2" />
             <Setter Property="MinWidth" Value="50" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
@@ -289,6 +292,7 @@
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
@@ -315,7 +319,7 @@
         <!-- Put this inside <Window.Resources> (replace any previous PipelineCheckBoxStyle) -->
         <Style x:Key="PipelineCheckBoxStyle" TargetType="CheckBox">
             <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -567,7 +571,7 @@
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding DisplayName}"
                                                    FontWeight="Bold"
-                                                   FontSize="16"
+                                                   FontSize="14"
                                                    Foreground="{StaticResource PipelineTextBrush}"
                                                    VerticalAlignment="Center"/>
 
@@ -654,7 +658,7 @@
                                                                                          VerticalContentAlignment="Center"
                                                                                          MinWidth="50"
                                                                                          MaxWidth="140"
-                                                                                         FontSize="13"/>
+                                                                                         FontSize="11"/>
                                                                             </Setter.Value>
                                                                         </Setter>
 
@@ -674,7 +678,7 @@
                                                                                                   BorderThickness="0"
                                                                                                   HorizontalContentAlignment="Right"
                                                                                                   VerticalContentAlignment="Center"
-                                                                                                  FontSize="13"/>
+                                                                                                  FontSize="11"/>
                                                                                     </Setter.Value>
                                                                                 </Setter>
                                                                             </DataTrigger>
@@ -742,7 +746,7 @@
                                                                    Foreground="{StaticResource PipelineTextBrush}"
                                                                    VerticalAlignment="Center"
                                                                    Margin="6,0,0,0"
-                                                                   FontSize="13"/>
+                                                                   FontSize="11"/>
                                                     </StackPanel>
                                                 </StackPanel>
                                             </DataTemplate>
