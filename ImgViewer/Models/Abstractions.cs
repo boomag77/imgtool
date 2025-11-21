@@ -1,13 +1,19 @@
 ﻿using ImgViewer.Interfaces;
 using System.ComponentModel;
-using System.Runtime.InteropServices;
-using System.Web.UI;
-using System.Web.UI.WebControls;
 
 namespace ImgViewer.Models
 {
 
-
+    public enum PipelineOperationType
+    {
+        Deskew,
+        BorderRemove,
+        Binarize,
+        PunchholesRemove,
+        Despeckle,
+        LinesRemove,
+        SmartCrop
+    }
 
     public class SourceImageFolder
     {
@@ -26,13 +32,6 @@ namespace ImgViewer.Models
         Binarize
     }
 
-    public enum OperationParameterDataType
-    {
-        Bool,
-        Int,
-        Double,
-        String
-    }
 
     internal struct BinarizeParameters
     {
@@ -52,7 +51,7 @@ namespace ImgViewer.Models
         public bool UseMorphology;
         public bool SauvolaUseClahe;
 
-        
+
 
         public static BinarizeParameters Default => new BinarizeParameters
         {
@@ -204,7 +203,7 @@ namespace ImgViewer.Models
     }
 
 
-    
+
 
 
 

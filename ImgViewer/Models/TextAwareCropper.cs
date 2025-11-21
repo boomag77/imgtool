@@ -203,7 +203,7 @@ public class TextAwareCropper
                         using var pix = MatToPix(grayForOcr);
                         using var page = engine.Process(pix, psm);
                         ocrText = page.GetText() ?? string.Empty;
-                        Debug.Write(ocrText);
+                        //Debug.Write(ocrText);
                         conf = page.GetMeanConfidence() * 100.0f;
                     }
 

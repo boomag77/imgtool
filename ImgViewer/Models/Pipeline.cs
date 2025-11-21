@@ -2,6 +2,7 @@
 using ImgViewer.Views;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 
@@ -12,21 +13,19 @@ namespace ImgViewer.Models
     public class Pipeline
     {
 
-        public enum PipelineOperationType
-        {
-            Deskew,
-            BorderRemove,
-            Binarize,
-            PunchholesRemove,
-            Despeckle,
-            LinesRemove,
-            Crop
-        }
+        
 
-        private static string buttonText = "Preview";
+        private sealed class PipelineSaveItem
+        {
+            public PipelineOperationType Type { get; set; }
+            public string? DisplayName { get; set; }
+            public Dictionary<string, object?>? Parameters { get; set; }
+        }
 
         
         private readonly IAppManager _manager;
+
+
         private readonly object _operationsLock = new();
 
         private ObservableCollection<PipelineOperation> _operations = new();
@@ -37,6 +36,10 @@ namespace ImgViewer.Models
             {
                 lock (_operationsLock)
                     return _operations;
+            }
+            set
+            {
+                Debug.WriteLine($"Operations: {_operations.Count}");
             }
         }
 
@@ -115,6 +118,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.Deskew:
                     {
                         operation = new PipelineOperation(
+                            PipelineOperationType.Deskew,
+                            ProcessorCommand.Deskew,
                             displayName,
                             buttonText,
                             new[]
@@ -136,6 +141,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.BorderRemove:
                     {
                         operation = new PipelineOperation(
+                            PipelineOperationType.BorderRemove,
+                            ProcessorCommand.BordersRemove,
                             displayName,
                             buttonText,
                             new[]
@@ -165,6 +172,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.Binarize:
                     {
                         operation = new PipelineOperation(
+                            PipelineOperationType.Binarize,
+                            ProcessorCommand.Binarize,
                             displayName,
                             buttonText,
                             new[]
@@ -201,6 +210,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.PunchholesRemove:
                     {
                         operation = new PipelineOperation(
+                            PipelineOperationType.PunchholesRemove,
+                            ProcessorCommand.PunchHolesRemove,
                             displayName,
                             buttonText,
                             new[]
@@ -232,6 +243,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.Despeckle:
                     {
                         operation = new PipelineOperation(
+                            PipelineOperationType.Despeckle,
+                            ProcessorCommand.Despeckle,
                             displayName,
                             buttonText,
                             new[]
@@ -255,6 +268,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.LinesRemove:
                     {
                         operation = new PipelineOperation(
+                            PipelineOperationType.LinesRemove,
+                            ProcessorCommand.LineRemove,
                         displayName,
                         buttonText,
                         new[]
@@ -271,6 +286,20 @@ namespace ImgViewer.Models
                         operation => ExecuteManagerCommand(ProcessorCommand.LineRemove, operation.CreateParameterDictionary()));
                     }
                     break;
+                case PipelineOperationType.SmartCrop:
+                    {
+                        operation = new PipelineOperation(
+                        PipelineOperationType.SmartCrop,
+                        ProcessorCommand.AutoCropRectangle,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
+                        },
+                        operation => ExecuteManagerCommand(ProcessorCommand.AutoCropRectangle, operation.CreateParameterDictionary()));
+                    }
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(
                                      nameof(type),
@@ -285,196 +314,277 @@ namespace ImgViewer.Models
         }
 
 
-        //public void SetOperationsToPipeline(List<Operation> ops)
-        //{
-        //    _operations.Clear();
 
-        //    if (ops == null)
-        //    {
-        //        InitializeDefault();
-        //        return;
-        //    }
 
-        //    foreach (var op in ops)
-        //    {
-        //        // Определяем заголовок и режим (Preview / Run) — можно настроить по команде
-        //        string displayName = op.Command;
-        //        string buttonText = "Preview";
-        //        var parameters = new List<PipeLineParameter>();
 
-        //        foreach (var p in op.Parameters)
-        //        {
-        //            // p.Name - ключ в JSON; p.Value - object (int/double/bool/string)
-        //            var plParam = CreatePipeLineParameterFromParsed(p.Name, p.Value);
-        //            if (plParam != null) parameters.Add(plParam);
-        //        }
-
-        //        // Лямбда-обработчик: переводит PipeLineOperation в запуск существующего менеджера
-        //        Action<MainWindow, PipeLineOperation> handler = (window, operation) =>
-        //        {
-        //            // предполагается, что CreateParameterDictionary существует у PipeLineOperation
-        //            window.ExecuteManagerCommand(MapToProcessorCommand(op.Command), operation.CreateParameterDictionary());
-        //        };
-
-        //        var plo = new PipeLineOperation(displayName, buttonText, parameters.ToArray(), handler)
-        //        {
-        //            Command = MapToProcessorCommand(op.Command)
-        //        };
-        //        _pipeline.Add(plo);
-        //    }
-        //}
-
-        //private PipeLineParameter? CreatePipeLineParameterFromParsed(string key, object? value)
-        //{
-        //    // Уберём лишние пробелы и приведём к lower для ключей сопоставления
-        //    string lk = key.Trim();
-
-        //    // Специфичные опции для известных ключей (воспользуйтесь теми массивами, что выше)
-        //    if (string.Equals(lk, "deskewAlgorithm", StringComparison.OrdinalIgnoreCase))
-        //        return new PipeLineParameter("Algorithm", "deskewAlgorithm", DeskewAlgorithmOptions, Array.IndexOf(DeskewAlgorithmOptions, (value?.ToString() ?? "Auto")));
-
-        //    if (string.Equals(lk, "borderRemovalAlgorithm", StringComparison.OrdinalIgnoreCase))
-        //        return new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", BorderRemovalOptions, Array.IndexOf(BorderRemovalOptions, (value?.ToString() ?? "Auto")));
-
-        //    if (string.Equals(lk, "binarizeAlgorithm", StringComparison.OrdinalIgnoreCase))
-        //        return new PipeLineParameter("Algorithm", "binarizeAlgorithm", BinarizeAlgorithmOptions, Array.IndexOf(BinarizeAlgorithmOptions, (value?.ToString() ?? "Treshold")));
-
-        //    // Булевы параметры
-        //    if (value is bool bv)
-        //    {
-        //        return new PipeLineParameter(PrettyLabelFromKey(lk), lk, bv);
-        //    }
-
-        //    // Целые числа
-        //    if (value is int iv)
-        //    {
-        //        // Подбор sensible bounds по имени параметра (если нужны особые min/max для некоторых ключей)
-        //        if (string.Equals(lk, "BinarizeTreshold", StringComparison.OrdinalIgnoreCase) ||
-        //            lk.IndexOf("Threshold", StringComparison.OrdinalIgnoreCase) >= 0 ||
-        //            lk.IndexOf("Tresh", StringComparison.OrdinalIgnoreCase) >= 0)
-        //        {
-        //            return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 0, 255, 1);
-        //        }
-
-        //        if (string.Equals(lk, "bgColor", StringComparison.OrdinalIgnoreCase))
-        //            return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 0, 255, 1);
-
-        //        if (string.Equals(lk, "minAreaPx", StringComparison.OrdinalIgnoreCase))
-        //            return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, 100, 2_000_000, 1);
-
-        //        // default для int
-        //        return new PipeLineParameter(PrettyLabelFromKey(lk), lk, iv, Math.Max(0, iv - 100), iv + Math.Max(100, iv), 1);
-        //    }
-
-        //    // Вещественные числа (double)
-        //    if (value is double dv)
-        //    {
-        //        // если значение явно в диапазоне [0..1], подставим такие границы
-        //        if (dv >= 0.0 && dv <= 1.0)
-        //            return new PipeLineParameter(PrettyLabelFromKey(lk), lk, dv, 0.0, 1.0, 0.01);
-
-        //        // стандартный fallback: min=0, max=dv*10 (чтобы можно было настраивать)
-        //        double max = Math.Max(1.0, dv * 10.0);
-        //        double step = dv < 1.0 ? 0.01 : 1.0;
-        //        return new PipeLineParameter(PrettyLabelFromKey(lk), lk, dv, 0.0, max, step);
-        //    }
-
-        //    // Если значение boxed как System.Text.Json.JsonElement, попробуем обработать:
-        //    if (value is System.Text.Json.JsonElement je)
-        //    {
-        //        // простая попытка извлечь тип
-        //        if (je.ValueKind == System.Text.Json.JsonValueKind.Number)
-        //        {
-        //            if (je.TryGetInt32(out var jjInt)) return CreatePipeLineParameterFromParsed(lk, jjInt);
-        //            if (je.TryGetDouble(out var jjDbl)) return CreatePipeLineParameterFromParsed(lk, jjDbl);
-        //        }
-        //        if (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False)
-        //            return CreatePipeLineParameterFromParsed(lk, je.GetBoolean());
-        //        if (je.ValueKind == System.Text.Json.JsonValueKind.String)
-        //            return CreatePipeLineParameterFromParsed(lk, je.GetString());
-        //    }
-
-        //    // Строковые значения: создаём текстовый (строковый) параметр, если у вас есть конструктор для строк
-        //    if (value is string sv)
-        //    {
-        //        // Если у вас нет явного string-конструктора — можно создать выбора с одним элементом
-        //        // Использую конструктор (label, key, options[], selectedIndex)
-        //        return new PipeLineParameter(PrettyLabelFromKey(lk), lk, new[] { sv }, 0);
-        //    }
-
-        //    // Null или неизвестный тип — возвращаем null (не будем создавать параметр)
-        //    return null;
-        //}
-
-        static string FormatParamValue(object? v)
+        public void LoadPipelineFromJson(string json)
         {
-            if (v == null) return "null";
+            if (string.IsNullOrWhiteSpace(json))
+                return;
 
-            // primitives and strings
-            var t = v.GetType();
-            if (t.IsPrimitive || v is decimal || v is string || v is DateTime || v is Guid)
-                return v.ToString() ?? "<empty>";
-
-            // IDictionary
-            if (v is System.Collections.IDictionary dict)
+            List<PipelineSaveItem>? snapshot;
+            try
             {
-                var items = new List<string>();
-                foreach (var key in dict.Keys)
+                snapshot = JsonSerializer.Deserialize<List<PipelineSaveItem>>(json,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+            }
+            catch (JsonException ex)
+            {
+                Debug.WriteLine($"Failed to parse pipeline json: {ex}");
+                return;
+            }
+
+            if (snapshot == null || snapshot.Count == 0)
+                return;
+
+            lock (_operationsLock)
+            {
+                _operations.Clear();
+
+                foreach (var item in snapshot)
                 {
-                    var val = dict[key];
-                    items.Add($"{key}={FormatParamValue(val)}");
-                    if (items.Count >= 10) { items.Add("..."); break; } // limit length
+                    // 1. Создаём операцию по enum-типу
+                    var op = CreatePipelineOperation(item.Type);
+
+                    // 2. Восстанавливаем значения параметров
+                    if (item.Parameters != null)
+                    {
+                        foreach (var param in op.Parameters)
+                        {
+                            if (item.Parameters.TryGetValue(param.Key, out var rawValue))
+                            {
+                                ApplySavedValueToParameter(param, rawValue);
+                            }
+                        }
+                    }
+
+                    _operations.Add(op);
                 }
-                return "{" + string.Join(", ", items) + "}";
             }
-
-            // IEnumerable (but not string)
-            if (v is System.Collections.IEnumerable ie && !(v is string))
-            {
-                var items = new List<string>();
-                int i = 0;
-                foreach (var it in ie)
-                {
-                    items.Add(FormatParamValue(it));
-                    if (++i >= 8) { items.Add("..."); break; } // limit items
-                }
-                return "[" + string.Join(", ", items) + "]";
-            }
-
-            // Common heavy/complex types: show type name and some hint instead of trying to serialize them
-            var typeName = t.Name;
-            if (typeName.Contains("Mat") || typeName.Contains("Image") || typeName.Contains("Bitmap") || typeName.Contains("ImageSource"))
-            {
-                return $"<{typeName}>";
-            }
-
-            // Last resort: ToString (may be type name)
-            try { return v.ToString() ?? $"<{typeName}>"; } catch { return $"<{typeName}>"; }
         }
 
-        public string BuildPipelineForSave((ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
-        {
-            if (pipeline == null) return "[]";
 
-            // Проектируем каждый шаг в объект с параметрами string->string
-            var items = pipeline.Select(step => new
+        private static void ApplySavedValueToParameter(PipeLineParameter param, object? rawValue)
+        {
+            // Основной сценарий: System.Text.Json кладёт в Dictionary<string, object?>
+            // значения типа JsonElement
+            if (rawValue is JsonElement je)
             {
-                command = step.command.ToString(), // или (int)step.command если хочешь числовой код
-                parameters = (step.parameters == null || step.parameters.Count == 0)
-                    ? new Dictionary<string, string>()
-                    : step.parameters.ToDictionary(
-                        kv => kv.Key,
-                        kv => FormatParamValue(kv.Value) ?? "null"  // FormatParamValue уже у тебя есть
-                    )
-            }).ToList();
+                // ---- BOOL-параметр (CheckBox) ----
+                if (param.IsBool)
+                {
+                    switch (je.ValueKind)
+                    {
+                        case JsonValueKind.True:
+                        case JsonValueKind.False:
+                            param.BoolValue = je.GetBoolean();
+                            return;
+
+                        case JsonValueKind.Number:
+                            // условно: 0 -> false, всё остальное -> true
+                            if (je.TryGetInt32(out var i))
+                                param.BoolValue = (i != 0);
+                            return;
+
+                        case JsonValueKind.String:
+                            var sBool = je.GetString();
+                            if (bool.TryParse(sBool, out var bParsed))
+                                param.BoolValue = bParsed;
+                            return;
+
+                        default:
+                            return;
+                    }
+                }
+
+                // ---- COMBO-параметр (Options/SelectedIndex) ----
+                if (param.IsCombo)
+                {
+                    if (param.Options == null || param.Options.Count == 0)
+                        return;
+
+                    string? option = null;
+
+                    switch (je.ValueKind)
+                    {
+                        case JsonValueKind.String:
+                            option = je.GetString();
+                            break;
+
+                        case JsonValueKind.Number:
+                            // на всякий случай поддержим вариант с индексом
+                            if (je.TryGetInt32(out var idxNum) &&
+                                idxNum >= 0 && idxNum < param.Options.Count)
+                            {
+                                param.SelectedIndex = idxNum;
+                                return;
+                            }
+                            break;
+
+                        default:
+                            return;
+                    }
+
+                    if (!string.IsNullOrEmpty(option))
+                    {
+                        // сначала точное совпадение
+                        int idx = param.Options.IndexOf(option);
+                        if (idx < 0)
+                        {
+                            // затем case-insensitive поиск
+                            for (int i = 0; i < param.Options.Count; i++)
+                            {
+                                if (string.Equals(param.Options[i], option, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    idx = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (idx >= 0)
+                            param.SelectedIndex = idx;
+                    }
+
+                    return;
+                }
+
+                // ---- Числовой параметр (Slider / Numeric) ----
+                if (je.ValueKind == JsonValueKind.Number)
+                {
+                    if (je.TryGetDouble(out var d))
+                    {
+                        param.Value = d; // внутри PipeLineParameter зажмётся Clamp-ом
+                    }
+                }
+                else if (je.ValueKind == JsonValueKind.String)
+                {
+                    var sNum = je.GetString();
+                    if (double.TryParse(sNum, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+                    {
+                        param.Value = d;
+                    }
+                }
+
+                return;
+            }
+
+            // --- fallback: если вдруг rawValue не JsonElement (другой десериализатор/ручная подготовка) ---
+
+            if (param.IsBool)
+            {
+                if (rawValue is bool b)
+                {
+                    param.BoolValue = b;
+                }
+                else if (rawValue is string s && bool.TryParse(s, out var parsed))
+                {
+                    param.BoolValue = parsed;
+                }
+                else if (rawValue is IConvertible conv)
+                {
+                    try
+                    {
+                        param.BoolValue = conv.ToBoolean(CultureInfo.InvariantCulture);
+                    }
+                    catch
+                    {
+                        // игнор, оставляем дефолт
+                    }
+                }
+
+                return;
+            }
+
+            if (param.IsCombo)
+            {
+                if (param.Options == null || param.Options.Count == 0)
+                    return;
+
+                var s = rawValue?.ToString();
+                if (string.IsNullOrEmpty(s))
+                    return;
+
+                int idx = param.Options.IndexOf(s);
+                if (idx < 0)
+                {
+                    for (int i = 0; i < param.Options.Count; i++)
+                    {
+                        if (string.Equals(param.Options[i], s, StringComparison.OrdinalIgnoreCase))
+                        {
+                            idx = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (idx >= 0)
+                    param.SelectedIndex = idx;
+
+                return;
+            }
+
+            // ---- числовой параметр ----
+            switch (rawValue)
+            {
+                case double d:
+                    param.Value = d;
+                    break;
+                case float f:
+                    param.Value = f;
+                    break;
+                case int i:
+                    param.Value = i;
+                    break;
+                case long l:
+                    param.Value = l;
+                    break;
+                case string s when double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d2):
+                    param.Value = d2;
+                    break;
+            }
+        }
+
+
+
+        public string BuildPipelineForSave()
+        {
+            List<PipelineSaveItem> snapshot;
+
+            lock (_operationsLock)
+            {
+                if (_operations.Count == 0)
+                    return string.Empty;
+
+                snapshot = new List<PipelineSaveItem>(_operations.Count);
+
+                foreach (var op in _operations)
+                {
+                    var parameters = op.CreateParameterDictionary();
+
+                    snapshot.Add(new PipelineSaveItem
+                    {
+                        Type = op.Type,                 // берём тип из PipelineOperation.Type
+                        DisplayName = op.DisplayName,   // чисто информативно, при загрузке не нужен
+                        Parameters = parameters
+                    });
+                }
+            }
 
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true
             };
 
-            return JsonSerializer.Serialize(items, options);
+            return JsonSerializer.Serialize(snapshot, options);
         }
+
+
+
+
 
 
 
@@ -487,23 +597,8 @@ namespace ImgViewer.Models
         {
 
             Clear();
-            Add(PipelineOperationType.Deskew);
             Add(PipelineOperationType.BorderRemove);
             Add(PipelineOperationType.Binarize);
-            Add(PipelineOperationType.PunchholesRemove);
-            Add(PipelineOperationType.Despeckle);
-            Add(PipelineOperationType.LinesRemove);
-
-            //var op3 = new PipeLineOperation(
-            //    "Auto Crop",
-            //    buttonText,
-            //    new[]
-            //    {
-            //        new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
-            //    },
-            //    (window, operation) => window.ExecuteManagerCommand(ProcessorCommands.AutoCropRectangle, operation.CreateParameterDictionary()));
-            //op3.Command = ProcessorCommands.AutoCropRectangle;
-            //_pipeLineOperations.Add(op3);
 
 
         }

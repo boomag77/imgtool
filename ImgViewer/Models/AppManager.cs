@@ -136,7 +136,7 @@ namespace ImgViewer.Models
 
         }
 
-        public async Task ProcessRootFolder(string rootFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline, bool fullTree = true)
+        public async Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree = true)
         {
             var debug = false;
             if (pipeline == null) return;
@@ -212,14 +212,13 @@ namespace ImgViewer.Models
             }
         }
 
-        public async Task ProcessFolder(string srcFolder, (ProcessorCommand command, Dictionary<string, object> parameters)[] pipeline)
+        public async Task ProcessFolder(string srcFolder, Pipeline pipeline)
         {
             bool debug = false ;
             if (pipeline == null) return;
 
             _mainViewModel.Status = $"Processing folder " + srcFolder;
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
-            var pipelineToUse = pipeline;
             //if (debug)
             //{
             //    string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
@@ -245,7 +244,7 @@ namespace ImgViewer.Models
 
             try
             {
-                using (var workerPool = new ImgWorkerPool(_poolCts, pipelineToUse, 0, sourceFolder, 0))
+                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0))
                 {
                     try
                     {

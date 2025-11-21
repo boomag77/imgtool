@@ -375,8 +375,10 @@
 
 
     </Window.Resources>
+
+    <AdornerDecorator>
     
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <!-- Menu bar row -->
             <RowDefinition Height="Auto"/>
@@ -484,25 +486,25 @@
                         <Button.ContextMenu>
                             <ContextMenu x:Name="AddOperationContextMenu">
                                 <MenuItem Header="Deskew"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Deskew}"
+                                      Tag="{x:Static models:PipelineOperationType.Deskew}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Border Removal"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.BorderRemove}"
+                                      Tag="{x:Static models:PipelineOperationType.BorderRemove}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Binarize"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Binarize}"
+                                      Tag="{x:Static models:PipelineOperationType.Binarize}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Punch holes"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.PunchholesRemove}"
+                                      Tag="{x:Static models:PipelineOperationType.PunchholesRemove}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Despeckle"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Despeckle}"
+                                      Tag="{x:Static models:PipelineOperationType.Despeckle}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Lines remove"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.LinesRemove}"
+                                      Tag="{x:Static models:PipelineOperationType.LinesRemove}"
                                       Click="AddOperationMenuItem_Click" />
                                     <MenuItem Header="Crop"
-                                      Tag="{x:Static models:Pipeline+PipelineOperationType.Crop}"
+                                      Tag="{x:Static models:PipelineOperationType.SmartCrop}"
                                       Click="AddOperationMenuItem_Click" /> 
                             </ContextMenu>
                         </Button.ContextMenu>
@@ -878,5 +880,6 @@
         </Border>
 
     </Grid>
-    
+    </AdornerDecorator>
+
 </Window>

@@ -18,7 +18,8 @@ namespace ImgViewer.Models
         private string _outputFolder = string.Empty;
         private readonly int _workersCount;
 
-        private readonly (ProcessorCommand command, Dictionary<string, object> parameters)[] _pipelineTemplate;
+        //private readonly (ProcessorCommand command, Dictionary<string, object> parameters)[] _pipelineTemplate;
+        private Pipeline _pipline;
 
         //private readonly ProcessorCommands[] _commandsQueue;
 
@@ -29,7 +30,7 @@ namespace ImgViewer.Models
         public event Action<int, int>? ProgressChanged;
 
         public ImgWorkerPool(CancellationTokenSource cts,
-                             (ProcessorCommand command, Dictionary<string, object> parameters)[] pipelineTemplate,
+                             Pipeline pipeline,
                              int maxWorkersCount,
                              SourceImageFolder sourceFolder,
                              int maxFilesQueue = 0)
@@ -40,7 +41,8 @@ namespace ImgViewer.Models
 
             _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
             Directory.CreateDirectory(_outputFolder);
-            _pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
+            //_pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
+            _pipline = pipeline;
 
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
@@ -104,12 +106,22 @@ namespace ImgViewer.Models
                     imgProc.CurrentImage = loaded.Item1;
                     //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
 
-                    foreach (var op in _pipelineTemplate)
+                    foreach (var op in _pipline.Operations)
                     {
+                        if (!op.InPipeline)
+                            continue; // пользователь снял галочку — пропускаем
+
                         token.ThrowIfCancellationRequested();
+
                         try
                         {
-                            imgProc.ApplyCommand(op.command, op.parameters ?? new Dictionary<string, object>());
+                            if (op.Command == null)
+                            {
+                                Debug.WriteLine($"Pipeline op '{op.DisplayName}' has no Command, skipping.");
+                                continue;
+                            }
+                            var parameters = op.CreateParameterDictionary();
+                            imgProc.ApplyCommand(op.Command.Value, parameters);
                         }
                         catch (OperationCanceledException)
                         {
@@ -117,7 +129,7 @@ namespace ImgViewer.Models
                         }
                         catch (Exception exOp)
                         {
-                            ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
+                            //ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
                         }
                     }
 

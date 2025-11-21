@@ -15,26 +15,54 @@ namespace ImgViewer.Models
 
         public event Action<PipelineOperation, PipeLineParameter?>? ParameterChanged;
 
-        public ProcessorCommand? Command { get; set; }
+        
 
         private bool _inPipeline = true;
         private bool _live = false;
+        private PipelineOperationType _type;
+        private string _displayName;
+        private ProcessorCommand _processorCommand;
 
-        public PipelineOperation(string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<PipelineOperation>? execute = null)
+        public PipelineOperation(PipelineOperationType type, ProcessorCommand procCommand, string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<PipelineOperation>? execute = null)
         {
-            DisplayName = displayName;
+            _displayName = displayName;
+            _type = type;
             ActionLabel = actionLabel;
             _parameters = new ObservableCollection<PipeLineParameter>(parameters ?? Enumerable.Empty<PipeLineParameter>());
             _execute = execute;
+            _processorCommand = procCommand;
 
 
             InitializeParameterVisibilityRules();
             HookParameterChanges();
         }
 
+        public ProcessorCommand? Command
+        {
+            get
+            {
+                return _processorCommand;
+            }
+        }
+
         public event Action<PipelineOperation>? LiveChanged;
 
-        public string DisplayName { get; }
+        public string DisplayName
+        { get
+            {
+                return _displayName;
+            }
+        }
+
+
+
+        public PipelineOperationType Type
+        {
+            get
+            {
+                return _type;
+            }
+        }
 
         public string ActionLabel { get; }
 

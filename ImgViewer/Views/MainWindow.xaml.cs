@@ -3,6 +3,7 @@ using ImgViewer.Models;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -49,6 +50,10 @@ namespace ImgViewer.Views
         private Point _dragStartPoint;
         private DraggedItemAdorner? _draggedItemAdorner;
         private InsertionIndicatorAdorner? _insertionAdorner;
+
+        private double EraseOffset = AppSettings.EraseOperationOffset;   // пикселей от левого/правого края
+        private bool _eraseModeActive;
+        private bool _operationErased;
 
         private bool _livePipelineRunning = false;
         private readonly HashSet<PipelineOperation> _liveRunning = new();
@@ -157,7 +162,17 @@ namespace ImgViewer.Views
             });
         }
 
+        private bool IsEraseDropPosition()
+        {
+            if (PipelineListBox == null)
+                return false;
 
+            var pos = Mouse.GetPosition(PipelineListBox);
+            double width = PipelineListBox.ActualWidth;
+
+            // "зона удаления" — когда ушли дальше, чем EraseOffset за левый/правый край списка
+            return pos.X < -EraseOffset || pos.X > width + EraseOffset;
+        }
 
 
         private async Task RunLivePipelineFromOriginalAsync()
@@ -849,6 +864,9 @@ namespace ImgViewer.Views
             //}
         }
 
+        
+
+
         private void PipelineListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(PipelineListBox);
@@ -888,6 +906,9 @@ namespace ImgViewer.Views
 
             EnsureInsertionAdorner();
             _insertionAdorner?.Update(PipelineListBox, _currentInsertionIndex);
+
+
+
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
         }
@@ -900,20 +921,52 @@ namespace ImgViewer.Views
                 return;
             }
 
-            var position = e.GetPosition(PipelineListBox);
+            // «сырая» позиция курсора относительно ListBox
+            var rawPos = e.GetPosition(PipelineListBox);
+            double width = PipelineListBox.ActualWidth;
+
+            // включаем режим удаления, как и раньше
+            bool erase =
+                rawPos.X < EraseOffset ||
+                rawPos.X > width - EraseOffset;
+
+            _eraseModeActive = erase;
+            _draggedItemAdorner?.SetEraseMode(erase);
+
+            // КЛЭМПИМ X для визуального призрака:
+            // не даём ему уйти дальше EraseOffset от краёв
+            double clampedX = Math.Max(EraseOffset, Math.Min(rawPos.X, width - EraseOffset));
+            var clampedPos = new Point(clampedX, rawPos.Y);
+
+            // двигаем drag-ghost по зажатой позиции
+            _draggedItemAdorner?.Update(clampedPos);
+
+            if (erase)
+            {
+                // В режиме удаления не показываем линию вставки
+                RemoveInsertionAdorner();
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
+
             PipelineListBox.UpdateLayout();
-            _currentInsertionIndex = GetInsertionIndex(PipelineListBox, position);
+            _currentInsertionIndex = GetInsertionIndex(PipelineListBox, rawPos); // для индекса используем сырую позицию
             EnsureInsertionAdorner();
             _insertionAdorner?.Update(PipelineListBox, _currentInsertionIndex);
+
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
         }
+
 
         private void PipelineListBox_DragLeave(object sender, DragEventArgs e)
         {
             if (!PipelineListBox.IsMouseOver)
             {
                 RemoveInsertionAdorner();
+                //_eraseModeActive = false;
+                //_draggedItemAdorner?.SetEraseMode(false);
             }
         }
 
@@ -922,6 +975,41 @@ namespace ImgViewer.Views
             if (!e.Data.GetDataPresent(typeof(PipelineOperation)) || _draggedOperation == null)
             {
                 e.Effects = DragDropEffects.None;
+                return;
+            }
+
+
+            
+
+            if (_eraseModeActive)
+            {
+
+                
+
+                // ----- РЕЖИМ УДАЛЕНИЯ -----
+                _dropHandled = true;
+                _operationErased = true;
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+
+                // если ты уже работаешь через Pipeline:
+                //_pipeline.Remove(_draggedOperation);
+
+                // в текущей реализации _pipeLineOperations.Remove уже был
+                // сделан в BeginPipelineDrag(), поэтому просто НЕ вставляем обратно
+
+                _eraseModeActive = false;
+                _draggedItemAdorner?.SetEraseMode(false);
+
+                try
+                {
+                    await RunLiveOperationsForNewImageAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Pipeline delete live-run failed: {ex}");
+                }
+
                 return;
             }
 
@@ -951,8 +1039,9 @@ namespace ImgViewer.Views
             if (_draggedItemAdorner != null)
             {
                 e.UseDefaultCursors = false;
-                _draggedItemAdorner.Update(Mouse.GetPosition(PipelineListBox));
-                Mouse.SetCursor(Cursors.Arrow);
+                //_draggedItemAdorner.Update(Mouse.GetPosition(RootGrid));
+                //_draggedItemAdorner.Update(e.GetPosition(PipelineListBox)); // вместо Mouse.GetPosition
+                //Mouse.SetCursor(Cursors.Arrow);
                 e.Handled = true;
             }
             else
@@ -970,6 +1059,8 @@ namespace ImgViewer.Views
 
             _isDragging = true;
             _draggedOperation = _activeOperation;
+            _eraseModeActive = false;
+            _operationErased = false;
             _originalPipelineIndex = _pipeline.IndexOf(_activeOperation);
             _currentInsertionIndex = _originalPipelineIndex;
 
@@ -978,7 +1069,7 @@ namespace ImgViewer.Views
             if (bitmap != null && layer != null)
             {
                 _draggedItemAdorner = new DraggedItemAdorner(PipelineListBox, layer, bitmap);
-                _draggedItemAdorner.Update(Mouse.GetPosition(PipelineListBox));
+                _draggedItemAdorner.Update(Mouse.GetPosition(RootGrid));
             }
 
             _pipeline.Remove(_activeOperation);
@@ -995,7 +1086,21 @@ namespace ImgViewer.Views
             _draggedItemAdorner = null;
             RemoveInsertionAdorner();
 
-            if (_draggedOperation != null)
+            bool eraseOnCancel = false;
+
+            if (cancelled && IsEraseDropPosition())
+            {
+                // тут мышь ушла далеко за края → пользователь явно "выбросил" карточку
+                var res = System.Windows.MessageBox.Show(
+                    $"WARNING! Are you sure you want to remove {_draggedOperation?.DisplayName} from current pipeline?",
+                    "Confirm",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning);
+
+                eraseOnCancel = (res == MessageBoxResult.OK);
+            }
+
+            if (_draggedOperation != null && !_operationErased && !eraseOnCancel)
             {
                 if (!_dropHandled || cancelled)
                 {
@@ -1012,6 +1117,7 @@ namespace ImgViewer.Views
             _dropHandled = false;
             _originalPipelineIndex = -1;
             _currentInsertionIndex = -1;
+            _operationErased = false;
         }
 
         private void EnsureInsertionAdorner()
@@ -1054,21 +1160,62 @@ namespace ImgViewer.Views
             return listBox.Items.Count;
         }
 
+        //private RenderTargetBitmap? CaptureElementBitmap(FrameworkElement element)
+        //{
+        //    element.UpdateLayout();
+
+        //    int width = (int)Math.Ceiling(element.ActualWidth);
+        //    int height = (int)Math.Ceiling(element.ActualHeight);
+        //    if (width <= 0 || height <= 0)
+        //    {
+        //        return null;
+        //    }
+
+        //    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        //    bitmap.Render(element);
+        //    return bitmap;
+        //}
+
         private RenderTargetBitmap? CaptureElementBitmap(FrameworkElement element)
         {
+            if (element == null)
+                return null;
+
+            // Обновляем layout, чтобы ActualWidth/ActualHeight были валидными
             element.UpdateLayout();
 
-            int width = (int)Math.Ceiling(element.ActualWidth);
-            int height = (int)Math.Ceiling(element.ActualHeight);
-            if (width <= 0 || height <= 0)
-            {
+            // Границы содержимого элемента (в его собственной системе координат)
+            var bounds = VisualTreeHelper.GetDescendantBounds(element);
+            if (bounds.IsEmpty)
                 return null;
+
+            int width = (int)Math.Ceiling(bounds.Width);
+            int height = (int)Math.Ceiling(bounds.Height);
+            if (width <= 0 || height <= 0)
+                return null;
+
+            const double dpi = 96.0;
+            var rtb = new RenderTargetBitmap(width, height, dpi, dpi, PixelFormats.Pbgra32);
+
+            // Рисуем элемент через VisualBrush, чтобы "отвязаться" от глобальных координат
+            var dv = new DrawingVisual();
+            using (var ctx = dv.RenderOpen())
+            {
+                var brush = new VisualBrush(element)
+                {
+                    Stretch = Stretch.None,
+                    AlignmentX = AlignmentX.Left,
+                    AlignmentY = AlignmentY.Top
+                    
+                };
+                
+                ctx.DrawRectangle(brush, null, new Rect(new Point(0, 0), new Size(width, height)));
             }
 
-            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(element);
-            return bitmap;
+            rtb.Render(dv);
+            return rtb;
         }
+
 
         private void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
         {
@@ -1184,7 +1331,7 @@ namespace ImgViewer.Views
             if (sender is not System.Windows.Controls.MenuItem menuItem)
                 return;
 
-            if (menuItem.Tag is not Pipeline.PipelineOperationType type)
+            if (menuItem.Tag is not PipelineOperationType type)
                 return;
 
             // создаём новую операцию нужного типа
@@ -1209,7 +1356,7 @@ namespace ImgViewer.Views
                 {
                     var fileName = dlg.FileName;
                     string json = File.ReadAllText(fileName);
-                    pipeline = ParsePiplineFromJSON(json);
+                    _pipeline.LoadPipelineFromJson(json);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1219,7 +1366,7 @@ namespace ImgViewer.Views
                 {
                     System.Windows.MessageBox.Show
                     (
-                        $"Error loading image for preview: {ex.Message}",
+                        $"Error loading preset: {ex.Message}",
                         "Error",
                         MessageBoxButton.OK,
                         MessageBoxImage.Error
@@ -1237,19 +1384,10 @@ namespace ImgViewer.Views
                 }
             }
 #endif
-            UpdatePipeline(pipeline);
-
         }
 
         private void SavePipelinePreset_Click(object sender, RoutedEventArgs e)
         {
-
-            var pipeline = GetPipelineParameters();
-            if (pipeline.Length == 0)
-            {
-                System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
 
             var dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.InitialDirectory = _manager.LastOpenedFolder;
@@ -1257,10 +1395,17 @@ namespace ImgViewer.Views
 
             if (dlg.ShowDialog() == true)
             {
-                var path = dlg.FileName + ".igpreset";
-                var json = _pipeline.BuildPipelineForSave(pipeline);
-                _manager.SavePipelineToJSON(path, json);
-                _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(path);
+                var fileName = dlg.FileName;
+
+                // если пользователь не указал расширение — добавим .igpreset
+                if (!Path.HasExtension(fileName))
+                    fileName += ".igpreset";
+
+                var json = _pipeline.BuildPipelineForSave();
+                Debug.WriteLine(json);
+
+                _manager.SavePipelineToJSON(fileName, json);
+                _manager.LastOpenedFolder = Path.GetDirectoryName(fileName);
             }
 
 
@@ -1424,9 +1569,8 @@ namespace ImgViewer.Views
 
         private void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
         {
-            var pipeline = GetPipelineParameters();
-            if (pipeline == null) return;
-            if (pipeline.Length == 0)
+            if (_pipeline == null) return;
+            if (_pipeline.Operations.Count == 0)
             {
                 System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -1452,7 +1596,7 @@ namespace ImgViewer.Views
 
             try
             {
-                _manager.ProcessRootFolder(rootFolder, pipeline, true);
+                _manager.ProcessRootFolder(rootFolder, _pipeline, true);
             }
             catch (Exception ex)
             {
@@ -1519,7 +1663,7 @@ namespace ImgViewer.Views
 
 
                 // вызываем менеджер, передавая команды
-                _manager.ProcessFolder(folder, pipeline);
+                _manager.ProcessFolder(folder, _pipeline);
 
 
                 //_manager.ProcessFolder(folder);
@@ -1620,6 +1764,7 @@ namespace ImgViewer.Views
             private readonly RenderTargetBitmap _bitmap;
             private readonly AdornerLayer _layer;
             private Point _position;
+            private bool _eraseMode;
 
             public DraggedItemAdorner(UIElement adornedElement, AdornerLayer layer, RenderTargetBitmap bitmap)
                 : base(adornedElement)
@@ -1636,11 +1781,46 @@ namespace ImgViewer.Views
                 InvalidateVisual();
             }
 
+            public void SetEraseMode(bool erase)
+            {
+                if (_eraseMode == erase)
+                    return;
+
+                _eraseMode = erase;
+                InvalidateVisual();
+            }
+
             protected override void OnRender(DrawingContext drawingContext)
             {
-                var size = new Size(_bitmap.Width, _bitmap.Height);
-                var topLeft = new Point(_position.X - size.Width / 2, _position.Y - size.Height / 2);
-                drawingContext.DrawImage(_bitmap, new Rect(topLeft, size));
+                // Корректно пересчитаем размер из пикселей в DIPs
+                double scaleX = _bitmap.DpiX / 96.0;
+                double scaleY = _bitmap.DpiY / 96.0;
+
+                var widthDip = _bitmap.PixelWidth / scaleX;
+                var heightDip = _bitmap.PixelHeight / scaleY;
+
+                var size = new Size(widthDip, heightDip);
+
+                var rect = new Rect(
+                    new Point(_position.X - size.Width / 2, _position.Y - size.Height / 2),
+                    size);
+
+                if (_eraseMode)
+                {
+                    // полупрозрачный ghost + красный overlay ровно по тому же rect
+                    drawingContext.PushOpacity(0.5);
+                    drawingContext.DrawImage(_bitmap, rect);
+                    drawingContext.Pop();
+
+                    var redBrush = new SolidColorBrush(Color.FromArgb(160, 255, 0, 0));
+                    drawingContext.DrawRectangle(redBrush, null, rect);
+                }
+                else
+                {
+                    drawingContext.PushOpacity(0.8);
+                    drawingContext.DrawImage(_bitmap, rect);
+                    drawingContext.Pop(); // важно!
+                }
             }
 
             public void Remove()

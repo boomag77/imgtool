@@ -12,6 +12,7 @@ namespace ImgViewer.Models
         private string _lastOpenedFolder;
 
         private static readonly TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
+        private static readonly double _eraseOperationModeOffset = 100;
 
         // cancellation for scheduled save
         private CancellationTokenSource? _saveCts;
@@ -23,6 +24,14 @@ namespace ImgViewer.Models
         //   "MyCompany",         // <-- поменяй на своё
         //   "MyApp",             // <-- поменяй на своё
         //   "settings.json");
+
+        public static double EraseOperationOffset
+        {
+            get
+            {
+                return _eraseOperationModeOffset;
+            }
+        }
 
         private static string SettingsFilePath
         {
