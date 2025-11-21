@@ -23,6 +23,8 @@ namespace ImgViewer.Models
         private Mat _blurred;
         private readonly IAppManager _appManager;
 
+        private CancellationToken _token;
+
         private readonly object _imageLock = new();
 
         private Mat WorkingImage
@@ -34,6 +36,7 @@ namespace ImgViewer.Models
             }
             set
             {
+                if (value == null) return;
                 Mat old;
                 lock (_imageLock)
                 {
@@ -50,10 +53,16 @@ namespace ImgViewer.Models
         {
             set
             {
-                using var mat = BitmapSourceToMat((BitmapSource)value);
-                if (mat == null || mat.Empty()) return;
-                WorkingImage = mat.Clone();
+                try
+                {
+                    using var mat = BitmapSourceToMat((BitmapSource)value);
+                    if (mat == null || mat.Empty()) return;
+                    WorkingImage = mat.Clone();
+                }
+                catch (OperationCanceledException)
+                {
 
+                }
             }
         }
 
@@ -63,10 +72,13 @@ namespace ImgViewer.Models
         public OpenCVImageProcessor(IAppManager appManager, CancellationToken token)
         {
             _appManager = appManager;
+            _token = token;
+
         }
 
         private Mat BitmapSourceToMat(BitmapSource src)
         {
+            _token.ThrowIfCancellationRequested();
             if (src == null) throw new ArgumentNullException(nameof(src));
 
             // Нормализуем формат: убираем premultiplied alpha и приводим к удобному формату
@@ -105,6 +117,7 @@ namespace ImgViewer.Models
 
             try
             {
+                _token.ThrowIfCancellationRequested();
                 src.CopyPixels(buffer, stride, 0);
 
                 // pin buffer short-lived, создать Mat view и совершить Clone/CvtColor
@@ -697,89 +710,6 @@ namespace ImgViewer.Models
                                 WorkingImage = MajorityBinarize(src, binParams);
                                 break;
                         }
-
-                        //foreach (var kv in parameters)
-                        //{
-                        //    switch (kv.Key)
-                        //    {
-                        //        case "binarizeThreshold":
-                        //            threshold = SafeInt(kv.Value, threshold);
-                        //            break;
-                        //        case "blockSize":
-                        //            blockSize = SafeInt(kv.Value, blockSize);
-                        //            break;
-                        //        case "C":
-                        //            {
-                        //                var v = kv.Value;
-                        //                if (v is double dv) { c = dv; break; }
-                        //                if (v is float fv) { c = fv; break; }
-                        //                if (v is int iv) { c = iv; break; }
-                        //                var s = v?.ToString()?.Trim();
-                        //                if (string.IsNullOrEmpty(s)) break;
-                        //                if (s.EndsWith("%", StringComparison.Ordinal))
-                        //                {
-                        //                    var p = s.TrimEnd('%').Trim();
-                        //                    if (double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out var pd))
-                        //                        c = pd / 100.0;
-                        //                    else if (double.TryParse(p, NumberStyles.Any, CultureInfo.CurrentCulture, out pd))
-                        //                        c = pd / 100.0;
-                        //                }
-                        //                else if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-                        //                {
-                        //                    c = d;
-                        //                }
-                        //                else if (double.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out d))
-                        //                {
-                        //                    c = d;
-                        //                }
-                        //            }
-                        //            break;
-                        //        case "useGaussian":
-                        //            useGaussian = SafeBool(kv.Value, useGaussian);
-                        //            break;
-                        //        case "useMorphology":
-                        //            useMorphology = SafeBool(kv.Value, useMorphology);
-                        //            break;
-                        //        case "morphKernelBinarize":
-                        //            morphKernel = SafeInt(kv.Value, morphKernel);
-                        //            break;
-                        //        case "morphIterationsBinarize":
-                        //            morphIters = SafeInt(kv.Value, morphIters);
-                        //            break;
-                        //        case "majorityOffset":
-                        //            majorityOffset = SafeInt(kv.Value, majorityOffset);
-                        //            break;
-
-                        //    }
-                        //}
-                        //foreach (var kv in parameters)
-                        //{
-
-                        //    if (kv.Key == "binarizeAlgorithm")
-                        //    {
-                        //        Debug.WriteLine(kv.Value.ToString());
-                        //        switch (kv.Value.ToString())
-                        //        {
-                        //            case "Threshold":
-                                        
-                        //                Binarize(threshold);
-                        //                break;
-                        //            case "Adaptive":
-                        //                BinarizeAdaptive(blockSize, c, useGaussian, useMorphology, morphKernel, morphIters);
-                        //                break;
-                        //            case "Sauvola":
-                        //                SauvolaBinarize();
-                        //                break;
-                        //            case "Majority":
-                        //                Debug.WriteLine(threshold.ToString() + " " + majorityOffset.ToString());
-
-                        //                MajorityBinarize(threshold, majorityOffset);
-                        //                break;
-
-                        //        }
-                        //    }
-
-                        //}
                         break;
                     case ProcessorCommand.Deskew:
                         //Deskewer.Parameters p = new Deskewer.Parameters();
@@ -1042,8 +972,9 @@ namespace ImgViewer.Models
                             }
                         }
 
-                        WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
-
+                        //WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
+                        Mat mask;
+                        WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 2.5, 20, 1, out mask, false, null);
                         
 
                         break;
@@ -1175,10 +1106,24 @@ namespace ImgViewer.Models
             }
         }
 
+        public void UpdateCancellationToken(CancellationToken token)
+        {
+            _token = token;
+        }
+
         private Mat Despeckle(Mat src, DespeckleSettings settings)
         {
             if (src == null || src.Empty()) return new Mat();
-            Mat result = Despeckler.DespeckleApplyToSource(src, settings, settings.ShowDespeckleDebug, true, true);
+            Mat result;
+            try
+            {
+                result = Despeckler.DespeckleApplyToSource(_token, src, settings, settings.ShowDespeckleDebug, true, true);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            
             return result;
         }
 

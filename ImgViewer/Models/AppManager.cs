@@ -1,8 +1,5 @@
 ﻿using ImgViewer.Interfaces;
 using System.Diagnostics;
-using System.Diagnostics.Eventing.Reader;
-using System.Text;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 
@@ -20,6 +17,7 @@ namespace ImgViewer.Models
         private readonly CancellationTokenSource _cts;
         private CancellationTokenSource? _poolCts;
         private CancellationTokenSource? _rootFolderCts;
+        private CancellationTokenSource _imgProcCts;
 
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
@@ -28,7 +26,9 @@ namespace ImgViewer.Models
             _mainViewModel = new MainViewModel(_appSettings);
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
-            _imageProcessor = new OpenCVImageProcessor(this, _cts.Token);
+
+            _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            _imageProcessor = new OpenCVImageProcessor(this, _imgProcCts.Token);
 
         }
 
@@ -55,6 +55,23 @@ namespace ImgViewer.Models
             _cts.Cancel();
             _cts.Dispose();
             Dispose();
+        }
+
+        public void CancelImageProcessing()
+        {
+            try
+            {
+                _imgProcCts.Cancel();
+            }
+            catch { }
+
+            _imgProcCts.Dispose();
+
+            // новый токен, снова привязанный к global _cts
+            _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+
+            // сообщаем процессору, что токен сменился
+            _imageProcessor.UpdateCancellationToken(_imgProcCts.Token);
         }
 
         public async Task SetImageForProcessing(ImageSource bmp)
@@ -156,7 +173,7 @@ namespace ImgViewer.Models
                     }
                     return;
                 }
-                
+
                 if (sourceFolders == null) return;
             }
             else
@@ -165,7 +182,7 @@ namespace ImgViewer.Models
                 if (debug)
                 {
                     Debug.WriteLine("Folders to process:");
-                    foreach(var folder in sourceFolders)
+                    foreach (var folder in sourceFolders)
                     {
                         Debug.WriteLine(folder.Path);
                     }
@@ -174,7 +191,7 @@ namespace ImgViewer.Models
                 if (sourceFolders == null) return;
 
             }
-               
+
             if (sourceFolders == null || sourceFolders.Length == 0) return;
 
             if (_rootFolderCts != null)
@@ -214,7 +231,7 @@ namespace ImgViewer.Models
 
         public async Task ProcessFolder(string srcFolder, Pipeline pipeline)
         {
-            bool debug = false ;
+            bool debug = false;
             if (pipeline == null) return;
 
             _mainViewModel.Status = $"Processing folder " + srcFolder;
@@ -291,14 +308,14 @@ namespace ImgViewer.Models
             }
         }
 
-        
+
 
         public void Dispose()
         {
             GC.SuppressFinalize(this);
         }
 
-        
+
 
     }
 }

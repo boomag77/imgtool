@@ -13,12 +13,14 @@ namespace ImgViewer.Models
     public class Despeckler
     {
         public static Mat DespeckleApplyToSource(
+                                            CancellationToken token,
                                             Mat src,
                                             DespeckleSettings? settings = null,
                                             bool debug = false,
                                             bool inputIsBinary = false,
                                             bool applyMaskToSource = true)    // <-- new parameter
         {
+            token.ThrowIfCancellationRequested();
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
 
@@ -70,6 +72,7 @@ namespace ImgViewer.Models
                 }
                 else
                 {
+                    token.ThrowIfCancellationRequested();
                     // Convert to gray if needed
                     Mat gray = new Mat();
                     if (src.Channels() == 3)
@@ -79,6 +82,7 @@ namespace ImgViewer.Models
                     else
                         src.CopyTo(gray);
 
+                    token.ThrowIfCancellationRequested();
                     // Estimate background (large open)
                     int grayCols = gray.Cols;
                     int approxBgKernel = ClampInt(grayCols / 30, 51, Math.Max(51, grayCols / 10));
@@ -87,6 +91,7 @@ namespace ImgViewer.Models
                     Cv2.MorphologyEx(gray, bg, MorphTypes.Open, kernelBg);
                     kernelBg.Dispose();
 
+                    token.ThrowIfCancellationRequested();
                     // Normalize by background
                     Mat corr = new Mat();
                     Cv2.Subtract(gray, bg, corr);
@@ -104,6 +109,7 @@ namespace ImgViewer.Models
                     Mat binLocal = new Mat();
                     if (bgRange < 30)
                     {
+                        token.ThrowIfCancellationRequested();
                         Cv2.Threshold(denoised, binLocal, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
 
                         // Хотим binLocal с text == 255, bg == 0
@@ -116,6 +122,7 @@ namespace ImgViewer.Models
                     }
                     else
                     {
+                        token.ThrowIfCancellationRequested();
                         int blockSize = ClampInt(grayCols / 40, 11, 101) | 1;
                         int C = 8;
                         Cv2.AdaptiveThreshold(denoised, binLocal, 255,
@@ -142,6 +149,7 @@ namespace ImgViewer.Models
 
                 // Now we have 'bin' as CV_8UC1 where text == 255, background == 0
 
+                token.ThrowIfCancellationRequested();
                 // Mask of original text pixels: 255 where bin == 255
                 using var textMask = new Mat();
                 Cv2.InRange(bin, new Scalar(255), new Scalar(255), textMask); // 0 where text==255
@@ -157,6 +165,7 @@ namespace ImgViewer.Models
                         case "3x3": k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3)); break;
                         default: k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3)); break;
                     }
+                    token.ThrowIfCancellationRequested();
                     var tmp = new Mat();
                     Cv2.Dilate(labelingMat, tmp, k, iterations: settings.DilateIter);
                     labelingMat.Dispose();
@@ -173,6 +182,7 @@ namespace ImgViewer.Models
                 var comps = new List<(int label, Rect bbox, int area)>();
                 for (int lbl = 1; lbl < nLabels; lbl++)
                 {
+                    token.ThrowIfCancellationRequested();
                     int left = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Left);
                     int top = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Top);
                     int width = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Width);
@@ -237,6 +247,7 @@ namespace ImgViewer.Models
 
                 foreach (var c in smallComps)
                 {
+                    token.ThrowIfCancellationRequested();
                     //var rect = c.bbox;
                     //var center = Center(rect);
 
@@ -287,6 +298,7 @@ namespace ImgViewer.Models
                 using var removeMask = new Mat(bin.Size(), MatType.CV_8UC1, Scalar.All(0)); // will accumulate removed pixels
                 foreach (int lbl in toRemoveLabels)
                 {
+                    token.ThrowIfCancellationRequested();
                     using var m = new Mat();
                     Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), m); // 255 where label==lbl
                     Cv2.BitwiseOr(removeMask, m, removeMask);
@@ -305,6 +317,7 @@ namespace ImgViewer.Models
 
                 if (applyMaskToSource)
                 {
+                    token.ThrowIfCancellationRequested();
                     Mat outMat;
 
                     if (src.Channels() == 1)
@@ -379,6 +392,7 @@ namespace ImgViewer.Models
                         Mat[] chs = Cv2.Split(outMat);
                         Mat alpha = chs.Length >= 4 ? chs[3].Clone() : null;
 
+                        token.ThrowIfCancellationRequested();
                         // пересобираем 4ch (RGB+Alpha)
                         Cv2.Merge(new[]
                         {

@@ -10,6 +10,8 @@ namespace ImgViewer.Interfaces
         public Task SetImageOnPreview(string imagePath);
         public Task SetBmpImageOnPreview(ImageSource bmp);
 
+        public void CancelImageProcessing();
+
         public void SavePipelineToJSON(string path, string json);
 
         public Task SetImageForProcessing(ImageSource bmp);

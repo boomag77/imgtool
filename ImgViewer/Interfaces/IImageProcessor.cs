@@ -12,6 +12,8 @@ namespace ImgViewer.Interfaces
 
         void Load(string path);
 
+        public void UpdateCancellationToken(CancellationToken token);
+
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);

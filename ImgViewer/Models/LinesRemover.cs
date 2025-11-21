@@ -27,6 +27,408 @@ namespace ImgViewer.Models
     {
 
 
+        public static Mat RemoveScannerHorizontalStripes(
+    Mat src,
+    double sensitivityK,               // "чувствительность", обычно 2.0–3.5
+    int smoothWindow,                  // окно сглаживания профиля, напр. 15–31
+    int expandRows,                    // на сколько строк расширять найденные полосы
+    out Mat stripesMask,               // маска горизонтальных полос
+    bool debugWriteIntermediate = false,
+    string debugOutputPath = null)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty())
+            {
+                stripesMask = new Mat();
+                return src.Clone();
+            }
+
+            // 1) Приводим к BGR, потом в grayscale
+            Mat bgr;
+            if (src.Channels() == 1)
+            {
+                bgr = new Mat();
+                Cv2.CvtColor(src, bgr, ColorConversionCodes.GRAY2BGR);
+            }
+            else
+            {
+                bgr = src.Clone();
+            }
+
+            using var gray = new Mat();
+            Cv2.CvtColor(bgr, gray, ColorConversionCodes.BGR2GRAY);
+
+            int rows = gray.Rows;
+            int cols = gray.Cols;
+
+            if (rows == 0 || cols == 0)
+            {
+                stripesMask = new Mat();
+                return src.Clone();
+            }
+
+            // Немного сгладим шум
+            Cv2.GaussianBlur(gray, gray, new Size(3, 3), 0);
+
+            // 2) Средняя яркость по каждой строке
+            var rowMeans = new double[rows];
+            for (int y = 0; y < rows; y++)
+            {
+                using var row = gray.Row(y);
+                rowMeans[y] = Cv2.Mean(row)[0];
+            }
+
+            // 3) Сглаженный профиль (скользящее среднее по строкам)
+            smoothWindow = Math.Max(1, smoothWindow);
+            if (smoothWindow > rows) smoothWindow = rows;
+            if (smoothWindow % 2 == 0) smoothWindow++; // лучше нечётное
+
+            int half = smoothWindow / 2;
+            var smooth = new double[rows];
+
+            for (int y = 0; y < rows; y++)
+            {
+                int y0 = Math.Max(0, y - half);
+                int y1 = Math.Min(rows - 1, y + half);
+
+                double sum = 0;
+                int count = 0;
+                for (int k = y0; k <= y1; k++)
+                {
+                    sum += rowMeans[k];
+                    count++;
+                }
+
+                smooth[y] = (count > 0) ? (sum / count) : rowMeans[y];
+            }
+
+            // 4) Аномалия = |mean - smooth|
+            var diff = new double[rows];
+            double sumDiff = 0.0;
+            for (int y = 0; y < rows; y++)
+            {
+                double d = Math.Abs(rowMeans[y] - smooth[y]);
+                diff[y] = d;
+                sumDiff += d;
+            }
+
+            double meanDiff = sumDiff / Math.Max(1, rows);
+            if (meanDiff <= 0) meanDiff = 1.0;
+
+            // Порог: sensitivityK * среднее отклонение
+            double thr = sensitivityK * meanDiff;
+            if (thr <= 0) thr = meanDiff * 2.5;
+
+            // 5) 1D-маска полос (по строкам)
+            var stripeRows = new bool[rows];
+            for (int y = 0; y < rows; y++)
+            {
+                stripeRows[y] = diff[y] > thr;
+            }
+
+            // 6) Расширяем полосы на несколько строк
+            expandRows = Math.Max(0, expandRows);
+            if (expandRows > 0)
+            {
+                var expanded = new bool[rows];
+                for (int y = 0; y < rows; y++)
+                {
+                    if (!stripeRows[y]) continue;
+
+                    int y0 = Math.Max(0, y - expandRows);
+                    int y1 = Math.Min(rows - 1, y + expandRows);
+
+                    for (int k = y0; k <= y1; k++)
+                        expanded[k] = true;
+                }
+                stripeRows = expanded;
+            }
+
+            // 7) Превращаем 1D-маску в 2D Mat
+            stripesMask = new Mat(rows, cols, MatType.CV_8U, Scalar.All(0));
+            for (int y = 0; y < rows; y++)
+            {
+                if (!stripeRows[y]) continue;
+                stripesMask.Row(y).SetTo(255);
+            }
+
+            // 8) Затираем полосы: заменяем строки на ближайшие "здоровые"
+            var result = bgr.Clone();
+
+            for (int y = 0; y < rows; y++)
+            {
+                if (!stripeRows[y]) continue;
+
+                // ищем ближайшую "нормальную" строку сверху и снизу
+                int top = y - 1;
+                while (top >= 0 && stripeRows[top]) top--;
+
+                int bottom = y + 1;
+                while (bottom < rows && stripeRows[bottom]) bottom++;
+
+                if (top < 0 && bottom >= rows)
+                {
+                    // весь столбец — сплошные полосы, нечего копировать
+                    continue;
+                }
+
+                int srcY;
+                if (top < 0) srcY = bottom;
+                else if (bottom >= rows) srcY = top;
+                else
+                {
+                    // выберем ту строку, у которой diff меньше (ближе к норме)
+                    srcY = diff[top] <= diff[bottom] ? top : bottom;
+                }
+
+                using var srcRow = bgr.Row(srcY);
+                var dstRow = result.Row(y);
+                srcRow.CopyTo(dstRow);
+            }
+
+            // 9) Debug-вывод
+            if (debugWriteIntermediate && !string.IsNullOrEmpty(debugOutputPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(debugOutputPath);
+
+                    // Профиль яркости (строки) — как картинка
+                    using var profile = new Mat(1, rows, MatType.CV_32F);
+                    for (int y = 0; y < rows; y++)
+                        profile.Set(0, y, rowMeans[y]);
+
+                    using var profileNorm = new Mat();
+                    Cv2.Normalize(profile, profileNorm, 0, 255, NormTypes.MinMax, MatType.CV_8U);
+
+                    using var profileImg = new Mat();
+                    Cv2.Resize(profileNorm, profileImg, new Size(rows, 100), 0, 0, InterpolationFlags.Nearest);
+                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_hstripes_profile.png"), profileImg);
+
+                    // Overlay: полосы подсвечены красным
+                    using var overlay = bgr.Clone();
+                    overlay.SetTo(new Scalar(0, 0, 255), stripesMask);
+                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_hstripes_overlay.png"), overlay);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"RemoveScannerHorizontalStripes debug write error: {ex.Message}");
+                }
+            }
+
+            // 10) Возвращаем в том же формате (BGR или GRAY), что и вход
+            if (src.Channels() == 1)
+            {
+                using var resultGray = new Mat();
+                Cv2.CvtColor(result, resultGray, ColorConversionCodes.BGR2GRAY);
+                return resultGray.Clone();
+            }
+
+            return result;
+        }
+
+
+        public static Mat RemoveScannerVerticalStripes(
+    Mat src,
+    double sensitivityK,               // "чувствительность", обычно 2.0–3.5
+    int smoothWindow,                  // окно сглаживания профиля, напр. 15–31
+    int expandCols,                    // на сколько колонок расширять найденные полосы
+    out Mat stripesMask,               // маска вертикальных полос
+    bool debugWriteIntermediate = false,
+    string debugOutputPath = null)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty())
+            {
+                stripesMask = new Mat();
+                return src.Clone();
+            }
+
+            // 1) Приводим к BGR, потом в grayscale
+            Mat bgr;
+            if (src.Channels() == 1)
+            {
+                bgr = new Mat();
+                Cv2.CvtColor(src, bgr, ColorConversionCodes.GRAY2BGR);
+            }
+            else
+            {
+                bgr = src.Clone();
+            }
+
+            using var gray = new Mat();
+            Cv2.CvtColor(bgr, gray, ColorConversionCodes.BGR2GRAY);
+
+            int rows = gray.Rows;
+            int cols = gray.Cols;
+
+            if (rows == 0 || cols == 0)
+            {
+                stripesMask = new Mat();
+                return src.Clone();
+            }
+
+            // Немного сгладим шум
+            Cv2.GaussianBlur(gray, gray, new Size(3, 3), 0);
+
+            // 2) Средняя яркость по каждой колонке
+            var colMeans = new double[cols];
+            for (int x = 0; x < cols; x++)
+            {
+                using var col = gray.Col(x);
+                colMeans[x] = Cv2.Mean(col)[0];
+            }
+
+            // 3) Сглаженный профиль (скользящее среднее)
+            smoothWindow = Math.Max(1, smoothWindow);
+            if (smoothWindow > cols) smoothWindow = cols;
+            if (smoothWindow % 2 == 0) smoothWindow++; // лучше нечётное
+
+            int half = smoothWindow / 2;
+            var smooth = new double[cols];
+
+            for (int x = 0; x < cols; x++)
+            {
+                int x0 = Math.Max(0, x - half);
+                int x1 = Math.Min(cols - 1, x + half);
+
+                double sum = 0;
+                int count = 0;
+                for (int k = x0; k <= x1; k++)
+                {
+                    sum += colMeans[k];
+                    count++;
+                }
+
+                smooth[x] = (count > 0) ? (sum / count) : colMeans[x];
+            }
+
+            // 4) Аномалия = |mean - smooth|
+            var diff = new double[cols];
+            double sumDiff = 0.0;
+            for (int x = 0; x < cols; x++)
+            {
+                double d = Math.Abs(colMeans[x] - smooth[x]);
+                diff[x] = d;
+                sumDiff += d;
+            }
+
+            double meanDiff = sumDiff / Math.Max(1, cols);
+            if (meanDiff <= 0) meanDiff = 1.0;
+
+            // Порог: sensitivityK * среднее отклонение
+            double thr = sensitivityK * meanDiff;
+            if (thr <= 0) thr = meanDiff * 2.5;
+
+            // 5) 1D-маска полос (по колонкам)
+            var stripeCols = new bool[cols];
+            for (int x = 0; x < cols; x++)
+            {
+                stripeCols[x] = diff[x] > thr;
+            }
+
+            // 6) Расширяем полосы на несколько колонок
+            expandCols = Math.Max(0, expandCols);
+            if (expandCols > 0)
+            {
+                var expanded = new bool[cols];
+                for (int x = 0; x < cols; x++)
+                {
+                    if (!stripeCols[x]) continue;
+
+                    int x0 = Math.Max(0, x - expandCols);
+                    int x1 = Math.Min(cols - 1, x + expandCols);
+
+                    for (int k = x0; k <= x1; k++)
+                        expanded[k] = true;
+                }
+                stripeCols = expanded;
+            }
+
+            // 7) Превращаем 1D-маску в 2D Mat
+            stripesMask = new Mat(rows, cols, MatType.CV_8U, Scalar.All(0));
+            for (int x = 0; x < cols; x++)
+            {
+                if (!stripeCols[x]) continue;
+                stripesMask.Col(x).SetTo(255);
+            }
+
+            // 8) Затираем полосы: заменяем колонки на ближайшие "здоровые"
+            var result = bgr.Clone();
+
+            for (int x = 0; x < cols; x++)
+            {
+                if (!stripeCols[x]) continue;
+
+                // ищем ближайшую "нормальную" колонку слева и справа
+                int left = x - 1;
+                while (left >= 0 && stripeCols[left]) left--;
+
+                int right = x + 1;
+                while (right < cols && stripeCols[right]) right++;
+
+                if (left < 0 && right >= cols)
+                {
+                    // вся строка — сплошные полосы, нечего копировать
+                    continue;
+                }
+
+                int srcX;
+                if (left < 0) srcX = right;
+                else if (right >= cols) srcX = left;
+                else
+                {
+                    // выберем ту колонку, у которой diff меньше (ближе к норме)
+                    srcX = diff[left] <= diff[right] ? left : right;
+                }
+
+                using var srcCol = bgr.Col(srcX);
+                var dstCol = result.Col(x);
+                srcCol.CopyTo(dstCol);
+            }
+
+            // 9) Debug-вывод
+            if (debugWriteIntermediate && !string.IsNullOrEmpty(debugOutputPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(debugOutputPath);
+
+                    // Профиль яркости (колонки) — как картинка
+                    using var profile = new Mat(1, cols, MatType.CV_32F);
+                    for (int x = 0; x < cols; x++)
+                        profile.Set(0, x, colMeans[x]);
+
+                    using var profileNorm = new Mat();
+                    Cv2.Normalize(profile, profileNorm, 0, 255, NormTypes.MinMax, MatType.CV_8U);
+
+                    using var profileImg = new Mat();
+                    Cv2.Resize(profileNorm, profileImg, new Size(cols, 100), 0, 0, InterpolationFlags.Nearest);
+                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_stripes_profile.png"), profileImg);
+
+                    // Overlay: полосы подсвечены красным
+                    using var overlay = bgr.Clone();
+                    overlay.SetTo(new Scalar(0, 0, 255), stripesMask);
+                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_stripes_overlay.png"), overlay);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"RemoveScannerVerticalStripes debug write error: {ex.Message}");
+                }
+            }
+
+            // 10) Возвращаем в том же формате (BGR или GRAY), что и вход
+            if (src.Channels() == 1)
+            {
+                using var resultGray = new Mat();
+                Cv2.CvtColor(result, resultGray, ColorConversionCodes.BGR2GRAY);
+                return resultGray.Clone();
+            }
+
+            return result;
+        }
+
+
 
 
         public static Mat RemoveEdgeStripes(
