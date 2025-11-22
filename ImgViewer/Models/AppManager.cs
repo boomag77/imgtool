@@ -1,5 +1,6 @@
 ﻿using ImgViewer.Interfaces;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 
@@ -57,6 +58,11 @@ namespace ImgViewer.Models
             Dispose();
         }
 
+        public void UpdateStatus(string status)
+        {
+            _mainViewModel.Status = status;
+        }
+
         public void CancelImageProcessing()
         {
             try
@@ -76,8 +82,8 @@ namespace ImgViewer.Models
 
         public async Task SetImageForProcessing(ImageSource bmp)
         {
-
-            _imageProcessor.CurrentImage = bmp;
+            await Task.Run(() => _imageProcessor.CurrentImage = bmp);
+           
         }
 
         public async Task SetBmpImageOnPreview(ImageSource bmp)
@@ -111,14 +117,23 @@ namespace ImgViewer.Models
         }
 
 
-        public void ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
+        public async Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
         {
             if (_mainViewModel.OriginalImage == null) return;
-            _mainViewModel.Status = $"Processing image ({command})";
-            Debug.WriteLine(command.ToString());
 
-            _imageProcessor.ApplyCommand(command, parameters);
-            _mainViewModel.Status = $"Standby";
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                _mainViewModel.Status = $"Processing image ({command})";
+            });
+
+            Debug.WriteLine(command.ToString());
+            await Task.Run(() => _imageProcessor.ApplyCommand(command, parameters));
+            
+
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                _mainViewModel.Status = "Standby";
+            });
         }
 
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)

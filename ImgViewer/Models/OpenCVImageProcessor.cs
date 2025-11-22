@@ -501,6 +501,58 @@ namespace ImgViewer.Models
             return def;
         }
 
+        private float SafeDoubleToFloat(object? v, float def)
+        {
+            if (v == null || v == DBNull.Value) return def;
+
+            // fast-path for common numeric CLR types
+            if (v is double d) return (float)d;
+            if (v is float f) return f;
+            if (v is decimal m) return (float)m;
+            if (v is int i) return (float)i;
+            if (v is long l) return l;
+            if (v is short sh) return sh;
+            if (v is byte b) return b;
+            if (v is sbyte sb) return sb;
+            if (v is uint ui) return ui;
+            if (v is ulong ul) return ul;
+            if (v is ushort us) return us;
+
+            // If it's already an IConvertible (strings included), prefer CurrentCulture for UI-sourced values
+            try
+            {
+                // Prefer current culture (user input), then invariant as fallback
+                try
+                {
+                    return (float)Convert.ToDouble(v, CultureInfo.CurrentCulture);
+                }
+                catch { /* try invariant below */ }
+
+                try
+                {
+                    return (float)Convert.ToDouble(v, CultureInfo.InvariantCulture);
+                }
+                catch { /* try string parsing below */ }
+
+                // Fallback: parse string representation (CurrentCulture then Invariant)
+                var s = v.ToString();
+                if (!string.IsNullOrWhiteSpace(s))
+                {
+                    s = s.Trim();
+                    if (double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var parsed))
+                        return (float)parsed;
+                    if (double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out parsed))
+                        return (float)parsed;
+                }
+            }
+            catch
+            {
+                // unexpected — swallow and return default
+            }
+
+            return def;
+        }
+
         private int SafeInt(object? v, int def)
         {
             if (v == null) return def;
@@ -675,6 +727,10 @@ namespace ImgViewer.Models
 
         public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)
         {
+            if (_appManager != null)
+            {
+                _appManager.UpdateStatus($"Processing image ({command})...");
+            }
             using var src = WorkingImage;
             if (src != null)
             {
@@ -914,11 +970,49 @@ namespace ImgViewer.Models
                         //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
 
                         break;
-                    case ProcessorCommand.AutoCropRectangle:
-                        WorkingImage = AutoCrop(src);
+                    case ProcessorCommand.SmartCrop:
+
+                        int eastInputWidth = 1280;
+                        int eastInputHeight = 1280;
+                        float eastScoreThreshold = 0.45f;
+                        float eastNmsThreshold = 0.45f;
+                        int tesseractMinConfidence = 50;
+                        int paddingPx = 20;
+                        int downscaleMaxWidth = 1600;
+
+                        foreach (var kv in parameters)
+                        {
+                            if (kv.Key == null) continue;
+                            switch (kv.Key)
+                            {
+                                case "eastInputWidth":
+                                    eastInputWidth = SafeInt(kv.Value, eastInputWidth);
+                                    break;
+                                case "eastInputHeight":
+                                    eastInputHeight = SafeInt(kv.Value, eastInputHeight);
+                                    break;
+                                case "eastScoreThreshold":
+                                    eastScoreThreshold = SafeDoubleToFloat(kv.Value, eastScoreThreshold);
+                                    break;
+                                case "eastNmsThreshold":
+                                    eastNmsThreshold = SafeDoubleToFloat(kv.Value, eastNmsThreshold);
+                                    break;
+                                case "tesseractMinConfidence":
+                                    tesseractMinConfidence = SafeInt(kv.Value, tesseractMinConfidence);
+                                    break;
+                                case "paddingPx":
+                                    paddingPx = SafeInt(kv.Value, paddingPx);
+                                    break;
+                                case "downscaleMaxWidth":
+                                    downscaleMaxWidth = SafeInt(kv.Value, downscaleMaxWidth);
+                                    break;
+                            }
+                        }
+
+                            WorkingImage = SmartCrop(src);
                         //applyAutoCropRectangleCurrent();
                         break;
-                    case ProcessorCommand.LineRemove:
+                    case ProcessorCommand.LinesRemove:
                         int lineWidthPx = 1;
                         double minLengthFraction = 0.5;
                         LineOrientation orientation = LineOrientation.Vertical;
@@ -974,7 +1068,15 @@ namespace ImgViewer.Models
 
                         //WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
                         Mat mask;
-                        WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 2.5, 20, 1, out mask, false, null);
+                        if (orientation == LineOrientation.Vertical)
+                        {
+                            WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+                        }
+                        if (orientation == LineOrientation.Horizontal)
+                        {
+                            WorkingImage = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
+                        }
+                        
                         
 
                         break;
@@ -1102,7 +1204,8 @@ namespace ImgViewer.Models
                         break;
 
                 }
-                //updateImagePreview();
+                if (_appManager != null)
+                    _appManager.UpdateStatus("Ready");
             }
         }
 
@@ -1121,7 +1224,7 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-                return null;
+                throw;
             }
             
             return result;
@@ -1446,16 +1549,26 @@ namespace ImgViewer.Models
             return work;
         }
 
-        private Mat AutoCrop(Mat src)
+        private Mat? SmartCrop(Mat src)
         {
 
             string eastPath = Path.Combine(AppContext.BaseDirectory, "Models", "frozen_east_text_detection.pb");
             string tessData = Path.Combine(AppContext.BaseDirectory, "tessdata");
             string tessLang = "eng"; // или "eng"
-            var cropper = new TextAwareCropper(eastPath, tessData, tessLang);
+            var cropper = new TextAwareCropper(_token, eastPath, tessData, tessLang);
             //var cropped = cropper.CropKeepingText(src);
-            Mat cropped = cropper.ShowDetectedAreas(src);
-            return cropped;
+            Mat cropped;
+            try
+            {
+                cropped = cropper.ShowDetectedAreas(src);
+                return cropped;
+            }
+            catch (OperationCanceledException)
+            {
+
+            }
+            
+            return null;
         }
 
         

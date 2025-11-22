@@ -1,5 +1,6 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Views;
+using OpenCvSharp.XImgProc;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -138,10 +139,10 @@ namespace ImgViewer.Models
                     }
                     
                     break;
-                case PipelineOperationType.BorderRemove:
+                case PipelineOperationType.BordersRemove:
                     {
                         operation = new PipelineOperation(
-                            PipelineOperationType.BorderRemove,
+                            PipelineOperationType.BordersRemove,
                             ProcessorCommand.BordersRemove,
                             displayName,
                             buttonText,
@@ -207,10 +208,10 @@ namespace ImgViewer.Models
                             operation => ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
                     }
                     break;
-                case PipelineOperationType.PunchholesRemove:
+                case PipelineOperationType.PunchHolesRemove:
                     {
                         operation = new PipelineOperation(
-                            PipelineOperationType.PunchholesRemove,
+                            PipelineOperationType.PunchHolesRemove,
                             ProcessorCommand.PunchHolesRemove,
                             displayName,
                             buttonText,
@@ -269,7 +270,7 @@ namespace ImgViewer.Models
                     {
                         operation = new PipelineOperation(
                             PipelineOperationType.LinesRemove,
-                            ProcessorCommand.LineRemove,
+                            ProcessorCommand.LinesRemove,
                         displayName,
                         buttonText,
                         new[]
@@ -283,21 +284,28 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Line color (Blue)", "lineColorBlue", -1, -1, 255, 1),
                                 new PipeLineParameter("Color tolerance", "colorTolerance", 40, 0, 255, 1)
                         },
-                        operation => ExecuteManagerCommand(ProcessorCommand.LineRemove, operation.CreateParameterDictionary()));
+                        operation => ExecuteManagerCommand(ProcessorCommand.LinesRemove, operation.CreateParameterDictionary()));
                     }
                     break;
                 case PipelineOperationType.SmartCrop:
                     {
                         operation = new PipelineOperation(
                         PipelineOperationType.SmartCrop,
-                        ProcessorCommand.AutoCropRectangle,
+                        ProcessorCommand.SmartCrop,
                         displayName,
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Padding", "CropPadding", 8, 0, 100, 1)
+                            new PipeLineParameter("Preset", "preset", new [] { "Fast", "Balance", "Quality" }),
+                            new PipeLineParameter("EAST input width", "eastInputWidth", 704, 1, 1600, 64),
+                            new PipeLineParameter("EAST input height", "eastInputHeight", 704, 1, 1600, 64),
+                            new PipeLineParameter("EAST score Threshold", "eastScoreThreshold", 0.45, 0.1, 1.0, 0.0),
+                            new PipeLineParameter("EAST NMS Threshold", "eastNmsThreshold", 0.45, 0.1, 0.7, 0.05),
+                            new PipeLineParameter("TESSERACT min confidence", "tesseractMinConfidence", 50, 30, 60, 1),
+                            new PipeLineParameter("Padding Px", "paddingPx", 20, 20, 160, 5),
+                            new PipeLineParameter("Downscale max width", "downscaleMaxWidth", 1600, -1, 2400, 100),
                         },
-                        operation => ExecuteManagerCommand(ProcessorCommand.AutoCropRectangle, operation.CreateParameterDictionary()));
+                        operation => ExecuteManagerCommand(ProcessorCommand.SmartCrop, operation.CreateParameterDictionary()));
                     }
                     break;
                 default:
@@ -597,7 +605,7 @@ namespace ImgViewer.Models
         {
 
             Clear();
-            Add(PipelineOperationType.BorderRemove);
+            Add(PipelineOperationType.BordersRemove);
             Add(PipelineOperationType.Binarize);
 
 

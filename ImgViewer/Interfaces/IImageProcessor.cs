@@ -51,8 +51,8 @@ namespace ImgViewer.Interfaces
         Binarize,
         BordersRemove,
         Despeckle,
-        AutoCropRectangle,
-        LineRemove,
+        SmartCrop,
+        LinesRemove,
         DotsRemove,
         PunchHolesRemove,
         ChannelsCorrection

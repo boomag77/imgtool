@@ -7,9 +7,9 @@ namespace ImgViewer.Models
     public enum PipelineOperationType
     {
         Deskew,
-        BorderRemove,
+        BordersRemove,
         Binarize,
-        PunchholesRemove,
+        PunchHolesRemove,
         Despeckle,
         LinesRemove,
         SmartCrop

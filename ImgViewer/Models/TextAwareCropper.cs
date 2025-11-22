@@ -15,9 +15,11 @@ public class TextAwareCropper
     private readonly string _eastModelPath;   // путь к frozen_east_text_detection.pb
     private readonly string _tessDataPath;    // папка tessdata с *.traineddata
     private readonly string _tessLang;        // "eng" или "rus+eng" и т.д.
+    private CancellationToken _token;
 
-    public TextAwareCropper(string eastModelPath, string tessDataPath, string tessLang = "eng")
+    public TextAwareCropper(CancellationToken token, string eastModelPath, string tessDataPath, string tessLang = "eng")
     {
+        _token = token;
         _eastModelPath = eastModelPath;
         _tessDataPath = tessDataPath;
         _tessLang = tessLang;
@@ -74,7 +76,7 @@ public class TextAwareCropper
     int downscaleMaxWidth = 1600)
     {
         if (orig == null || orig.Empty()) return orig;
-
+        _token.ThrowIfCancellationRequested();
         OCMat resized = null;
 
         try
@@ -115,6 +117,8 @@ public class TextAwareCropper
             // объединяем кандидатов: EAST + (опционально) handwriting + stamp
             var textCandidates = new List<OpenCvSharp.Rect>(rects);
 
+            _token.ThrowIfCancellationRequested();
+
             // Добавим handwritten и stamp кандидаты (рекомендуется включать, если нужны печати/записи)
             var hwCandidates = DetectHandwrittenCandidates(proc, minAreaFraction: 0.0002);
             if (hwCandidates != null && hwCandidates.Count > 0) textCandidates.AddRange(hwCandidates);
@@ -143,6 +147,7 @@ public class TextAwareCropper
                 // НЕ ставим глобальный whitelist — используем его только для цифровых ROI (page numbers)
                 foreach (var cand in textCandidates)
                 {
+                    _token.ThrowIfCancellationRequested();
                     // маленький padded ROI вокруг кандидата (proc coords)
                     int px = Math.Max(0, cand.X - ocrPadding);
                     int py = Math.Max(0, cand.Y - ocrPadding);
@@ -241,7 +246,7 @@ public class TextAwareCropper
                 resized?.Dispose();
                 return orig.Clone();
             }
-
+            _token.ThrowIfCancellationRequested();
             // 3) merge уже подтверждённых боксов (proc coords)
             int mergePaddingPx = Math.Min(80, Math.Max(20, paddingPx / 2));
             double relInflate = 0.4;
@@ -258,6 +263,7 @@ public class TextAwareCropper
             var outImg = orig.Clone();
             for (int i = 0; mergedProcBoxes != null && i < mergedProcBoxes.Count; i++)
             {
+                _token.ThrowIfCancellationRequested();
                 var b = mergedProcBoxes[i];
 
                 int x0 = (int)System.Math.Round(b.X / scale);

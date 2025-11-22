@@ -493,13 +493,13 @@
                                       Tag="{x:Static models:PipelineOperationType.Deskew}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Border Removal"
-                                      Tag="{x:Static models:PipelineOperationType.BorderRemove}"
+                                      Tag="{x:Static models:PipelineOperationType.BordersRemove}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Binarize"
                                       Tag="{x:Static models:PipelineOperationType.Binarize}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Punch holes"
-                                      Tag="{x:Static models:PipelineOperationType.PunchholesRemove}"
+                                      Tag="{x:Static models:PipelineOperationType.PunchHolesRemove}"
                                       Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Despeckle"
                                       Tag="{x:Static models:PipelineOperationType.Despeckle}"

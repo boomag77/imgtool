@@ -12,10 +12,12 @@ namespace ImgViewer.Interfaces
 
         public void CancelImageProcessing();
 
+        public void UpdateStatus(string status);
+
         public void SavePipelineToJSON(string path, string json);
 
         public Task SetImageForProcessing(ImageSource bmp);
-        public void ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters);
+        public Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters);
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDesvription = null);
         public Task ProcessFolder(string srcFolder, Pipeline pipeline);
 

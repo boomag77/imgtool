@@ -29,10 +29,9 @@ namespace ImgViewer.Views
 {
     public partial class MainWindow : Window, IMainView
     {
-        private readonly IImageProcessor _processor;
+        //private readonly IImageProcessor _processor;
         private readonly IFileProcessor _explorer;
 
-        //private readonly ObservableCollection<PipeLineOperation> _pipeLineOperations = new();
         private readonly HashSet<PipelineOperation> _handlingOps = new();
 
         private PipelineOperation? _draggedOperation;
@@ -50,7 +49,8 @@ namespace ImgViewer.Views
         private bool _eraseModeActive;
         private bool _operationErased;
 
-        private bool _livePipelineRunning = false;
+        private bool _livePipelineRunning;
+        private readonly object _liveLock = new();
         private readonly HashSet<PipelineOperation> _liveRunning = new();
 
         // debounce для Live-пайплайна
@@ -166,56 +166,33 @@ namespace ImgViewer.Views
         private async Task RunLivePipelineFromOriginalAsync()
         {
             if (_viewModel.OriginalImage == null) return;
-            // защита от повторных запусков, пока предыдущий ещё работает
-            if (_livePipelineRunning)
-                return;
 
-            _livePipelineRunning = true;
+
+            lock (_liveLock)
+            {
+                if (_livePipelineRunning)
+                    return;              // не запускаем параллельно, просто пропускаем лишний вызов
+                _livePipelineRunning = true;
+            }
+
             try
             {
-                // 1) сброс к оригиналу на UI-потоке
-                try
-                {
-                    Dispatcher.Invoke(() => ResetPreview());
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Reset failed in RunLivePipelineFromOriginalAsync: {ex}");
-                }
+                _manager.CancelImageProcessing();
+                Dispatcher.Invoke(() => ResetPreview());
 
-                // 2) пройти по всем операциям в порядке списка
                 foreach (var pipelineOp in _pipeline.Operations)
                 {
                     if (!pipelineOp.InPipeline || !pipelineOp.Live)
                         continue;
 
-                    // защита от параллельных запусков одной и той же операции
-                    if (!_liveRunning.Add(pipelineOp))
-                        continue;
-
-                    try
-                    {
-                        await Task.Run(() =>
-                        {
-                            try
-                            {
-                                pipelineOp.Execute();
-                            }
-                            catch (Exception exExec)
-                            {
-                                Debug.WriteLine($"Live execution failed for {pipelineOp.DisplayName}: {exExec}");
-                            }
-                        });
-                    }
-                    finally
-                    {
-                        _liveRunning.Remove(pipelineOp);
-                    }
+                    _viewModel.Status = $"Processing image ({pipelineOp.DisplayName}).";
+                    pipelineOp.Execute();
                 }
             }
             finally
             {
-                _livePipelineRunning = false;
+                _viewModel.Status = "Standby";
+                lock (_liveLock) _livePipelineRunning = false;
             }
         }
 
@@ -682,9 +659,26 @@ namespace ImgViewer.Views
         }
 
 
-        private void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
+        private async void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
         {
-            _manager?.ApplyCommandToProcessingImage(command, parameters);
+            if (_manager == null)
+                return;
+
+            // Опционально: если хочешь, чтобы новый запуск отменял предыдущий Despeckle:
+            _manager.CancelImageProcessing();
+
+            try
+            {
+                await Task.Run(() => _manager.ApplyCommandToProcessingImage(command, parameters));
+            }
+            catch (OperationCanceledException)
+            {
+                // тихо игнорируем
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ExecuteManagerCommand error: {ex}");
+            }
         }
 
         //private void ExecuteProcessorCommand(ProcessorCommand command, Dictionary<string, object> parameters)
@@ -749,6 +743,8 @@ namespace ImgViewer.Views
                     //await SetImgBoxSourceAsync(dlg.FileName);
                     //await _mvm.LoadImagAsync(dlg.FileName);
                     var fileName = dlg.FileName;
+                    _liveDebounceCts?.Cancel();
+                    _liveDebounceCts = null;
                     await _manager.SetImageOnPreview(fileName);
                     _viewModel.CurrentImagePath = fileName;
                     _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(fileName);
@@ -927,6 +923,10 @@ namespace ImgViewer.Views
                 if (newIdx < 0 || newIdx >= files.Length) return;
 
                 var target = files[newIdx];
+
+                _manager.CancelImageProcessing();
+                _liveDebounceCts?.Cancel();
+                _liveDebounceCts = null;
                 await _manager.SetImageOnPreview(target);
                 _viewModel.CurrentImagePath = target;
                 _manager.LastOpenedFolder = folder;
@@ -954,7 +954,7 @@ namespace ImgViewer.Views
 
         private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteManagerCommand(ProcessorCommand.AutoCropRectangle, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.SmartCrop, GetParametersFromSender(sender));
         }
 
         private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)
@@ -977,7 +977,7 @@ namespace ImgViewer.Views
 
         private void ApplyLineRemoveCommand(object sender, RoutedEventArgs e)
         {
-            ExecuteManagerCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
+            ExecuteManagerCommand(ProcessorCommand.LinesRemove, GetParametersFromSender(sender));
             //ExecuteProcessorCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
         }
 
@@ -1109,6 +1109,7 @@ namespace ImgViewer.Views
 
         private async void ResetPreview()
         {
+            _manager.CancelImageProcessing();
             if (_viewModel.OriginalImage == null) return;
             await _manager.SetImageForProcessing(_viewModel.OriginalImage);
         }
