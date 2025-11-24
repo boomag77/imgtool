@@ -19,12 +19,13 @@ namespace ImgViewer.Models
         private readonly int _workersCount;
 
         //private readonly (ProcessorCommand command, Dictionary<string, object> parameters)[] _pipelineTemplate;
-        private Pipeline _pipline;
+        //private Pipeline _pipline;
 
         //private readonly ProcessorCommands[] _commandsQueue;
 
         private int _processedCount;
         private readonly int _totalCount;
+        private (ProcessorCommand Command, Dictionary<string, object> Params)[] _plOperations;
 
         public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
@@ -42,7 +43,12 @@ namespace ImgViewer.Models
             _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
             Directory.CreateDirectory(_outputFolder);
             //_pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
-            _pipline = pipeline;
+            var opsSnapshot = pipeline.Operations
+                .Where(op => op.InPipeline)
+                .Select(op => (op.Command, Params: op.CreateParameterDictionary()))
+                .ToArray();
+            _plOperations = opsSnapshot;
+            //_pipline = pipeline;
 
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
@@ -103,13 +109,21 @@ namespace ImgViewer.Models
                     token.ThrowIfCancellationRequested();
 
                     var loaded = fileProc.Load<ImageSource>(filePath);
+
+                    if (loaded.Item1 == null)
+                    {
+                        // если здесь токен отменён — просто выходим/продолжаем без ошибки
+                        if (token.IsCancellationRequested) throw new OperationCanceledException(token);
+                        continue; // или лог и continue
+                    }
+
                     imgProc.CurrentImage = loaded.Item1;
                     //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
 
-                    foreach (var op in _pipline.Operations)
+                    foreach (var op in _plOperations)
                     {
-                        if (!op.InPipeline)
-                            continue; // пользователь снял галочку — пропускаем
+                        //if (!op.InPipeline)
+                        //    continue; // пользователь снял галочку — пропускаем
 
                         token.ThrowIfCancellationRequested();
 
@@ -117,11 +131,11 @@ namespace ImgViewer.Models
                         {
                             if (op.Command == null)
                             {
-                                Debug.WriteLine($"Pipeline op '{op.DisplayName}' has no Command, skipping.");
+                                
                                 continue;
                             }
-                            var parameters = op.CreateParameterDictionary();
-                            imgProc.ApplyCommand(op.Command, parameters);
+                            //var parameters = op.CreateParameterDictionary();
+                            imgProc.ApplyCommand(op.Command, op.Params);
                         }
                         catch (OperationCanceledException)
                         {
