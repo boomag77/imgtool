@@ -178,20 +178,21 @@ namespace ImgViewer.Views
             try
             {
                 _manager.CancelImageProcessing();
-                Dispatcher.Invoke(() => ResetPreview());
+                await ResetPreview();
 
                 foreach (var pipelineOp in _pipeline.Operations)
                 {
                     if (!pipelineOp.InPipeline || !pipelineOp.Live)
                         continue;
-
-                    _viewModel.Status = $"Processing image ({pipelineOp.DisplayName}).";
-                    pipelineOp.Execute();
+                    ProcessorCommand opCommand = pipelineOp.Command;
+                    if (opCommand == null) return; 
+                    await _manager.ApplyCommandToProcessingImage(opCommand, pipelineOp.CreateParameterDictionary());
+                    //pipelineOp.Execute();
                 }
             }
             finally
             {
-                _viewModel.Status = "Standby";
+                //_viewModel.Status = "StandBy";
                 lock (_liveLock) _livePipelineRunning = false;
             }
         }
@@ -988,11 +989,11 @@ namespace ImgViewer.Views
         }
 
 
-        private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
+        private (ProcessorCommand Command, Dictionary<string, object>)[] GetPipelineParameters()
         {
             var pl = _pipeline.Operations
-                    .Where(op => op.InPipeline && op.Command.HasValue)
-                    .Select(op => (op.Command.Value, op.CreateParameterDictionary()))
+                    .Where(op => op.InPipeline)
+                    .Select(op => (op.Command, op.CreateParameterDictionary()))
                     .ToArray();
 
             return pl;
@@ -1107,7 +1108,7 @@ namespace ImgViewer.Views
             Dispatcher.Invoke(() => ResetPreview());
         }
 
-        private async void ResetPreview()
+        private async Task ResetPreview()
         {
             _manager.CancelImageProcessing();
             if (_viewModel.OriginalImage == null) return;

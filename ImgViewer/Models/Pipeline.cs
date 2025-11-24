@@ -226,7 +226,7 @@ namespace ImgViewer.Models
                    
                                 // common
                                 new PipeLineParameter("Density", "density", 1.00, 0.00, 1.00, 0.05),
-                                new PipeLineParameter("Size tolerance", "sizeTolerance", 0.8, 0.0, 1.0, 0.1),
+                                new PipeLineParameter("Size tolerance", "sizeTolerance", 0.8, 0.0, 2.0, 0.1),
                                 new PipeLineParameter("Left Offset", "leftOffset", 100, 0, 1500, 1),
                                 new PipeLineParameter("Right Offset", "rightOffset", 100, 0, 1500, 1),
                                 new PipeLineParameter("Top Offset", "topOffset", 100, 0, 1500, 1),
@@ -251,13 +251,13 @@ namespace ImgViewer.Models
                             new[]
                             {
                                 new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
-                                new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.25, 0.01, 2, 0.01),
+                                new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 2, 0.01),
                                 new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
                                 new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 1.00, 0.01),
                                 new PipeLineParameter("Proximity Radius Fraction", "ProximityRadiusFraction", 0.80, 0.01, 1.00, 0.01),
                                 new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 1.00, 0.05),
                                 new PipeLineParameter("KeepClusters", "keepClusters", true),
-                                new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", true),
+                                new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", false),
                                 new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
                                 new PipeLineParameter("Dilate Iterations", "DilateIter", 1, 1, 5, 1),
                                 new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),

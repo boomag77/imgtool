@@ -37,7 +37,7 @@ namespace ImgViewer.Models
             HookParameterChanges();
         }
 
-        public ProcessorCommand? Command
+        public ProcessorCommand Command
         {
             get
             {
@@ -112,6 +112,8 @@ namespace ImgViewer.Models
         public void Execute()
         {
             _execute?.Invoke(this);
+
+
         }
 
         private void InitializeParameterVisibilityRules()

@@ -121,7 +121,7 @@ namespace ImgViewer.Models
                                 continue;
                             }
                             var parameters = op.CreateParameterDictionary();
-                            imgProc.ApplyCommand(op.Command.Value, parameters);
+                            imgProc.ApplyCommand(op.Command, parameters);
                         }
                         catch (OperationCanceledException)
                         {

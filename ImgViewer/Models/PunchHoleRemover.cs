@@ -20,7 +20,7 @@ public static class PunchHoleRemover
     /// <returns>Restored Mat (BGR)</returns>
     /// 
 
-    public static Mat RemovePunchHoles(Mat src,
+    public static Mat RemovePunchHoles(CancellationToken token, Mat src,
                                       List<PunchSpec> specs,
                                       int offsetTop, int offsetBottom,
                                       int offsetLeft, int offsetRight)
@@ -28,6 +28,7 @@ public static class PunchHoleRemover
         if (src == null || src.Empty())
             return src;
 
+        token.ThrowIfCancellationRequested();
         // ensure color image for inpainting output
         Mat srcColor = src.Channels() == 3 ? src.Clone() : new Mat();
         if (srcColor.Empty())
@@ -38,6 +39,7 @@ public static class PunchHoleRemover
         if (src.Channels() == 3) Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
         else gray = src.Clone();
 
+        token.ThrowIfCancellationRequested();
         Cv2.GaussianBlur(gray, gray, new Size(5, 5), 0);
 
         // 2) Build search mask (areas near edges where holes expected)
@@ -49,34 +51,40 @@ public static class PunchHoleRemover
         {
             var r = new Rect(offsetLeft, 0, w - offsetLeft - offsetRight, Math.Min(offsetTop, h));
             if (r.Width > 0 && r.Height > 0) searchMask[r].SetTo(255);
+            token.ThrowIfCancellationRequested();
         }
         // bottom strip
         if (offsetBottom > 0)
         {
             var r = new Rect(offsetLeft, Math.Max(0, h - offsetBottom), w - offsetLeft - offsetRight, Math.Min(offsetBottom, h));
             if (r.Width > 0 && r.Height > 0) searchMask[r].SetTo(255);
+            token.ThrowIfCancellationRequested();
         }
         // left strip
         if (offsetLeft > 0)
         {
             var r = new Rect(0, offsetTop, Math.Min(offsetLeft, w), h - offsetTop - offsetBottom);
             if (r.Width > 0 && r.Height > 0) searchMask[r].SetTo(255);
+            token.ThrowIfCancellationRequested();
         }
         // right strip
         if (offsetRight > 0)
         {
             var r = new Rect(Math.Max(0, w - offsetRight), offsetTop, Math.Min(offsetRight, w), h - offsetTop - offsetBottom);
             if (r.Width > 0 && r.Height > 0) searchMask[r].SetTo(255);
+            token.ThrowIfCancellationRequested();
         }
 
         // optional: dilate search mask slightly to include border artifacts
         Cv2.Dilate(searchMask, searchMask, Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3)));
+        token.ThrowIfCancellationRequested();
 
         // 3) Candidate detection & mask construction
         Mat holesMask = Mat.Zeros(gray.Size(), MatType.CV_8UC1);
 
         foreach (var spec in specs)
         {
+            token.ThrowIfCancellationRequested();
             if (spec.Shape == PunchShape.Circle)
             {
                 // Use HoughCircles on masked ROI
@@ -162,7 +170,9 @@ public static class PunchHoleRemover
 
                 Mat thr = new Mat();
                 // adaptive or Otsu depending on image; try adaptive for nonuniform illumination
+                token.ThrowIfCancellationRequested();
                 Cv2.AdaptiveThreshold(masked, thr, 255, AdaptiveThresholdTypes.GaussianC, ThresholdTypes.BinaryInv, 11, 2);
+                token.ThrowIfCancellationRequested();
 
                 // morphological closing to fill holes inside the punch ring
                 //Mat kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
@@ -171,7 +181,9 @@ public static class PunchHoleRemover
                 // find contours
                 Point[][] contours;
                 HierarchyIndex[] hier;
+                token.ThrowIfCancellationRequested();
                 Cv2.FindContours(thr, out contours, out hier, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+                token.ThrowIfCancellationRequested();
 
                 foreach (var cnt in contours)
                 {

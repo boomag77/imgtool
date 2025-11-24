@@ -469,6 +469,7 @@ namespace ImgViewer.Models
             catch (OperationCanceledException)
             {
                 Debug.WriteLine("Despeckler: cancelled");
+                return null;
             }
             return null;
         }    

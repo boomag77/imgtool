@@ -7,6 +7,7 @@ namespace ImgViewer.Interfaces
     {
         
         public ImageSource CurrentImage { set; }
+        
 
 
 

@@ -2,7 +2,6 @@
 using OpenCvSharp;
 using System.Buffers;
 using System.Diagnostics;
-using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -26,6 +25,7 @@ namespace ImgViewer.Models
         private CancellationToken _token;
 
         private readonly object _imageLock = new();
+        private readonly object _commandLock = new();
 
         private Mat WorkingImage
         {
@@ -43,7 +43,7 @@ namespace ImgViewer.Models
                     old = _currentImage;
                     _currentImage = value;
                 }
-                
+
                 old?.Dispose();
                 if (_appManager == null) return;
                 _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
@@ -727,159 +727,157 @@ namespace ImgViewer.Models
 
         public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)
         {
-            if (_appManager != null)
+            lock (_commandLock)
             {
-                _appManager.UpdateStatus($"Processing image ({command})...");
-            }
-            using var src = WorkingImage;
-            if (src != null)
-            {
-                
-                switch (command)
+                using var src = WorkingImage;
+                if (src != null)
                 {
-                    case ProcessorCommand.Binarize:
 
-                        //int threshold = 128;
-                        //int blockSize = 3;
-                        //double c = 14;
-                        //bool useGaussian = false;
-                        //bool useMorphology = false;
-                        //int morphKernel = 3;
-                        //int morphIters = 1;
-                        //int majorityOffset = 20;
+                    switch (command)
+                    {
+                        case ProcessorCommand.Binarize:
 
-                        var binParams = ToStruct<BinarizeParameters>(parameters);
+                            //int threshold = 128;
+                            //int blockSize = 3;
+                            //double c = 14;
+                            //bool useGaussian = false;
+                            //bool useMorphology = false;
+                            //int morphKernel = 3;
+                            //int morphIters = 1;
+                            //int majorityOffset = 20;
 
-                        switch (binParams.Method)
-                        {
-                            case BinarizeMethod.Threshold:
-                                //DumpStruct(binParams);
-                                WorkingImage = BinarizeThreshold(src, binParams.Threshold);
-                                break;
-                            case BinarizeMethod.Adaptive:
-                                WorkingImage = BinarizeAdaptive(src, binParams, invert: false);
-                                break;
-                            case BinarizeMethod.Sauvola:
-                                WorkingImage = SauvolaBinarize(src, binParams);
-                                break;
-                            case BinarizeMethod.Majority:
-                                WorkingImage = MajorityBinarize(src, binParams);
-                                break;
-                        }
-                        break;
-                    case ProcessorCommand.Deskew:
-                        //Deskewer.Parameters p = new Deskewer.Parameters();
-                        foreach (var kv in parameters)
-                        {
-                            Debug.WriteLine(kv.Key.ToString());
-                            Debug.WriteLine(kv.Value.ToString());
+                            var binParams = ToStruct<BinarizeParameters>(parameters);
 
-                        }
-                        WorkingImage = NewDeskew(src, parameters);
-                        //Deskew();
-                        break;
-                    case ProcessorCommand.BordersRemove:
-                        {
-                            //BordersDeskew();
-                            //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
-                            //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
-                            //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
-                            //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
-                            //либо используйте более устойчивую выборку(несколько областей).
-                            //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
-                            double treshFrac = 0.40;
-                            int contrastThr = 50;
-                            double centralSample = 0.10;
-                            double maxRemoveFrac = 0.45;
-
-                            byte darkThresh = 40;
-                            bool autoThresh = false;
-                            int marginPercentForThresh = 10;
-                            double shiftFactorForTresh = 0.25;
-                            Scalar? bgColor = null;
-                            int minAreaPx = 2000;
-                            double minSpanFraction = 0.6;
-                            double solidityThreshold = 0.6;
-                            double minDepthFraction = 0.05;
-                            int featherPx = 12;
-
-
-                            foreach (var kv in parameters)
+                            switch (binParams.Method)
                             {
-                                if (kv.Key == null) continue;
-
-                                switch (kv.Key)
-                                {
-                                    case "autoThresh":
-                                        autoThresh = SafeBool(kv.Value, autoThresh);
-                                        break;
-                                    case "marginPercent":
-                                        marginPercentForThresh = SafeInt(kv.Value, marginPercentForThresh);
-                                        break;
-                                    case "shiftFactor":
-                                        shiftFactorForTresh = SafeDouble(kv.Value, shiftFactorForTresh);
-                                        break;
-                                    case "bgColor":
-                                        int i = SafeInt(kv.Value, 0);
-                                        int color = Math.Max(0, Math.Min(255, i));
-                                        //bgColor = new Scalar(0, 0, 255);
-                                        //bgColor = new Scalar(color, color, color);
-                                        bgColor = SampleCentralGrayScalar(WorkingImage, 0, 0.1);
-                                        Debug.WriteLine("bgColor:", bgColor.ToString());
-                                        break;
-                                    case "darkThreshold":
-                                        int iThresh = SafeInt(kv.Value, darkThresh);
-                                        darkThresh = (byte)(iThresh < 0 ? 0 : (iThresh > 255 ? 255 : iThresh));
-                                        break;
-                                    case "treshFrac":
-                                        treshFrac = SafeDouble(kv.Value, treshFrac);
-                                        break;
-                                    case "minSpanFraction":
-                                        minSpanFraction = SafeDouble(kv.Value, minSpanFraction);
-                                        break;
-                                    case "solidityThreshold":
-                                        solidityThreshold = SafeDouble(kv.Value, solidityThreshold);
-                                        break;
-                                    case "minDepthFraction":
-                                        minDepthFraction = SafeDouble(kv.Value, minDepthFraction);
-                                        break;
-
-                                    case "contrastThr":
-                                        contrastThr = SafeInt(kv.Value, contrastThr);
-                                        break;
-                                    case "minAreaPx":
-                                        minAreaPx = SafeInt(kv.Value, minAreaPx);
-                                        break;
-                                    case "featherPx":
-                                        featherPx = SafeInt(kv.Value, featherPx);
-                                        break;
-
-                                    case "centralSample":
-                                        centralSample = SafeDouble(kv.Value, centralSample);
-                                        break;
-
-                                    case "maxRemoveFrac":
-                                        maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
-                                        break;
-
-                                    default:
-                                        // ignore unknown key
-                                        break;
-                                }
+                                case BinarizeMethod.Threshold:
+                                    //DumpStruct(binParams);
+                                    WorkingImage = BinarizeThreshold(src, binParams.Threshold);
+                                    break;
+                                case BinarizeMethod.Adaptive:
+                                    WorkingImage = BinarizeAdaptive(src, binParams, invert: false);
+                                    break;
+                                case BinarizeMethod.Sauvola:
+                                    WorkingImage = SauvolaBinarize(src, binParams);
+                                    break;
+                                case BinarizeMethod.Majority:
+                                    WorkingImage = MajorityBinarize(src, binParams);
+                                    break;
                             }
-
+                            break;
+                        case ProcessorCommand.Deskew:
+                            //Deskewer.Parameters p = new Deskewer.Parameters();
                             foreach (var kv in parameters)
                             {
-                                if (kv.Key == "borderRemovalAlgorithm")
+                                Debug.WriteLine(kv.Key.ToString());
+                                Debug.WriteLine(kv.Value.ToString());
+
+                            }
+                            WorkingImage = NewDeskew(src, parameters);
+                            //Deskew();
+                            break;
+                        case ProcessorCommand.BordersRemove:
+                            {
+                                //BordersDeskew();
+                                //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
+                                //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
+                                //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
+                                //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
+                                //либо используйте более устойчивую выборку(несколько областей).
+                                //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
+                                double treshFrac = 0.40;
+                                int contrastThr = 50;
+                                double centralSample = 0.10;
+                                double maxRemoveFrac = 0.45;
+
+                                byte darkThresh = 40;
+                                bool autoThresh = false;
+                                int marginPercentForThresh = 10;
+                                double shiftFactorForTresh = 0.25;
+                                Scalar? bgColor = null;
+                                int minAreaPx = 2000;
+                                double minSpanFraction = 0.6;
+                                double solidityThreshold = 0.6;
+                                double minDepthFraction = 0.05;
+                                int featherPx = 12;
+
+
+                                foreach (var kv in parameters)
                                 {
-                                    Debug.WriteLine(kv.Value.ToString());
-                                    switch (kv.Value.ToString())
+                                    if (kv.Key == null) continue;
+
+                                    switch (kv.Key)
                                     {
-                                        case "Auto":
-                                            if (autoThresh)
-                                            {
-                                                darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
-                                            }
+                                        case "autoThresh":
+                                            autoThresh = SafeBool(kv.Value, autoThresh);
+                                            break;
+                                        case "marginPercent":
+                                            marginPercentForThresh = SafeInt(kv.Value, marginPercentForThresh);
+                                            break;
+                                        case "shiftFactor":
+                                            shiftFactorForTresh = SafeDouble(kv.Value, shiftFactorForTresh);
+                                            break;
+                                        case "bgColor":
+                                            int i = SafeInt(kv.Value, 0);
+                                            int color = Math.Max(0, Math.Min(255, i));
+                                            //bgColor = new Scalar(0, 0, 255);
+                                            //bgColor = new Scalar(color, color, color);
+                                            bgColor = SampleCentralGrayScalar(WorkingImage, 0, 0.1);
+                                            Debug.WriteLine("bgColor:", bgColor.ToString());
+                                            break;
+                                        case "darkThreshold":
+                                            int iThresh = SafeInt(kv.Value, darkThresh);
+                                            darkThresh = (byte)(iThresh < 0 ? 0 : (iThresh > 255 ? 255 : iThresh));
+                                            break;
+                                        case "treshFrac":
+                                            treshFrac = SafeDouble(kv.Value, treshFrac);
+                                            break;
+                                        case "minSpanFraction":
+                                            minSpanFraction = SafeDouble(kv.Value, minSpanFraction);
+                                            break;
+                                        case "solidityThreshold":
+                                            solidityThreshold = SafeDouble(kv.Value, solidityThreshold);
+                                            break;
+                                        case "minDepthFraction":
+                                            minDepthFraction = SafeDouble(kv.Value, minDepthFraction);
+                                            break;
+
+                                        case "contrastThr":
+                                            contrastThr = SafeInt(kv.Value, contrastThr);
+                                            break;
+                                        case "minAreaPx":
+                                            minAreaPx = SafeInt(kv.Value, minAreaPx);
+                                            break;
+                                        case "featherPx":
+                                            featherPx = SafeInt(kv.Value, featherPx);
+                                            break;
+
+                                        case "centralSample":
+                                            centralSample = SafeDouble(kv.Value, centralSample);
+                                            break;
+
+                                        case "maxRemoveFrac":
+                                            maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
+                                            break;
+
+                                        default:
+                                            // ignore unknown key
+                                            break;
+                                    }
+                                }
+
+                                foreach (var kv in parameters)
+                                {
+                                    if (kv.Key == "borderRemovalAlgorithm")
+                                    {
+                                        Debug.WriteLine(kv.Value.ToString());
+                                        switch (kv.Value.ToString())
+                                        {
+                                            case "Auto":
+                                                if (autoThresh)
+                                                {
+                                                    darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
+                                                }
                                                 WorkingImage = RemoveBorderArtifactsGeneric_Safe(src,
                                                     darkThresh,
                                                     bgColor,
@@ -889,267 +887,227 @@ namespace ImgViewer.Models
                                                     minDepthFraction,
                                                     featherPx
                                                 );
-                                            break;
-                                        case "By Contrast":
-                                            WorkingImage = RemoveBordersByRowColWhite(src,
-                                                    threshFrac: treshFrac,
-                                                    contrastThr: contrastThr,
-                                                    centralSample: centralSample,
-                                                    maxRemoveFrac: maxRemoveFrac
-                                                );
-                                            break;
+                                                break;
+                                            case "By Contrast":
+                                                WorkingImage = RemoveBordersByRowColWhite(src,
+                                                        threshFrac: treshFrac,
+                                                        contrastThr: contrastThr,
+                                                        centralSample: centralSample,
+                                                        maxRemoveFrac: maxRemoveFrac
+                                                    );
+                                                break;
+                                        }
                                     }
+
                                 }
 
                             }
+                            break;
+                        case ProcessorCommand.Despeckle:
+                            //applyDespeckleCurrent();
 
-                        }
-                        break;
-                    case ProcessorCommand.Despeckle:
-                        //applyDespeckleCurrent();
+                            bool smallAreaRelative = true;
+                            double smallAreaMultiplier = 0.25;
+                            int smallAreaAbsolutePx = 64;
+                            double maxDotHeightFraction = 0.35;
+                            double proximityRadiusFraction = 0.8;
+                            double squarenessTolerance = 0.6;
+                            bool keepClusters = true;
+                            bool useDilateBeforeCC = true;
+                            string dilateKernel = "1x3";
+                            int dilateIter = 1;
+                            bool showDespeckleDebug = false;
 
-                        bool smallAreaRelative = true;
-                        double smallAreaMultiplier = 0.25;
-                        int smallAreaAbsolutePx = 64;
-                        double maxDotHeightFraction = 0.35;
-                        double proximityRadiusFraction = 0.8;
-                        double squarenessTolerance = 0.6;
-                        bool keepClusters = true;
-                        bool useDilateBeforeCC = true;
-                        string dilateKernel = "1x3";
-                        int dilateIter = 1;
-                        bool showDespeckleDebug = false;
-
-                        DespeckleSettings settings = new DespeckleSettings();
-                        foreach (var kv in parameters)
-                        {
-                            if (kv.Key == null) continue;
-
-                            switch (kv.Key)
+                            DespeckleSettings settings = new DespeckleSettings();
+                            foreach (var kv in parameters)
                             {
-                                case "smallAreaRelative":
-                                    settings.SmallAreaRelative = SafeBool(kv.Value, smallAreaRelative);
-                                    break;
-                                case "smallAreaMultiplier":
-                                    settings.SmallAreaMultiplier = SafeDouble(kv.Value, smallAreaMultiplier);
-                                    break;
-                                case "smallAreaAbsolutePx":
-                                    settings.SmallAreaAbsolutePx = SafeInt(kv.Value, smallAreaAbsolutePx);
-                                    break;
-                                case "maxDotHeightFraction":
-                                    settings.MaxDotHeightFraction = SafeDouble(kv.Value, maxDotHeightFraction);
-                                    break;
-                                case "proximityRadiusFraction":
-                                    settings.ProximityRadiusFraction = SafeDouble(kv.Value, proximityRadiusFraction);
-                                    break;
-                                case "SquarenessTolerance":
-                                    settings.SquarenessTolerance = SafeDouble(kv.Value, squarenessTolerance);
-                                    break;
-                                case "keepClusters":
-                                    settings.KeepClusters = SafeBool(kv.Value, keepClusters);
-                                    break;
-                                case "useDilateBeforeCC":
-                                    settings.UseDilateBeforeCC = SafeBool(kv.Value, useDilateBeforeCC);
-                                    break;
-                                case "dilateKernel":
-                                    settings.DilateKernel = kv.Value.ToString();
-                                    if (settings.DilateKernel == string.Empty) settings.DilateKernel = dilateKernel;
-                                    break;
-                                case "dilateIter":
-                                    settings.DilateIter = SafeInt(kv.Value, dilateIter);
-                                    break;
-                                case "showDespeckleDebug":
-                                    settings.ShowDespeckleDebug = SafeBool(kv.Value, showDespeckleDebug);
-                                    break;
+                                if (kv.Key == null) continue;
 
+                                switch (kv.Key)
+                                {
+                                    case "smallAreaRelative":
+                                        settings.SmallAreaRelative = SafeBool(kv.Value, smallAreaRelative);
+                                        break;
+                                    case "smallAreaMultiplier":
+                                        settings.SmallAreaMultiplier = SafeDouble(kv.Value, smallAreaMultiplier);
+                                        break;
+                                    case "smallAreaAbsolutePx":
+                                        settings.SmallAreaAbsolutePx = SafeInt(kv.Value, smallAreaAbsolutePx);
+                                        break;
+                                    case "maxDotHeightFraction":
+                                        settings.MaxDotHeightFraction = SafeDouble(kv.Value, maxDotHeightFraction);
+                                        break;
+                                    case "proximityRadiusFraction":
+                                        settings.ProximityRadiusFraction = SafeDouble(kv.Value, proximityRadiusFraction);
+                                        break;
+                                    case "SquarenessTolerance":
+                                        settings.SquarenessTolerance = SafeDouble(kv.Value, squarenessTolerance);
+                                        break;
+                                    case "keepClusters":
+                                        settings.KeepClusters = SafeBool(kv.Value, keepClusters);
+                                        break;
+                                    case "useDilateBeforeCC":
+                                        settings.UseDilateBeforeCC = SafeBool(kv.Value, useDilateBeforeCC);
+                                        break;
+                                    case "dilateKernel":
+                                        settings.DilateKernel = kv.Value.ToString();
+                                        if (settings.DilateKernel == string.Empty) settings.DilateKernel = dilateKernel;
+                                        break;
+                                    case "dilateIter":
+                                        settings.DilateIter = SafeInt(kv.Value, dilateIter);
+                                        break;
+                                    case "showDespeckleDebug":
+                                        settings.ShowDespeckleDebug = SafeBool(kv.Value, showDespeckleDebug);
+                                        break;
+
+                                }
                             }
-                        }
 
-                        //_currentImage = DespeckleApplyToSource(_currentImage, settings, true, false, true);
-                        WorkingImage = Despeckle(src, settings);
-                        //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
+                            //_currentImage = DespeckleApplyToSource(_currentImage, settings, true, false, true);
+                            WorkingImage = Despeckle(src, settings);
+                            //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
 
-                        break;
-                    case ProcessorCommand.SmartCrop:
+                            break;
+                        case ProcessorCommand.SmartCrop:
 
-                        int eastInputWidth = 1280;
-                        int eastInputHeight = 1280;
-                        float eastScoreThreshold = 0.45f;
-                        float eastNmsThreshold = 0.45f;
-                        int tesseractMinConfidence = 50;
-                        int paddingPx = 20;
-                        int downscaleMaxWidth = 1600;
+                            int eastInputWidth = 1280;
+                            int eastInputHeight = 1280;
+                            float eastScoreThreshold = 0.45f;
+                            float eastNmsThreshold = 0.45f;
+                            int tesseractMinConfidence = 50;
+                            int paddingPx = 20;
+                            int downscaleMaxWidth = 1600;
 
-                        foreach (var kv in parameters)
-                        {
-                            if (kv.Key == null) continue;
-                            switch (kv.Key)
+                            foreach (var kv in parameters)
                             {
-                                case "eastInputWidth":
-                                    eastInputWidth = SafeInt(kv.Value, eastInputWidth);
-                                    break;
-                                case "eastInputHeight":
-                                    eastInputHeight = SafeInt(kv.Value, eastInputHeight);
-                                    break;
-                                case "eastScoreThreshold":
-                                    eastScoreThreshold = SafeDoubleToFloat(kv.Value, eastScoreThreshold);
-                                    break;
-                                case "eastNmsThreshold":
-                                    eastNmsThreshold = SafeDoubleToFloat(kv.Value, eastNmsThreshold);
-                                    break;
-                                case "tesseractMinConfidence":
-                                    tesseractMinConfidence = SafeInt(kv.Value, tesseractMinConfidence);
-                                    break;
-                                case "paddingPx":
-                                    paddingPx = SafeInt(kv.Value, paddingPx);
-                                    break;
-                                case "downscaleMaxWidth":
-                                    downscaleMaxWidth = SafeInt(kv.Value, downscaleMaxWidth);
-                                    break;
+                                if (kv.Key == null) continue;
+                                switch (kv.Key)
+                                {
+                                    case "eastInputWidth":
+                                        eastInputWidth = SafeInt(kv.Value, eastInputWidth);
+                                        break;
+                                    case "eastInputHeight":
+                                        eastInputHeight = SafeInt(kv.Value, eastInputHeight);
+                                        break;
+                                    case "eastScoreThreshold":
+                                        eastScoreThreshold = SafeDoubleToFloat(kv.Value, eastScoreThreshold);
+                                        break;
+                                    case "eastNmsThreshold":
+                                        eastNmsThreshold = SafeDoubleToFloat(kv.Value, eastNmsThreshold);
+                                        break;
+                                    case "tesseractMinConfidence":
+                                        tesseractMinConfidence = SafeInt(kv.Value, tesseractMinConfidence);
+                                        break;
+                                    case "paddingPx":
+                                        paddingPx = SafeInt(kv.Value, paddingPx);
+                                        break;
+                                    case "downscaleMaxWidth":
+                                        downscaleMaxWidth = SafeInt(kv.Value, downscaleMaxWidth);
+                                        break;
+                                }
                             }
-                        }
 
                             WorkingImage = SmartCrop(src);
-                        //applyAutoCropRectangleCurrent();
-                        break;
-                    case ProcessorCommand.LinesRemove:
-                        int lineWidthPx = 1;
-                        double minLengthFraction = 0.5;
-                        LineOrientation orientation = LineOrientation.Vertical;
-                        int offsetStartPx = 0;
-                        int lineColorRed = 255;
-                        int lineColorGreen = 255;
-                        int lineColorBlue = 255;
-                        int colorTolerance = 40;
-                        
-                        foreach (var kv in parameters)
-                        {
-                            if (kv.Key == null) continue;
-                            switch (kv.Key)
-                            {
-                                case "lineWidthPx":
-                                    lineWidthPx = SafeInt(kv.Value, lineWidthPx);
-                                    break;
-                                case "minLengthFraction":
-                                    minLengthFraction = SafeDouble(kv.Value, minLengthFraction);
-                                    break;
-                                case "orientation":
-                                    switch (kv.Value)
-                                    {
-                                        case "Vertical":
-                                            orientation = LineOrientation.Vertical;
-                                            break;
-                                        case "Horizontal":
-                                            orientation = LineOrientation.Horizontal;
-                                            break;
-                                        default:
-                                            orientation = LineOrientation.Both;
-                                            break;
-                                    }
-                                    break;
-                                case "offsetStartPx":
-                                    offsetStartPx = SafeInt(kv.Value, offsetStartPx);
-                                    break;
-                                case "lineColorRed":
-                                    lineColorRed = SafeInt(kv.Value, lineColorRed);
-                                    break;
-                                case "lineColorGreen":
-                                    lineColorGreen = SafeInt(kv.Value, lineColorGreen);
-                                    break;
-                                case "lineColorBlue":
-                                    lineColorBlue = SafeInt(kv.Value, lineColorBlue);
-                                    break;
-                                case "colorTolerance":
-                                    colorTolerance = SafeInt(kv.Value, colorTolerance);
-                                    break;
+                            //applyAutoCropRectangleCurrent();
+                            break;
+                        case ProcessorCommand.LinesRemove:
+                            int lineWidthPx = 1;
+                            double minLengthFraction = 0.5;
+                            LineOrientation orientation = LineOrientation.Vertical;
+                            int offsetStartPx = 0;
+                            int lineColorRed = 255;
+                            int lineColorGreen = 255;
+                            int lineColorBlue = 255;
+                            int colorTolerance = 40;
 
+                            foreach (var kv in parameters)
+                            {
+                                if (kv.Key == null) continue;
+                                switch (kv.Key)
+                                {
+                                    case "lineWidthPx":
+                                        lineWidthPx = SafeInt(kv.Value, lineWidthPx);
+                                        break;
+                                    case "minLengthFraction":
+                                        minLengthFraction = SafeDouble(kv.Value, minLengthFraction);
+                                        break;
+                                    case "orientation":
+                                        switch (kv.Value)
+                                        {
+                                            case "Vertical":
+                                                orientation = LineOrientation.Vertical;
+                                                break;
+                                            case "Horizontal":
+                                                orientation = LineOrientation.Horizontal;
+                                                break;
+                                            default:
+                                                orientation = LineOrientation.Both;
+                                                break;
+                                        }
+                                        break;
+                                    case "offsetStartPx":
+                                        offsetStartPx = SafeInt(kv.Value, offsetStartPx);
+                                        break;
+                                    case "lineColorRed":
+                                        lineColorRed = SafeInt(kv.Value, lineColorRed);
+                                        break;
+                                    case "lineColorGreen":
+                                        lineColorGreen = SafeInt(kv.Value, lineColorGreen);
+                                        break;
+                                    case "lineColorBlue":
+                                        lineColorBlue = SafeInt(kv.Value, lineColorBlue);
+                                        break;
+                                    case "colorTolerance":
+                                        colorTolerance = SafeInt(kv.Value, colorTolerance);
+                                        break;
+
+                                }
                             }
-                        }
 
-                        //WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
-                        Mat mask;
-                        if (orientation == LineOrientation.Vertical)
-                        {
-                            WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
-                        }
-                        if (orientation == LineOrientation.Horizontal)
-                        {
-                            WorkingImage = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
-                        }
-                        
-                        
-
-                        break;
-                    case ProcessorCommand.DotsRemove:
-                        //RemoveSpecksWithHandler();
-                        break;
-                    case ProcessorCommand.ChannelsCorrection:
-                        break;
-                    case ProcessorCommand.PunchHolesRemove:
-
-                        Debug.WriteLine("Starting Punch removing");
-
-                        PunchShape shape = PunchShape.Circle;
-                        int diameter = 20;
-                        int height = 20;
-                        int width = 20;
-                        double density = 0.50;
-                        double sizeTolerance = 0.40;
-                        int leftOffset = 100;
-                        int rightOffset = 100;
-                        int topOffset = 100;
-                        int bottomOffset = 100;
-
-                        foreach (var kv in parameters)
-                        {
-                            if (kv.Key == null) continue;
-
-                            switch (kv.Key)
+                            //WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
+                            Mat mask;
+                            if (orientation == LineOrientation.Vertical)
                             {
-                                case "Circle":
-                                    shape = PunchShape.Circle;
-                                    break;
-                                case "Rect":
-                                    shape = PunchShape.Rect;
-                                    break;
-                                case "diameter":
-                                    diameter = SafeInt(kv.Value, diameter);
-                                    break;
-                                case "height":
-                                    height = SafeInt(kv.Value, height);
-                                    break;
-                                case "width":
-                                    width = SafeInt(kv.Value, width);
-                                    break;
-                                case "density":
-                                    density = SafeDouble(kv.Value, density);
-                                    break;
-                                case "sizeTolerance":
-                                    sizeTolerance = SafeDouble(kv.Value, sizeTolerance);
-                                    break;
-                                case "leftOffset":
-                                    leftOffset = SafeInt(kv.Value, leftOffset);
-                                    break;
-                                case "rightOffset":
-                                    rightOffset = SafeInt(kv.Value, rightOffset);
-                                    break;
-                                case "topOffset":
-                                    topOffset = SafeInt(kv.Value, topOffset);
-                                    break;
-                                case "bottomOffset":
-                                    bottomOffset = SafeInt(kv.Value, bottomOffset);
-                                    break;
-                                default:
-                                    // ignore unknown key
-                                    break;
+                                WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
                             }
-                        }
-
-                        foreach (var kv in parameters)
-                        {
-                            if (kv.Key == "punchShape")
+                            if (orientation == LineOrientation.Horizontal)
                             {
-                                switch (kv.Value.ToString())
+                                WorkingImage = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
+                            }
+                            if (orientation == LineOrientation.Both)
+                            {
+                                WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+                                WorkingImage = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
+                            }
+
+
+
+                            break;
+                        case ProcessorCommand.DotsRemove:
+                            //RemoveSpecksWithHandler();
+                            break;
+                        case ProcessorCommand.ChannelsCorrection:
+                            break;
+                        case ProcessorCommand.PunchHolesRemove:
+
+                            Debug.WriteLine("Starting Punch removing");
+
+                            PunchShape shape = PunchShape.Circle;
+                            int diameter = 20;
+                            int height = 20;
+                            int width = 20;
+                            double density = 0.50;
+                            double sizeTolerance = 0.40;
+                            int leftOffset = 100;
+                            int rightOffset = 100;
+                            int topOffset = 100;
+                            int bottomOffset = 100;
+
+                            foreach (var kv in parameters)
+                            {
+                                if (kv.Key == null) continue;
+
+                                switch (kv.Key)
                                 {
                                     case "Circle":
                                         shape = PunchShape.Circle;
@@ -1157,56 +1115,102 @@ namespace ImgViewer.Models
                                     case "Rect":
                                         shape = PunchShape.Rect;
                                         break;
+                                    case "diameter":
+                                        diameter = SafeInt(kv.Value, diameter);
+                                        break;
+                                    case "height":
+                                        height = SafeInt(kv.Value, height);
+                                        break;
+                                    case "width":
+                                        width = SafeInt(kv.Value, width);
+                                        break;
+                                    case "density":
+                                        density = SafeDouble(kv.Value, density);
+                                        break;
+                                    case "sizeTolerance":
+                                        sizeTolerance = SafeDouble(kv.Value, sizeTolerance);
+                                        break;
+                                    case "leftOffset":
+                                        leftOffset = SafeInt(kv.Value, leftOffset);
+                                        break;
+                                    case "rightOffset":
+                                        rightOffset = SafeInt(kv.Value, rightOffset);
+                                        break;
+                                    case "topOffset":
+                                        topOffset = SafeInt(kv.Value, topOffset);
+                                        break;
+                                    case "bottomOffset":
+                                        bottomOffset = SafeInt(kv.Value, bottomOffset);
+                                        break;
+                                    default:
+                                        // ignore unknown key
+                                        break;
                                 }
                             }
 
-                        }
+                            foreach (var kv in parameters)
+                            {
+                                if (kv.Key == "punchShape")
+                                {
+                                    switch (kv.Value.ToString())
+                                    {
+                                        case "Circle":
+                                            shape = PunchShape.Circle;
+                                            break;
+                                        case "Rect":
+                                            shape = PunchShape.Rect;
+                                            break;
+                                    }
+                                }
 
-                        List<PunchSpec> specs = new List<PunchSpec>();
+                            }
 
-                        PunchSpec spec1 = new PunchSpec();
-                        spec1.Shape = shape;
-                        spec1.Diameter = diameter;
-                        spec1.RectSize = new OpenCvSharp.Size(width, height);
-                        spec1.Density = density;
-                        spec1.SizeToleranceFraction = sizeTolerance;
-                        Debug.WriteLine(spec1.Shape.ToString());
-                        Debug.WriteLine(spec1.Diameter.ToString());
-                        Debug.WriteLine(width.ToString());
-                        Debug.WriteLine(height.ToString());
-                        Debug.WriteLine(spec1.Count.ToString());
-                        Debug.WriteLine(spec1.Density.ToString());
-                        Debug.WriteLine(spec1.SizeToleranceFraction.ToString());
-                        //Debug.WriteLine(offset.ToString());
+                            List<PunchSpec> specs = new List<PunchSpec>();
 
-                        
-                        specs.Add(spec1);
-                        PunchSpec spec2 = new PunchSpec();
-                        spec2.Diameter = diameter;
-                        spec2.RectSize = new OpenCvSharp.Size(width, height);
-                        spec2.Density = density;
-                        spec2.SizeToleranceFraction = sizeTolerance;
-                        if (spec1.Shape == PunchShape.Circle)
-                        {
-                            spec2.Shape = PunchShape.Rect;
-
-                        } else
-                        {
-                            spec2.Shape = PunchShape.Circle;
-                        }
-                        specs.Add(spec1);
-                        specs.Add(spec2);
-                        Mat result = PunchHolesRemove(src, specs, topOffset, bottomOffset, leftOffset, rightOffset);
-
-                        WorkingImage = result;
+                            PunchSpec spec1 = new PunchSpec();
+                            spec1.Shape = shape;
+                            spec1.Diameter = diameter;
+                            spec1.RectSize = new OpenCvSharp.Size(width, height);
+                            spec1.Density = density;
+                            spec1.SizeToleranceFraction = sizeTolerance;
+                            Debug.WriteLine(spec1.Shape.ToString());
+                            Debug.WriteLine(spec1.Diameter.ToString());
+                            Debug.WriteLine(width.ToString());
+                            Debug.WriteLine(height.ToString());
+                            Debug.WriteLine(spec1.Count.ToString());
+                            Debug.WriteLine(spec1.Density.ToString());
+                            Debug.WriteLine(spec1.SizeToleranceFraction.ToString());
+                            //Debug.WriteLine(offset.ToString());
 
 
-                        break;
+                            specs.Add(spec1);
+                            PunchSpec spec2 = new PunchSpec();
+                            spec2.Diameter = diameter;
+                            spec2.RectSize = new OpenCvSharp.Size(width, height);
+                            spec2.Density = density;
+                            spec2.SizeToleranceFraction = sizeTolerance;
+                            if (spec1.Shape == PunchShape.Circle)
+                            {
+                                spec2.Shape = PunchShape.Rect;
 
+                            }
+                            else
+                            {
+                                spec2.Shape = PunchShape.Circle;
+                            }
+                            specs.Add(spec1);
+                            specs.Add(spec2);
+                            WorkingImage = PunchHolesRemove(src, specs, topOffset, bottomOffset, leftOffset, rightOffset);
+
+
+
+                            break;
+
+                    }
                 }
-                if (_appManager != null)
-                    _appManager.UpdateStatus("Ready");
             }
+
+
         }
 
         public void UpdateCancellationToken(CancellationToken token)
@@ -1216,18 +1220,7 @@ namespace ImgViewer.Models
 
         private Mat Despeckle(Mat src, DespeckleSettings settings)
         {
-            if (src == null || src.Empty()) return new Mat();
-            Mat result;
-            try
-            {
-                result = Despeckler.DespeckleApplyToSource(_token, src, settings, settings.ShowDespeckleDebug, true, true);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            
-            return result;
+            return Despeckler.DespeckleApplyToSource(_token, src, settings, settings.ShowDespeckleDebug, true, true);
         }
 
         private Mat RemoveLines(Mat src,
@@ -1252,7 +1245,7 @@ namespace ImgViewer.Models
                 out mask,
                 colorTolerance,
                 inverColorMeaning);
-            
+
             return result;
         }
 
@@ -1335,15 +1328,23 @@ namespace ImgViewer.Models
             return grayU8;
         }
 
-        private Mat PunchHolesRemove(Mat src, List<PunchSpec> specs, int offsetTop, int offsetBottom, int offsetLeft, int offsetRight)
+        private Mat? PunchHolesRemove(Mat src, List<PunchSpec> specs, int offsetTop, int offsetBottom, int offsetLeft, int offsetRight)
         {
             if (src == null || src.Empty()) return new Mat();
-            Mat result = PunchHoleRemover.RemovePunchHoles(src, specs, offsetTop, offsetBottom, offsetLeft, offsetRight);
-            return result;
+            try
+            {
+                return PunchHoleRemover.RemovePunchHoles(_token, src, specs, offsetTop, offsetBottom, offsetLeft, offsetRight);
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("PunchHoles Removal cancelled!");
+            }
+
+            return null;
         }
 
 
-        
+
 
         public Mat DespeckleAfterBinarization(Mat bin, DespeckleSettings? settings = null, bool debug = false)
         {
@@ -1567,11 +1568,11 @@ namespace ImgViewer.Models
             {
 
             }
-            
+
             return null;
         }
 
-        
+
 
         private Stream MatToStream(Mat mat)
         {
@@ -1837,7 +1838,7 @@ namespace ImgViewer.Models
                     }
                     break;
             }
-            
+
             return gray;
         }
 
@@ -3351,7 +3352,7 @@ namespace ImgViewer.Models
             {
                 bin8.Dispose();
             }
-            
+
         }
 
 
