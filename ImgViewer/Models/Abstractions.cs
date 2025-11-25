@@ -221,7 +221,10 @@ namespace ImgViewer.Models
         ByContrast
     }
 
+    public enum DeskewMethod
+    {
 
+    }
 
 
 

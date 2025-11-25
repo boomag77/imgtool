@@ -103,6 +103,7 @@
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="FontWeight" Value="Regular"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -119,7 +120,7 @@
             <Setter Property="Background" Value="#2F3136"/>
             <Setter Property="BorderBrush" Value="#2F3136"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Padding" Value="12,5"/>
             <Setter Property="MinWidth" Value="120"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -158,7 +159,7 @@
         <Style x:Key="ElevatedRoundedButton" TargetType="Button">
             <Setter Property="Background" Value="#2F3136"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Padding" Value="6,6"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -176,7 +177,9 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}"/>
                             </Border>
                         </Grid>
 
@@ -203,19 +206,19 @@
             <Setter Property="BorderBrush" Value="{StaticResource PipelineCardBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="6,2" />
-            <Setter Property="MinWidth" Value="50" />
+            <Setter Property="MinWidth" Value="10" />
             <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="10"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
                         <Grid>
                             <Border x:Name="Bd"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="3"
-                            SnapsToDevicePixels="True">
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                SnapsToDevicePixels="True"> 
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -228,14 +231,14 @@
                                                       Margin="{TemplateBinding Padding}"
                                                       VerticalAlignment="Center"
                                                       HorizontalAlignment="Right"   
-                                                                        Content="{TemplateBinding SelectionBoxItem}"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
                                                       ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                                       RecognizesAccessKey="True" /> 
 
                                     <!-- toggle sits in column 1 with fixed width and won't stretch -->
                                         <ToggleButton x:Name="Toggle"
                                                       Grid.Column="1"
-                                                      Width="20"
+                                                      Width="16"
                                                       Focusable="False"
                                                       IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                                       Background="Transparent"
@@ -243,10 +246,10 @@
                                                       BorderThickness="0"
                                                       VerticalAlignment="Center"
                                                       HorizontalAlignment="Right"
-                                                      Margin="4,0,0,0">
+                                                      Margin="{TemplateBinding Padding}">
                                             <!-- small outer padding -->
                                             <Viewbox Width="10" Height="10">
-                                                <Path Data="M0,0 L4,4 8,0 Z" Fill="{StaticResource PipelineTextBrush}"/>
+                                                <Path Data="M0,0 L5,5 10,0 Z" Fill="{StaticResource PipelineTextBrush}"/>
                                             </Viewbox>
                                         </ToggleButton>
                                 </Grid>
@@ -261,7 +264,7 @@
                                 <Border Background="{StaticResource PipelineCardBackgroundBrush}"
                                         BorderBrush="{StaticResource PipelineCardBorderBrush}"
                                         BorderThickness="1"
-                                        CornerRadius="4"
+                                        CornerRadius="3"
                                         Margin="0,6,0,0"
                                         SnapsToDevicePixels="True">
                                     <ScrollViewer CanContentScroll="True"
@@ -316,7 +319,6 @@
         </Style>
 
 
-        <!-- Put this inside <Window.Resources> (replace any previous PipelineCheckBoxStyle) -->
         <Style x:Key="PipelineCheckBoxStyle" TargetType="CheckBox">
             <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}"/>
             <Setter Property="FontSize" Value="11"/>
@@ -327,26 +329,26 @@
                         <Grid>
                             <!-- Box -->
                             <Border x:Name="Box"
-                            Width="18" Height="18"
-                            CornerRadius="3"
-                            Background="{StaticResource PipelineTextboxBackgroundBrush}"
-                            BorderBrush="{StaticResource PipelineCardBorderBrush}"
-                            BorderThickness="1"
-                            VerticalAlignment="Center"
-                            HorizontalAlignment="Left"/>
+                                    Width="15" Height="15"
+                                    CornerRadius="3"
+                                    Background="{StaticResource PipelineTextboxBackgroundBrush}"
+                                    BorderBrush="{StaticResource PipelineCardBorderBrush}"
+                                    BorderThickness="1"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Left"/>    
 
                             <!-- Vector check mark - stroke binds to Foreground so it matches text -->
                             <Path x:Name="CheckMark"
-                          Data="M3,9 L7,13 L15,4"
-                          Stroke="{TemplateBinding Foreground}"
-                          StrokeThickness="2.0"
-                          StrokeLineJoin="Round"
-                          StrokeStartLineCap="Round"
-                          StrokeEndLineCap="Round"
-                          Visibility="Collapsed"
-                          HorizontalAlignment="Left"
-                          VerticalAlignment="Center"
-                          Margin="0,0,0,0"/>
+                                  Data="M2,2 L6,7 L10,1"
+                                  Stroke="{TemplateBinding Foreground}"
+                                  StrokeThickness="1.0"
+                                  StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  Visibility="Collapsed"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Center"
+                                  Margin="1,1,0,0"/>        
 
                             <!-- Label: use TextElement.Foreground to color text correctly -->
                             <ContentPresenter x:Name="content"
@@ -361,8 +363,8 @@
                             <!-- show check when checked -->
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
-                                <!-- optional: change box background on checked -->
-                                <Setter TargetName="Box" Property="Background" Value="{StaticResource PipelineCardBorderBrush}"/>
+                                <!-- optional: change box background on checked 
+                                <Setter TargetName="Box" Property="Background" Value="{StaticResource PipelineCardBorderBrush}"/> -->
                             </Trigger>
 
                             <Trigger Property="IsEnabled" Value="False">
@@ -402,7 +404,7 @@
             <!--Original image -->
             <ColumnDefinition Width="4*"/>
             <!--Pipeline and controls -->
-            <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="2*"/>
             <!--Processing image -->
             <ColumnDefinition Width="4*"/>
             
@@ -463,30 +465,27 @@
                 <!-- Load/Save preset buttons -->
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Center"
+                            
                             Grid.Row="1">
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="100"
                             Click="LoadPipelinePreset_Click">
-                        Load preset
+                            Load preset
                     </Button>
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="100"
                             Click="SavePipelinePreset_Click">
-                        Save preset
+                            Save preset
                     </Button>
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="100"
                             Click="ResetPipelineToDefaults_Click">
                             Reset to defauts
                     </Button>
                     <Button Style="{StaticResource ElevatedRoundedButton}"
                             Margin="5,5,5,5"
-                            MinWidth="100"
                             Click="AddPipelineOperation_Click">      
-                        Add operation
+                            +
                         <Button.ContextMenu>
                             <ContextMenu x:Name="AddOperationContextMenu">
                                 <MenuItem Header="Deskew"
@@ -570,7 +569,7 @@
 
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding DisplayName}"
-                                                   FontWeight="Bold"
+                                                   FontWeight="SemiBold"
                                                    FontSize="14"
                                                    Foreground="{StaticResource PipelineTextBrush}"
                                                    VerticalAlignment="Center"/>
@@ -608,15 +607,15 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type models:PipeLineParameter}">
                                                 <StackPanel Orientation="Horizontal"
-                                                            Margin="0,0,12,8"
+                                                            Margin="0,0,15,7"
                                                             VerticalAlignment="Center"
                                                             Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
                                                     <TextBlock x:Name="ParamLabel"
                                                                Text="{Binding Label}"
-                                                               FontWeight="SemiBold"
+                                                               FontWeight="Regular"
                                                                Foreground="{StaticResource PipelineTextBrush}"
                                                                VerticalAlignment="Center"
-                                                               Margin="0,0,8,0">
+                                                               Margin="0,0,5,0">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
                                                                 <Setter Property="Visibility" Value="Visible"/>
@@ -635,11 +634,12 @@
                                                             BorderBrush="{StaticResource PipelineCardBorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="3"
+                                                            HorizontalAlignment="Left"
                                                             Visibility="{Binding IsBool, Converter={StaticResource InvBoolToVis}}">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="18"/>
+                                                                <ColumnDefinition Width="Auto"/>
                                                             </Grid.ColumnDefinitions>
 
                                                             <!-- EDITOR: exactly ONE control via triggers -->
@@ -656,7 +656,7 @@
                                                                                          Padding="6,2"
                                                                                          HorizontalContentAlignment="Right"
                                                                                          VerticalContentAlignment="Center"
-                                                                                         MinWidth="50"
+                                                                                         MinWidth="40"
                                                                                          MaxWidth="140"
                                                                                          FontSize="11"/>
                                                                             </Setter.Value>
@@ -668,7 +668,6 @@
                                                                                 <Setter Property="Content">
                                                                                     <Setter.Value>
                                                                                         <ComboBox MinWidth="50"
-                                                                                                  MaxWidth="140"
                                                                                                   ItemsSource="{Binding Options}"
                                                                                                   SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
                                                                                                   Style="{StaticResource PipelineComboBoxStyle}"
@@ -676,6 +675,7 @@
                                                                                                   Background="Transparent"
                                                                                                   Foreground="{StaticResource PipelineTextBrush}"
                                                                                                   BorderThickness="0"
+                                                                                                  HorizontalAlignment="Stretch"
                                                                                                   HorizontalContentAlignment="Right"
                                                                                                   VerticalContentAlignment="Center"
                                                                                                   FontSize="11"/>
@@ -688,7 +688,8 @@
                                                             </ContentControl>
 
                                                             <!-- SPINNERS: visible only when NOT combo AND NOT bool -->
-                                                            <Grid Grid.Column="1">
+                                                            <Grid Grid.Column="1"
+                                                                  Margin="0,0,5,0">
                                                                 <Grid.Style>
                                                                     <Style TargetType="Grid">
                                                                         <Setter Property="Visibility" Value="Collapsed"/>
