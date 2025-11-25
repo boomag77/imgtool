@@ -50,6 +50,7 @@ namespace ImgViewer.Views
         private bool _operationErased;
 
         private bool _livePipelineRunning;
+        private bool _livePipelineRestartPending;
         private readonly object _liveLock = new();
         private readonly HashSet<PipelineOperation> _liveRunning = new();
 
@@ -171,8 +172,13 @@ namespace ImgViewer.Views
 
             lock (_liveLock)
             {
+
                 if (_livePipelineRunning)
-                    return;              // не запускаем параллельно, просто пропускаем лишний вызов
+                {
+                    _livePipelineRestartPending = true;
+                    return;
+                }
+                // не запускаем параллельно, просто пропускаем лишний вызов
                 _livePipelineRunning = true;
             }
 
@@ -191,14 +197,22 @@ namespace ImgViewer.Views
                 {
                     ProcessorCommand opCommand = pipelineOp.Command;
 
-                    if (opCommand == null) continue; 
+                    if (opCommand == null) continue;
 
                     await _manager.ApplyCommandToProcessingImage(opCommand, pipelineOp.CreateParameterDictionary());
                 }
             }
             finally
             {
-                lock (_liveLock) _livePipelineRunning = false;
+                bool restart;
+                lock (_liveLock)
+                {
+                    _livePipelineRunning = false;
+                    restart = _livePipelineRestartPending;
+                    _livePipelineRestartPending = false;
+                }
+                if (restart)
+                    _ = RunLiveOperationsForNewImageAsync();
             }
         }
 
@@ -287,6 +301,9 @@ namespace ImgViewer.Views
         {
             if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
             {
+                //var commmand = operation.Command;
+                //var p = operation.CreateParameterDictionary();
+                _ = ResetPreview();
                 operation.Execute();
                 e.Handled = true;
             }
@@ -994,7 +1011,7 @@ namespace ImgViewer.Views
         }
 
 
-        private (ProcessorCommand Command, Dictionary<string, object>)[] GetPipelineParameters()
+        private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
         {
             var pl = _pipeline.Operations
                     .Where(op => op.InPipeline)

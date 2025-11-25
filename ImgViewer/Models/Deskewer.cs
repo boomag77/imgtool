@@ -7,12 +7,12 @@ namespace ImgViewer.Models
     public class Deskewer
     {
 
-
-        private static double GetSkewAngleByBorders(Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150,
+        private static double GetSkewAngleByBorders(CancellationToken token, Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150,
                                    int morphKernel = 5, double minAreaFraction = 0.2)
         {
             if (src == null || src.Empty()) return double.NaN;
 
+            token.ThrowIfCancellationRequested();
             // 1. grayscale
             using var gray = new Mat();
             if (src.Channels() == 3)
@@ -22,6 +22,7 @@ namespace ImgViewer.Models
             else
                 src.CopyTo(gray);
 
+            token.ThrowIfCancellationRequested();
             // 2. чуть размытие
             Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
 
@@ -30,6 +31,7 @@ namespace ImgViewer.Models
             Cv2.AdaptiveThreshold(gray, bin, 255, AdaptiveThresholdTypes.GaussianC, ThresholdTypes.BinaryInv, 31, 10);
             // Если бордер тонкий/пунктирный — его лучше "склеить"
             var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(morphKernel, morphKernel));
+            token.ThrowIfCancellationRequested();
             Cv2.MorphologyEx(bin, bin, MorphTypes.Close, kernel, iterations: 2);
 
             // 4. Альтернативно: Canny + close (иногда лучше выделяет линии)
@@ -37,6 +39,7 @@ namespace ImgViewer.Models
             //Cv2.Canny(gray, edges, cannyThresh1, cannyThresh2);
             //Cv2.MorphologyEx(edges, edges, MorphTypes.Close, kernel, iterations: 2);
 
+            token.ThrowIfCancellationRequested();
             // 5. Найти контуры
             Cv2.FindContours(bin, out OpenCvSharp.Point[][] contours, out HierarchyIndex[] _,
                              RetrievalModes.External, ContourApproximationModes.ApproxSimple);
@@ -61,6 +64,7 @@ namespace ImgViewer.Models
 
             var biggest = contours[maxIdx];
 
+            token.ThrowIfCancellationRequested();
             // 7. Пытаемся аппроксимировать полигонон (проверим, есть ли четырёхугольник)
             var approx = Cv2.ApproxPolyDP(biggest, Cv2.ArcLength(biggest, true) * 0.02, true);
 
@@ -127,7 +131,7 @@ namespace ImgViewer.Models
         }
 
 
-        public static Mat Deskew(Mat orig, bool byBorders, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh)
+        public static Mat Deskew(CancellationToken token, Mat orig, bool byBorders, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh)
         {
             if (orig == null || orig.Empty()) return orig;
 
@@ -139,7 +143,7 @@ namespace ImgViewer.Models
             double finalAngle = double.NaN;
             if (byBorders)
             {
-                double borderAngle = GetSkewAngleByBorders(src,
+                double borderAngle = GetSkewAngleByBorders(token, src,
                     cannyThresh1: cTresh1,
                     cannyThresh2: cTresh2,
                     morphKernel: morphK,
@@ -155,14 +159,18 @@ namespace ImgViewer.Models
             }
             else
             {
+                
                 // 1) candidate angles
-                double houghAngle = GetSkewAngleByHough(src, cannyThresh1: cTresh1, cannyThresh2: cTresh2, houghThreshold: houghTresh, minLineLength: minLL, maxLineGap: 20);
+                double houghAngle = GetSkewAngleByHough(token, src, cannyThresh1: cTresh1, cannyThresh2: cTresh2, houghThreshold: houghTresh, minLineLength: minLL, maxLineGap: 20);
                 Debug.WriteLine($"Deskew: angle by Hough = {houghAngle:F3}");
 
-                double projAngle = GetSkewAngleByProjection(src, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
+
+                
+                double projAngle = GetSkewAngleByProjection(token, src, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
                 Debug.WriteLine($"Deskew: angle by Projection = {projAngle:F3}");
 
-                double pcaAngle = GetSkewAngleByPCA(src);
+                
+                double pcaAngle = GetSkewAngleByPCA(token, src);
                 Debug.WriteLine($"Deskew: angle by PCA = {pcaAngle:F3}");
 
                 //double finalAngle = double.NaN;
@@ -191,7 +199,7 @@ namespace ImgViewer.Models
             int bigH = (int)Math.Round(src.Width * absSin + src.Height * absCos);
             var centerBig = new Point2f(bigW / 2f, bigH / 2f);
 
-            var borderRgb = GetBorderColor(src);
+            var borderRgb = GetBorderColor(token, src);
             byte rb = (byte)((borderRgb >> 16) & 0xFF);
             byte gb = (byte)((borderRgb >> 8) & 0xFF);
             byte bb = (byte)(borderRgb & 0xFF);
@@ -205,6 +213,8 @@ namespace ImgViewer.Models
 
             var M = Cv2.GetRotationMatrix2D(centerBig, rotation, 1.0);
             using var rotatedBig = new Mat();
+
+            token.ThrowIfCancellationRequested();
            
             Cv2.WarpAffine(big, rotatedBig, M, new OpenCvSharp.Size(bigW, bigH), InterpolationFlags.Linear, BorderTypes.Constant, bgScalar);
 
@@ -214,6 +224,8 @@ namespace ImgViewer.Models
             {
                 return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, centerBig);
             }
+
+            token.ThrowIfCancellationRequested();
 
             using var nonZeroMat = new Mat();
             Cv2.FindNonZero(mask, nonZeroMat);
@@ -316,19 +328,23 @@ namespace ImgViewer.Models
             return new Mat(bigImg, roi).Clone();
         }
 
-        private static double GetSkewAngleByHough(Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150, int houghThreshold = 80, int minLineLength = 100, int maxLineGap = 20)
+        private static double GetSkewAngleByHough(CancellationToken token, Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150, int houghThreshold = 80, int minLineLength = 100, int maxLineGap = 20)
         {
             using var gray = new Mat();
+
+            token.ThrowIfCancellationRequested();
             if (src.Channels() == 3)
                 Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
             else
                 src.CopyTo(gray);
 
+            token.ThrowIfCancellationRequested();
             Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
 
             var edges = new Mat();
             Cv2.Canny(gray, edges, cannyThresh1, cannyThresh2);
 
+            token.ThrowIfCancellationRequested();
             LineSegmentPoint[] lines = Cv2.HoughLinesP(edges, 1, Math.PI / 180.0, houghThreshold, minLineLength, maxLineGap);
             if (lines == null || lines.Length == 0) return double.NaN;
 
@@ -352,13 +368,14 @@ namespace ImgViewer.Models
             var useAngles = longAngles.Length > 0 ? longAngles : angles.Select(x => x.ang).ToArray();
             if (useAngles.Length == 0) return double.NaN;
 
+            token.ThrowIfCancellationRequested();
             Array.Sort(useAngles);
             double median = useAngles[useAngles.Length / 2];
             return median;
         }
 
 
-        private static double GetSkewAngleByProjection(Mat src, double minAngle = -15, double maxAngle = 15, double coarseStep = 1.0, double refineStep = 0.2)
+        private static double GetSkewAngleByProjection(CancellationToken token, Mat src, double minAngle = -15, double maxAngle = 15, double coarseStep = 1.0, double refineStep = 0.2)
         {
             // метод проекций: для каждого угла вычисляем variance / entropy горизонтального проекционного профиля,
             // выберем угол с наибольшей "пиковостью" (max variance)
@@ -370,7 +387,8 @@ namespace ImgViewer.Models
 
             for (double a = minAngle; a <= maxAngle; a += coarseStep)
             {
-                double score = ProjectionScore(mask, a);
+                token.ThrowIfCancellationRequested();
+                double score = ProjectionScore(token, mask, a);
                 if (score > bestScore) { bestScore = score; best = a; }
             }
 
@@ -379,14 +397,15 @@ namespace ImgViewer.Models
             double end = Math.Min(maxAngle, best + coarseStep);
             for (double a = start; a <= end; a += refineStep)
             {
-                double score = ProjectionScore(mask, a);
+                token.ThrowIfCancellationRequested();
+                double score = ProjectionScore(token, mask, a);
                 if (score > bestScore) { bestScore = score; best = a; }
             }
 
             return best;
         }
 
-        private static double ProjectionScore(Mat mask, double angle)
+        private static double ProjectionScore(CancellationToken token, Mat mask, double angle)
         {
             double rotation = -angle;
             double rad = rotation * Math.PI / 180.0;
@@ -409,6 +428,7 @@ namespace ImgViewer.Models
             var proj = new int[rotated.Rows];
             for (int y = 0; y < rotated.Rows; y++)
             {
+                token.ThrowIfCancellationRequested();
                 using var row = rotated.Row(y);               // временный SubMat
                 proj[y] = Cv2.CountNonZero(row);             // native, быстро
             }
@@ -419,7 +439,7 @@ namespace ImgViewer.Models
         }
 
 
-        private static double GetSkewAngleByPCA(Mat src)
+        private static double GetSkewAngleByPCA(CancellationToken token, Mat src)
         {
             using var mask = BinarizeToMask(src);
             if (mask.Empty()) return double.NaN;
@@ -434,6 +454,7 @@ namespace ImgViewer.Models
             nzPoints = new OpenCvSharp.Point[rows];
             for (int i = 0; i < rows; i++)
             {
+                token.ThrowIfCancellationRequested();
                 // Попробуем считать как Vec2i (int,int). В зависимости от версии тип может называться по-разному,
                 // но в большинстве сборок At<Vec2i> работает.
                 var v = nonZeroMat.At<Vec2i>(i, 0);
@@ -449,6 +470,7 @@ namespace ImgViewer.Models
             // Заполняем матрицу (x,y) в float
             for (int i = 0; i < N; i++)
             {
+                token.ThrowIfCancellationRequested();
                 data.Set(i, 0, (float)nzPoints[i].X);
                 data.Set(i, 1, (float)nzPoints[i].Y);
             }
@@ -468,7 +490,7 @@ namespace ImgViewer.Models
             return angle;
         }
 
-        private static int GetBorderColor(Mat src)
+        private static int GetBorderColor(CancellationToken token, Mat src)
         {
             if (src == null || src.Empty())
                 return 0xFFFFFF; // default white
@@ -496,6 +518,7 @@ namespace ImgViewer.Models
             var samples = new List<float>();
             for (int y = 0; y < h; y += step)
             {
+                token.ThrowIfCancellationRequested();
                 for (int x = 0; x < w; x += step)
                 {
                     if (x < thickness || x >= w - thickness || y < thickness || y >= h - thickness)
@@ -516,6 +539,7 @@ namespace ImgViewer.Models
             double sumB = 0, sumG = 0, sumR = 0;
             for (int i = 0; i < n; i++)
             {
+                token.ThrowIfCancellationRequested();
                 sumB += samples[i * 3 + 0];
                 sumG += samples[i * 3 + 1];
                 sumR += samples[i * 3 + 2];
@@ -525,6 +549,7 @@ namespace ImgViewer.Models
             double varB = 0, varG = 0, varR = 0;
             for (int i = 0; i < n; i++)
             {
+                token.ThrowIfCancellationRequested();
                 double b = samples[i * 3 + 0] - meanB;
                 double g = samples[i * 3 + 1] - meanG;
                 double r = samples[i * 3 + 2] - meanR;

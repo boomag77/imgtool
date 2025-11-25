@@ -56,14 +56,14 @@ namespace ImgViewer.Models
                     try { return v[0].ToDouble(); } catch { return defaultValue; }
                 }
 #if DEBUG
-                Debug.WriteLine($"ImageWidth: {GetInt(TiffTag.IMAGEWIDTH)}");
-                Debug.WriteLine($"ImageLength: {GetInt(TiffTag.IMAGELENGTH)}");
-                Debug.WriteLine($"RowsPerStrip: {GetInt(TiffTag.ROWSPERSTRIP)}");
-                Debug.WriteLine($"Compression: {GetInt(TiffTag.COMPRESSION)}");
-                Debug.WriteLine($"Photometric: {GetInt(TiffTag.PHOTOMETRIC)}");
-                Debug.WriteLine($"PlanarConfiguration: {GetInt(TiffTag.PLANARCONFIG)}");
-                Debug.WriteLine($"SamplesPerPixel: {GetInt(TiffTag.SAMPLESPERPIXEL)}");
-                Debug.WriteLine($"BitsPerSample: {GetInt(TiffTag.BITSPERSAMPLE)}");
+                //Debug.WriteLine($"ImageWidth: {GetInt(TiffTag.IMAGEWIDTH)}");
+                //Debug.WriteLine($"ImageLength: {GetInt(TiffTag.IMAGELENGTH)}");
+                //Debug.WriteLine($"RowsPerStrip: {GetInt(TiffTag.ROWSPERSTRIP)}");
+                //Debug.WriteLine($"Compression: {GetInt(TiffTag.COMPRESSION)}");
+                //Debug.WriteLine($"Photometric: {GetInt(TiffTag.PHOTOMETRIC)}");
+                //Debug.WriteLine($"PlanarConfiguration: {GetInt(TiffTag.PLANARCONFIG)}");
+                //Debug.WriteLine($"SamplesPerPixel: {GetInt(TiffTag.SAMPLESPERPIXEL)}");
+                //Debug.WriteLine($"BitsPerSample: {GetInt(TiffTag.BITSPERSAMPLE)}");
 #endif
                 // Try to print STRIPOFFSETS and STRIPBYTECOUNTS if present
                 FieldValue[]? off = tif.GetField(TiffTag.STRIPOFFSETS);
@@ -107,9 +107,9 @@ namespace ImgViewer.Models
                 }
 
                 int strips = tif.NumberOfStrips();
-                Debug.WriteLine($"NumberOfStrips(): {strips}");
+                //Debug.WriteLine($"NumberOfStrips(): {strips}");
                 int declaredStripSize = tif.StripSize();
-                Debug.WriteLine($"StripSize() (declared max): {declaredStripSize}");
+                //Debug.WriteLine($"StripSize() (declared max): {declaredStripSize}");
 
                 // For each strip: try to read encoded strip and log actual read bytes.
                 for (int i = 0; i < strips; i++)
@@ -120,7 +120,7 @@ namespace ImgViewer.Models
                         byte[] buf = new byte[bufSize];
                         // ReadEncodedStrip returns number of bytes read (or -1/0 if none)
                         int read = tif.ReadEncodedStrip(i, buf, 0, buf.Length);
-                        Debug.WriteLine($"Strip {i}: read={read} bytes (buffer size={bufSize})");
+                        //Debug.WriteLine($"Strip {i}: read={read} bytes (buffer size={bufSize})");
                     }
                     catch (Exception ex)
                     {
@@ -196,7 +196,7 @@ namespace ImgViewer.Models
                             return null;
                         }
 #if DEBUG
-                        DumpTiffInfo(filePath);
+                        //DumpTiffInfo(filePath);
 #endif
                         int width = GetIntTag(tiff, TiffTag.IMAGEWIDTH);
                         int height = GetIntTag(tiff, TiffTag.IMAGELENGTH);

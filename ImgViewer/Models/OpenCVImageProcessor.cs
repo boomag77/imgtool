@@ -9,8 +9,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Point = OpenCvSharp.Point;
-using Size = OpenCvSharp.Size;
 
 namespace ImgViewer.Models
 {
@@ -38,15 +36,17 @@ namespace ImgViewer.Models
             {
                 if (value == null) return;
                 Mat old;
+                //Mat newMat = value.Clone();
                 lock (_imageLock)
                 {
                     old = _currentImage;
                     _currentImage = value;
+                    old?.Dispose();
+                    if (_appManager == null) return;
+                    _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
                 }
 
-                old?.Dispose();
-                if (_appManager == null) return;
-                _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
+                
             }
         }
         public ImageSource CurrentImage
@@ -878,7 +878,7 @@ namespace ImgViewer.Models
                                                 {
                                                     darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
                                                 }
-                                                WorkingImage = RemoveBorderArtifactsGeneric_Safe(src,
+                                                WorkingImage = RemoveBorders_Auto(src,
                                                     darkThresh,
                                                     bgColor,
                                                     minAreaPx,
@@ -1231,7 +1231,7 @@ namespace ImgViewer.Models
                                 bottom = bottomOffset,
                             };
 
-                            
+
                             WorkingImage = PunchHolesRemove(src, specs, roundness, fillRatio, offsets);
 
 
@@ -1378,215 +1378,215 @@ namespace ImgViewer.Models
                 Debug.WriteLine(ex);
                 return null;
             }
-            
+
         }
 
 
 
 
-        public Mat DespeckleAfterBinarization(Mat bin, DespeckleSettings? settings = null, bool debug = false)
-        {
-            if (bin == null) throw new ArgumentNullException(nameof(bin));
-            if (bin.Type() != MatType.CV_8UC1) throw new ArgumentException("Expect CV_8UC1 binary image (text=0).");
+        //public Mat DespeckleAfterBinarization(Mat bin, DespeckleSettings? settings = null, bool debug = false)
+        //{
+        //    if (bin == null) throw new ArgumentNullException(nameof(bin));
+        //    if (bin.Type() != MatType.CV_8UC1) throw new ArgumentException("Expect CV_8UC1 binary image (text=0).");
 
-            // default settings if null
-            settings ??= new DespeckleSettings
-            {
-                SmallAreaRelative = true,
-                SmallAreaMultiplier = 0.25,
-                SmallAreaAbsolutePx = 64,
-                MaxDotHeightFraction = 0.35,
-                ProximityRadiusFraction = 0.8,
-                SquarenessTolerance = 0.6,
-                KeepClusters = true,
-                UseDilateBeforeCC = true,
-                DilateKernel = "1x3", // "1x3", "3x1" or "3x3"
-                DilateIter = 1,
-                ShowDespeckleDebug = false
-            };
+        //    // default settings if null
+        //    settings ??= new DespeckleSettings
+        //    {
+        //        SmallAreaRelative = true,
+        //        SmallAreaMultiplier = 0.25,
+        //        SmallAreaAbsolutePx = 64,
+        //        MaxDotHeightFraction = 0.35,
+        //        ProximityRadiusFraction = 0.8,
+        //        SquarenessTolerance = 0.6,
+        //        KeepClusters = true,
+        //        UseDilateBeforeCC = true,
+        //        DilateKernel = "1x3", // "1x3", "3x1" or "3x3"
+        //        DilateIter = 1,
+        //        ShowDespeckleDebug = false
+        //    };
 
-            if (settings.SmallAreaMultiplier <= 0) settings.SmallAreaMultiplier = 0.25;
-            if (settings.SmallAreaAbsolutePx <= 0) settings.SmallAreaAbsolutePx = 64;
-            if (settings.DilateIter < 0) settings.DilateIter = 0;
+        //    if (settings.SmallAreaMultiplier <= 0) settings.SmallAreaMultiplier = 0.25;
+        //    if (settings.SmallAreaAbsolutePx <= 0) settings.SmallAreaAbsolutePx = 64;
+        //    if (settings.DilateIter < 0) settings.DilateIter = 0;
 
-            if (!(settings.DilateKernel == "1x3" || settings.DilateKernel == "3x1" || settings.DilateKernel == "3x3"))
-            {
-                // fallback to default
-                settings.DilateKernel = "1x3";
-            }
+        //    if (!(settings.DilateKernel == "1x3" || settings.DilateKernel == "3x1" || settings.DilateKernel == "3x3"))
+        //    {
+        //        // fallback to default
+        //        settings.DilateKernel = "1x3";
+        //    }
 
-            if (!settings.SmallAreaRelative && settings.SmallAreaAbsolutePx <= 0)
-                settings.SmallAreaAbsolutePx = 64;
+        //    if (!settings.SmallAreaRelative && settings.SmallAreaAbsolutePx <= 0)
+        //        settings.SmallAreaAbsolutePx = 64;
 
-            // If despeckling disabled by giving absurd values, still allow quick exit:
-            // (you can add explicit Enable flag in settings if needed)
-            // Start processing
-            Mat work = bin.Clone();
+        //    // If despeckling disabled by giving absurd values, still allow quick exit:
+        //    // (you can add explicit Enable flag in settings if needed)
+        //    // Start processing
+        //    Mat work = bin.Clone();
 
-            // origBlackMask: 255 where original had text (pixel == 0)
-            using var origBlackMask = new Mat();
-            Cv2.InRange(work, new Scalar(0), new Scalar(0), origBlackMask); // 255 where text==0
+        //    // origBlackMask: 255 where original had text (pixel == 0)
+        //    using var origBlackMask = new Mat();
+        //    Cv2.InRange(work, new Scalar(0), new Scalar(0), origBlackMask); // 255 where text==0
 
-            // labelingMat: copy of work; we may dilate labelingMat to merge touching dots->glyphs,
-            // but we will intersect removal masks with origBlackMask so only original pixels removed.
-            Mat labelingMat = work.Clone();
+        //    // labelingMat: copy of work; we may dilate labelingMat to merge touching dots->glyphs,
+        //    // but we will intersect removal masks with origBlackMask so only original pixels removed.
+        //    Mat labelingMat = work.Clone();
 
-            if (settings.UseDilateBeforeCC && settings.DilateIter > 0)
-            {
-                Mat kernel;
-                switch (settings.DilateKernel)
-                {
-                    case "3x1":
-                        kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 1));
-                        break;
-                    case "3x3":
-                        kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
-                        break;
-                    default: // "1x3"
-                        kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3));
-                        break;
-                }
-                var tmp = new Mat();
-                Cv2.Dilate(labelingMat, tmp, kernel, iterations: settings.DilateIter);
-                labelingMat.Dispose();
-                kernel.Dispose();
-                labelingMat = tmp;
-            }
+        //    if (settings.UseDilateBeforeCC && settings.DilateIter > 0)
+        //    {
+        //        Mat kernel;
+        //        switch (settings.DilateKernel)
+        //        {
+        //            case "3x1":
+        //                kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 1));
+        //                break;
+        //            case "3x3":
+        //                kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+        //                break;
+        //            default: // "1x3"
+        //                kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3));
+        //                break;
+        //        }
+        //        var tmp = new Mat();
+        //        Cv2.Dilate(labelingMat, tmp, kernel, iterations: settings.DilateIter);
+        //        labelingMat.Dispose();
+        //        kernel.Dispose();
+        //        labelingMat = tmp;
+        //    }
 
-            // connected components (on labelingMat)
-            using var labels = new Mat();
-            using var stats = new Mat();
-            using var centroids = new Mat();
-            int nLabels = Cv2.ConnectedComponentsWithStats(labelingMat, labels, stats, centroids, PixelConnectivity.Connectivity8, MatType.CV_32S);
+        //    // connected components (on labelingMat)
+        //    using var labels = new Mat();
+        //    using var stats = new Mat();
+        //    using var centroids = new Mat();
+        //    int nLabels = Cv2.ConnectedComponentsWithStats(labelingMat, labels, stats, centroids, PixelConnectivity.Connectivity8, MatType.CV_32S);
 
-            var comps = new List<(int label, Rect bbox, int area)>();
-            for (int lbl = 1; lbl < nLabels; lbl++) // label 0 = background
-            {
-                int left = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Left);
-                int top = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Top);
-                int width = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Width);
-                int height = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Height);
-                int area = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Area);
-                comps.Add((lbl, new Rect(left, top, width, height), area));
-            }
+        //    var comps = new List<(int label, Rect bbox, int area)>();
+        //    for (int lbl = 1; lbl < nLabels; lbl++) // label 0 = background
+        //    {
+        //        int left = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Left);
+        //        int top = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Top);
+        //        int width = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Width);
+        //        int height = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Height);
+        //        int area = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Area);
+        //        comps.Add((lbl, new Rect(left, top, width, height), area));
+        //    }
 
-            if (comps.Count == 0)
-            {
-                labelingMat.Dispose();
-                return work;
-            }
+        //    if (comps.Count == 0)
+        //    {
+        //        labelingMat.Dispose();
+        //        return work;
+        //    }
 
-            // median char height (robust)
-            var heights = comps.Select(c => c.bbox.Height).Where(h => h >= 3).ToArray();
-            int medianHeight = heights.Length > 0 ? heights.OrderBy(h => h).ElementAt(heights.Length / 2) : 20;
+        //    // median char height (robust)
+        //    var heights = comps.Select(c => c.bbox.Height).Where(h => h >= 3).ToArray();
+        //    int medianHeight = heights.Length > 0 ? heights.OrderBy(h => h).ElementAt(heights.Length / 2) : 20;
 
-            // compute thresholds
-            int smallAreaThrPx = settings.SmallAreaRelative
-                ? Math.Max(1, (int)Math.Round(settings.SmallAreaMultiplier * medianHeight * medianHeight))
-                : Math.Max(1, settings.SmallAreaAbsolutePx);
+        //    // compute thresholds
+        //    int smallAreaThrPx = settings.SmallAreaRelative
+        //        ? Math.Max(1, (int)Math.Round(settings.SmallAreaMultiplier * medianHeight * medianHeight))
+        //        : Math.Max(1, settings.SmallAreaAbsolutePx);
 
-            int maxDotHeight = Math.Max(1, (int)Math.Round(settings.MaxDotHeightFraction * medianHeight));
-            double proximityRadius = Math.Max(1.0, settings.ProximityRadiusFraction * medianHeight);
-            double squarenessTolerance = Math.Max(0.0, Math.Min(1.0, settings.SquarenessTolerance));
+        //    int maxDotHeight = Math.Max(1, (int)Math.Round(settings.MaxDotHeightFraction * medianHeight));
+        //    double proximityRadius = Math.Max(1.0, settings.ProximityRadiusFraction * medianHeight);
+        //    double squarenessTolerance = Math.Max(0.0, Math.Min(1.0, settings.SquarenessTolerance));
 
-            int rows = work.Rows, cols = work.Cols;
-            var horProj = new int[rows];
-            for (int y = 0; y < rows; y++) horProj[y] = cols - Cv2.CountNonZero(work.Row(y)); // black px per row
-            int projThr = Math.Max(1, cols / 100);
-            var textRows = new HashSet<int>(Enumerable.Range(0, rows).Where(y => horProj[y] > projThr));
+        //    int rows = work.Rows, cols = work.Cols;
+        //    var horProj = new int[rows];
+        //    for (int y = 0; y < rows; y++) horProj[y] = cols - Cv2.CountNonZero(work.Row(y)); // black px per row
+        //    int projThr = Math.Max(1, cols / 100);
+        //    var textRows = new HashSet<int>(Enumerable.Range(0, rows).Where(y => horProj[y] > projThr));
 
-            Point Center(Rect r) => new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+        //    Point Center(Rect r) => new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
 
-            var bigBoxes = comps.Where(c => c.bbox.Height >= medianHeight * 0.6 || c.area > smallAreaThrPx * 4)
-                                .Select(c => c.bbox).ToArray();
+        //    var bigBoxes = comps.Where(c => c.bbox.Height >= medianHeight * 0.6 || c.area > smallAreaThrPx * 4)
+        //                        .Select(c => c.bbox).ToArray();
 
-            static double DistPointToRect(Point p, Rect r)
-            {
-                int dx = Math.Max(Math.Max(r.Left - p.X, 0), p.X - r.Right);
-                int dy = Math.Max(Math.Max(r.Top - p.Y, 0), p.Y - r.Bottom);
-                return Math.Sqrt(dx * dx + dy * dy);
-            }
+        //    static double DistPointToRect(Point p, Rect r)
+        //    {
+        //        int dx = Math.Max(Math.Max(r.Left - p.X, 0), p.X - r.Right);
+        //        int dy = Math.Max(Math.Max(r.Top - p.Y, 0), p.Y - r.Bottom);
+        //        return Math.Sqrt(dx * dx + dy * dy);
+        //    }
 
-            var smallComps = comps.Where(c => c.area < smallAreaThrPx || c.bbox.Height <= maxDotHeight).ToArray();
-            var toRemoveLabels = new List<int>();
-            var toKeepLabels = new HashSet<int>();
+        //    var smallComps = comps.Where(c => c.area < smallAreaThrPx || c.bbox.Height <= maxDotHeight).ToArray();
+        //    var toRemoveLabels = new List<int>();
+        //    var toKeepLabels = new HashSet<int>();
 
-            int rowCheckRange = Math.Max(1, medianHeight / 3);
-            int clusterHoriz = Math.Max(3, (int)(medianHeight * 0.6));
+        //    int rowCheckRange = Math.Max(1, medianHeight / 3);
+        //    int clusterHoriz = Math.Max(3, (int)(medianHeight * 0.6));
 
-            foreach (var c in smallComps)
-            {
-                var rect = c.bbox;
-                var center = Center(rect);
+        //    foreach (var c in smallComps)
+        //    {
+        //        var rect = c.bbox;
+        //        var center = Center(rect);
 
-                double minDistToBig = double.MaxValue;
-                foreach (var br in bigBoxes)
-                {
-                    double d = DistPointToRect(center, br);
-                    if (d < minDistToBig) minDistToBig = d;
-                }
-                bool nearBig = minDistToBig < proximityRadius;
+        //        double minDistToBig = double.MaxValue;
+        //        foreach (var br in bigBoxes)
+        //        {
+        //            double d = DistPointToRect(center, br);
+        //            if (d < minDistToBig) minDistToBig = d;
+        //        }
+        //        bool nearBig = minDistToBig < proximityRadius;
 
-                bool onTextLine = false;
-                for (int ry = Math.Max(0, center.Y - rowCheckRange); ry <= Math.Min(rows - 1, center.Y + rowCheckRange); ry++)
-                {
-                    if (textRows.Contains(ry)) { onTextLine = true; break; }
-                }
+        //        bool onTextLine = false;
+        //        for (int ry = Math.Max(0, center.Y - rowCheckRange); ry <= Math.Min(rows - 1, center.Y + rowCheckRange); ry++)
+        //        {
+        //            if (textRows.Contains(ry)) { onTextLine = true; break; }
+        //        }
 
-                bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
+        //        bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
 
-                bool partOfCluster = false;
-                if (settings.KeepClusters)
-                {
-                    foreach (var c2 in smallComps)
-                    {
-                        if (c2.label == c.label) continue;
-                        if (Math.Abs(Center(c2.bbox).Y - center.Y) <= rowCheckRange &&
-                            Math.Abs(Center(c2.bbox).X - center.X) <= clusterHoriz)
-                        {
-                            partOfCluster = true;
-                            break;
-                        }
-                    }
-                }
+        //        bool partOfCluster = false;
+        //        if (settings.KeepClusters)
+        //        {
+        //            foreach (var c2 in smallComps)
+        //            {
+        //                if (c2.label == c.label) continue;
+        //                if (Math.Abs(Center(c2.bbox).Y - center.Y) <= rowCheckRange &&
+        //                    Math.Abs(Center(c2.bbox).X - center.X) <= clusterHoriz)
+        //                {
+        //                    partOfCluster = true;
+        //                    break;
+        //                }
+        //            }
+        //        }
 
-                if (nearBig || (onTextLine && squareLike) || partOfCluster)
-                {
-                    toKeepLabels.Add(c.label);
-                    continue;
-                }
+        //        if (nearBig || (onTextLine && squareLike) || partOfCluster)
+        //        {
+        //            toKeepLabels.Add(c.label);
+        //            continue;
+        //        }
 
-                toRemoveLabels.Add(c.label);
-            }
+        //        toRemoveLabels.Add(c.label);
+        //    }
 
-            // remove: build mask from labels and intersect with original black mask (so we never delete pixels created by dilation)
-            foreach (int lbl in toRemoveLabels)
-            {
-                using var mask = new Mat();
-                Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), mask); // 255 where label==lbl (on labelingMat)
-                using var intersect = new Mat();
-                Cv2.BitwiseAnd(mask, origBlackMask, intersect); // ensure only original black pixels removed
-                work.SetTo(new Scalar(255), intersect);
-            }
+        //    // remove: build mask from labels and intersect with original black mask (so we never delete pixels created by dilation)
+        //    foreach (int lbl in toRemoveLabels)
+        //    {
+        //        using var mask = new Mat();
+        //        Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), mask); // 255 where label==lbl (on labelingMat)
+        //        using var intersect = new Mat();
+        //        Cv2.BitwiseAnd(mask, origBlackMask, intersect); // ensure only original black pixels removed
+        //        work.SetTo(new Scalar(255), intersect);
+        //    }
 
-            // debug visualization
-            if (debug || settings.ShowDespeckleDebug)
-            {
-                var vis = new Mat();
-                Cv2.CvtColor(bin, vis, ColorConversionCodes.GRAY2BGR);
-                foreach (var c in comps)
-                {
-                    var color = toKeepLabels.Contains(c.label) ? Scalar.Green : toRemoveLabels.Contains(c.label) ? Scalar.Red : Scalar.Yellow;
-                    Cv2.Rectangle(vis, c.bbox, color, 1);
-                }
+        //    // debug visualization
+        //    if (debug || settings.ShowDespeckleDebug)
+        //    {
+        //        var vis = new Mat();
+        //        Cv2.CvtColor(bin, vis, ColorConversionCodes.GRAY2BGR);
+        //        foreach (var c in comps)
+        //        {
+        //            var color = toKeepLabels.Contains(c.label) ? Scalar.Green : toRemoveLabels.Contains(c.label) ? Scalar.Red : Scalar.Yellow;
+        //            Cv2.Rectangle(vis, c.bbox, color, 1);
+        //        }
 
-                labelingMat.Dispose();
-                return vis;
-            }
+        //        labelingMat.Dispose();
+        //        return vis;
+        //    }
 
-            labelingMat.Dispose();
-            return work;
-        }
+        //    labelingMat.Dispose();
+        //    return work;
+        //}
 
         private Mat? SmartCrop(Mat src)
         {
@@ -1640,9 +1640,11 @@ namespace ImgViewer.Models
         }
 
         // Safe Mat -> BitmapSource conversion (no use of .Depth or non-existent members)
-        private BitmapSource MatToBitmapSource(Mat mat)
+        private BitmapSource MatToBitmapSource(Mat matOrg)
         {
-            if (mat == null || mat.Empty()) return null!;
+            if (matOrg == null || matOrg.Empty()) return null!;
+
+            using var mat = matOrg.Clone();
 
             // Desired types: 8-bit single/three/four channels
             MatType desiredType;
@@ -2082,172 +2084,7 @@ namespace ImgViewer.Models
         //либо используйте более устойчивую выборку(несколько областей).
         //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
 
-        public Mat RemoveBordersByRowColWhite(Mat src,
-        double threshFrac = 0.60,
-        int contrastThr = 30,
-        double centralSample = 0.30,
-        double maxRemoveFrac = 0.25)
-        {
-            Debug.WriteLine("RemoveBordersByRowColWhite started. Before checking _currentImage");
-            if (src == null || src.Empty())
-                return new Mat();
 
-            Debug.WriteLine("RemoveBordersByRowColWhite started.");
-
-            // Подготовка источника (убедиться, что BGR CV_8UC3)
-            //Mat src = _currentImage;
-            Mat srcBgr = src;
-            bool converted = false;
-            if (src.Type() != MatType.CV_8UC3)
-            {
-                srcBgr = new Mat();
-                src.ConvertTo(srcBgr, MatType.CV_8UC3);
-                converted = true;
-            }
-
-            // Грейскейл
-            Mat gray = new Mat();
-            Cv2.CvtColor(srcBgr, gray, ColorConversionCodes.BGR2GRAY);
-
-            int h = gray.Rows;
-            int w = gray.Cols;
-
-            // Ограничим входные параметры
-            centralSample = Math.Max(0.05, Math.Min(0.9, centralSample));
-            threshFrac = Math.Max(0.01, Math.Min(0.99, threshFrac));
-            maxRemoveFrac = Math.Max(0.01, Math.Min(0.5, maxRemoveFrac));
-
-            // Центральный прямоугольник для оценки медианы
-            int cx0 = (int)Math.Round(w * (0.5 - centralSample / 2.0));
-            int cy0 = (int)Math.Round(h * (0.5 - centralSample / 2.0));
-            int cx1 = (int)Math.Round(w * (0.5 + centralSample / 2.0));
-            int cy1 = (int)Math.Round(h * (0.5 + centralSample / 2.0));
-            cx0 = Math.Max(0, Math.Min(w - 1, cx0));
-            cy0 = Math.Max(0, Math.Min(h - 1, cy0));
-            cx1 = Math.Max(cx0 + 1, Math.Min(w, cx1));
-            cy1 = Math.Max(cy0 + 1, Math.Min(h, cy1));
-
-            Mat central = new Mat(gray, new Rect(cx0, cy0, cx1 - cx0, cy1 - cy0));
-            int centralMedian = ComputeMatMedian(central);
-
-            // Считаем количество "не-фон" пикселей в каждой строке и колонке
-            int[] rowCounts = new int[h];
-            int[] colCounts = new int[w];
-
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    byte v = gray.At<byte>(y, x);
-                    if (Math.Abs(v - centralMedian) > contrastThr)
-                    {
-                        rowCounts[y]++;
-                        colCounts[x]++;
-                    }
-                }
-            }
-
-            // Фракции
-            double[] rowFrac = new double[h];
-            double[] colFrac = new double[w];
-            for (int y = 0; y < h; y++) rowFrac[y] = (double)rowCounts[y] / w;
-            for (int x = 0; x < w; x++) colFrac[x] = (double)colCounts[x] / h;
-
-            // Сканируем от краёв
-            int top = 0;
-            for (int y = 0; y < h; y++)
-            {
-                if (rowFrac[y] > threshFrac) top = y + 1;
-                else break;
-            }
-            int bottom = 0;
-            for (int y = h - 1; y >= 0; y--)
-            {
-                if (rowFrac[y] > threshFrac) bottom = h - y;
-                else break;
-            }
-            int left = 0;
-            for (int x = 0; x < w; x++)
-            {
-                if (colFrac[x] > threshFrac) left = x + 1;
-                else break;
-            }
-            int right = 0;
-            for (int x = w - 1; x >= 0; x--)
-            {
-                if (colFrac[x] > threshFrac) right = w - x;
-                else break;
-            }
-
-
-            // Защита от удаления слишком большой доли
-            int maxTop = (int)Math.Round(maxRemoveFrac * h);
-            int maxSide = (int)Math.Round(maxRemoveFrac * w);
-            if (top > maxTop) top = maxTop;
-            if (bottom > maxTop) bottom = maxTop;
-            if (left > maxSide) left = maxSide;
-            if (right > maxSide) right = maxSide;
-
-
-            // Применяем заливку белым (in-place в новом Mat)
-            Mat result = srcBgr.Clone();
-            //Scalar white = new Scalar(255, 255, 255);
-            //if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
-            //if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
-            //if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
-            //if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
-
-            // trying to crop instead of fill
-            int row0 = top;
-            int row1 = h - bottom;
-            int col0 = left;
-            int col1 = w - right;
-            if (row1 <= row0 || col1 <= col0) return new Mat();
-            result = srcBgr.RowRange(row0, row1).ColRange(col0, col1).Clone();
-
-
-            // Заменяем поле _currentImage на result (освобождая прежний Mat)
-            //WorkingImage = result;
-
-            // Освобождаем временные объекты
-            central.Dispose();
-            gray.Dispose();
-            if (converted) srcBgr.Dispose(); // если создали новый Mat при конвертации
-            //old?.Dispose();
-
-            // (опционально) логирование — можно убрать
-            Debug.WriteLine($"RemoveBordersByRowColWhite applied: cuts(top,bottom,left,right) = ({top},{bottom},{left},{right}), centralMedian={centralMedian}");
-            return result;
-        }
-
-        /// <summary>
-        /// Вспомогательная: медиана значений CV_8UC1 Mat.
-        /// </summary>
-        private static int ComputeMatMedian(Mat grayMat)
-        {
-            if (grayMat == null || grayMat.Empty()) return 255;
-            if (grayMat.Type() != MatType.CV_8UC1)
-            {
-                using var tmp = new Mat();
-                Cv2.CvtColor(grayMat, tmp, ColorConversionCodes.BGR2GRAY);
-                grayMat = tmp;
-            }
-
-            List<byte> list = new List<byte>(grayMat.Rows * grayMat.Cols);
-            for (int y = 0; y < grayMat.Rows; y++)
-            {
-                for (int x = 0; x < grayMat.Cols; x++)
-                {
-                    list.Add(grayMat.At<byte>(y, x));
-                }
-            }
-
-            list.Sort();
-            int mid = list.Count / 2;
-            if (list.Count == 0) return 255;
-            if (list.Count % 2 == 1) return list[mid];
-            return (list[mid - 1] + list[mid]) / 2;
-        }
 
 
         public static Deskewer.Parameters ParseParametersSimple(Dictionary<string, object>? parameters)
@@ -2333,7 +2170,7 @@ namespace ImgViewer.Models
             return result;
         }
 
-        public Mat NewDeskew(Mat src, Dictionary<string, object> parameters)
+        public Mat? NewDeskew(Mat src, Dictionary<string, object> parameters)
         {
             if (src == null || src.Empty()) return new Mat();
 
@@ -2341,9 +2178,22 @@ namespace ImgViewer.Models
             var p = new Deskewer.Parameters();
 
             p = ParseParametersSimple(parameters);
+            try
+            {
+                Mat result = Deskewer.Deskew(_token, src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
 
-            Mat result = Deskewer.Deskew(src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
-            return result;
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error while Deskew: {ex.Message}");
+                return null;
+            }
+
         }
 
         //private void BordersDeskew()
@@ -2404,337 +2254,77 @@ namespace ImgViewer.Models
 
 
 
-        Mat PrecomputeDarkMask_BackgroundNormalized(Mat src)
+        //Mat PrecomputeDarkMask_BackgroundNormalized(Mat src)
+        //{
+        //    var gray = new Mat();
+        //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+
+        //    // оценка фона большим ядром (например 101x101)
+        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(101, 101));
+        //    var bg = new Mat();
+        //    Cv2.MorphologyEx(gray, bg, MorphTypes.Open, kernel);
+
+        //    // вычитаем фон — получаем более ровную яркость
+        //    var norm = new Mat();
+        //    Cv2.Subtract(gray, bg, norm);
+
+        //    // optional contrast
+        //    Cv2.Normalize(norm, norm, 0, 255, NormTypes.MinMax);
+
+        //    // Otsu или адаптивный порог
+        //    var darkMask = new Mat();
+        //    Cv2.Threshold(norm, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
+
+        //    gray.Dispose(); bg.Dispose(); norm.Dispose();
+        //    return darkMask;
+        //}
+
+        private Mat? RemoveBordersByRowColWhite(Mat src,
+                                                double threshFrac,
+                                                int contrastThr,
+                                                double centralSample,
+                                                double maxRemoveFrac)
         {
-            var gray = new Mat();
-            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-
-            // оценка фона большим ядром (например 101x101)
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(101, 101));
-            var bg = new Mat();
-            Cv2.MorphologyEx(gray, bg, MorphTypes.Open, kernel);
-
-            // вычитаем фон — получаем более ровную яркость
-            var norm = new Mat();
-            Cv2.Subtract(gray, bg, norm);
-
-            // optional contrast
-            Cv2.Normalize(norm, norm, 0, 255, NormTypes.MinMax);
-
-            // Otsu или адаптивный порог
-            var darkMask = new Mat();
-            Cv2.Threshold(norm, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
-
-            gray.Dispose(); bg.Dispose(); norm.Dispose();
-            return darkMask;
-        }
-
-        public Mat RemoveBorderArtifactsGeneric_Safe(
-            Mat src,
-            byte thr,                       // порог для определения "тёмного" (например EstimateBlackThreshold(rotated)) 
-            Scalar? bgColor = null,         // цвет фона (null -> автоопределение по углам)
-            int minAreaPx = 2000,           // если площадь >= этого -> считается значимой
-            double minSpanFraction = 0.6,   // если bbox покрывает >= этой доли по ширине/высоте -> кандидат
-            double solidityThreshold = 0.6, // если solidity >= -> кандидат
-            double minDepthFraction = 0.05, // проникновение вглубь, в долях min(rows,cols)
-            int featherPx = 12              // радиус растушёвки для мягкого перехода
-        )
-
-
-        {
-
-
-            if (src == null) throw new ArgumentNullException(nameof(src));
-            if (src.Empty()) return src;
-
-            using var srcClone = src.Clone();
-            Mat working = srcClone;
-            bool disposeWorking = false;
-            if (srcClone.Type() != MatType.CV_8UC3)
-            {
-                working = new Mat();
-                srcClone.ConvertTo(working, MatType.CV_8UC3);
-                disposeWorking = true;
-            }
-
             try
             {
-                int rows = working.Rows, cols = working.Cols;
-                int minDepthPx = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
-
-                // determine bg color from corners if not provided
-                Scalar chosenBg = bgColor ?? new Scalar(255, 255, 255);
-                if (!bgColor.HasValue)
-                {
-
-
-                    int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
-                    double sb = 0, sg = 0, sr = 0; int cnt = 0;
-                    var rects = new[]
-                    {
-                        new Rect(0,0,cornerSize,cornerSize),
-                        new Rect(Math.Max(0,cols-cornerSize),0,cornerSize,cornerSize),
-                        new Rect(0,Math.Max(0,rows-cornerSize),cornerSize,cornerSize),
-                        new Rect(Math.Max(0,cols-cornerSize), Math.Max(0,rows-cornerSize), cornerSize, cornerSize)
-                    };
-                    foreach (var r in rects)
-                    {
-                        if (r.Width <= 0 || r.Height <= 0) continue;
-                        using var patch = new Mat(working, r);
-                        var mean = Cv2.Mean(patch);
-                        double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
-                        if (brightness > thr * 1.0) { sb += mean.Val0; sg += mean.Val1; sr += mean.Val2; cnt++; }
-                    }
-                    if (cnt > 0) chosenBg = new Scalar(sb / cnt, sg / cnt, sr / cnt);
-                }
-
-                // 1) binary dark mask
-                using var gray = new Mat();
-                Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
-                using var darkMask = new Mat();
-                Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
-
-
-
-
-
-                //+++
-                int kernelWidth = Math.Max(7, working.Cols / 60);
-                using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 1));
-                Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
-                using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(1, 1));
-                Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
-                //+++
-
-                // small open to reduce noise
-                using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3)))
-                {
-                    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kOpen);
-                }
-
-                // 2) connected components
-                using var labels = new Mat();
-                using var stats = new Mat();
-                using var cents = new Mat();
-                int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, cents);
-
-                System.Diagnostics.Debug.WriteLine($"darkMask nonzero: {Cv2.CountNonZero(darkMask)}");
-                System.Diagnostics.Debug.WriteLine($"nLabels: {nLabels}  labels.type={labels.Type()}  stats.size={stats.Rows}x{stats.Cols}");
-
-                // selected mask init
-                //  var selectedMask = Mat.Zeros(darkMask.Size(), MatType.CV_8U);
-                var selectedMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
-
-                // iterate components
-                for (int i = 1; i < nLabels; i++)
-                {
-                    int x = stats.At<int>(i, 0);
-                    int y = stats.At<int>(i, 1);
-                    int w = stats.At<int>(i, 2);
-                    int h = stats.At<int>(i, 3);
-                    int area = stats.At<int>(i, 4);
-
-                    bool touchesLeft = x <= 0;
-                    bool touchesTop = y <= 0;
-                    bool touchesRight = (x + w) >= (cols - 1);
-                    bool touchesBottom = (y + h) >= (rows - 1);
-                    if (!(touchesLeft || touchesTop || touchesRight || touchesBottom)) continue;
-
-                    double solidity = (w > 0 && h > 0) ? (double)area / (w * h) : 0.0;
-                    double spanFractionW = (double)w / cols;
-                    double spanFractionH = (double)h / rows;
-
-                    // compute maxDepth by scanning the component mask area (safe, no ToArray)
-                    int maxDepth = 0;
-                    using (var compMask = new Mat())
-                    {
-                        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // compMask: 255 where label==i
-
-                        // scan bounding box only for speed
-                        int x0 = Math.Max(0, x);
-                        int y0 = Math.Max(0, y);
-                        int x1 = Math.Min(cols - 1, x + w - 1);
-                        int y1 = Math.Min(rows - 1, y + h - 1);
-
-                        for (int yy = y0; yy <= y1; yy++)
-                        {
-                            for (int xx = x0; xx <= x1; xx++)
-                            {
-                                byte v = compMask.At<byte>(yy, xx);
-                                if (v == 0) continue;
-                                int d = Math.Min(Math.Min(xx, cols - 1 - xx), Math.Min(yy, rows - 1 - yy));
-                                if (d > maxDepth) maxDepth = d;
-                            }
-                        }
-
-                        bool select = false;
-                        if (area >= minAreaPx) select = true;
-                        if (solidity >= solidityThreshold) select = true;
-                        if (spanFractionW >= minSpanFraction && (touchesTop || touchesBottom)) select = true;
-                        if (spanFractionH >= minSpanFraction && (touchesLeft || touchesRight)) select = true;
-                        if (maxDepth >= minDepthPx) select = true;
-                        if ((touchesLeft && touchesRight) || (touchesTop && touchesBottom)) select = true;
-
-                        if (select)
-                        {
-                            // add compMask -> selectedMask (BitwiseOr). Use Cv2.BitwiseOr with real Mats.
-                            Cv2.BitwiseOr(selectedMask, compMask, selectedMask);
-                        }
-                    }
-                }
-
-                //System.Diagnostics.Debug.WriteLine($"selectedMask nonzero: {Cv2.CountNonZero(selectedMask)}, type={selectedMask.Type()}");
-
-                // if nothing selected -> return clone
-                if (Cv2.CountNonZero(selectedMask) == 0)
-                    return working.Clone();
-
-                // 3) fill selected areas with background color (hard fill)
-                var filled = working.Clone();
-
-                // cut ++++++
-
-                int margin = featherPx; // adjust if you want expansion/shrink of mask
-
-                // Ensure mask is 0/255 CV_8U and clone
-                Mat modMask;
-                if (selectedMask.Type() != MatType.CV_8U)
-                {
-                    modMask = new Mat();
-                    selectedMask.ConvertTo(modMask, MatType.CV_8U);
-                }
-                else
-                {
-                    modMask = selectedMask.Clone();
-                }
-
-                // apply symmetric margin if requested
-                if (margin != 0)
-                {
-                    int m = Math.Abs(margin);
-                    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
-                    if (margin > 0)
-                        Cv2.Dilate(modMask, modMask, k, iterations: 1);
-                    else
-                        Cv2.Erode(modMask, modMask, k, iterations: 1);
-                }
-
-                // Safely convert chosenBg components to 0..255 integers WITHOUT Math.Clamp
-                int bVal = (int)Math.Round(chosenBg.Val0);
-                if (bVal < 0) bVal = 0; else if (bVal > 255) bVal = 255;
-                int gVal = (int)Math.Round(chosenBg.Val1);
-                if (gVal < 0) gVal = 0; else if (gVal > 255) gVal = 255;
-                int rVal = (int)Math.Round(chosenBg.Val2);
-                if (rVal < 0) rVal = 0; else if (rVal > 255) rVal = 255;
-
-                // Build result initialized with chosen background color (B,G,R)
-                Mat result = new Mat(working.Size(), MatType.CV_8UC3, new Scalar(bVal, gVal, rVal));
-
-                // Copy original pixels where mask == 0 (outside selection)
-                Mat invMask = new Mat();
-                Cv2.BitwiseNot(modMask, invMask);
-                working.CopyTo(result, invMask);
-
-                // return result immediately (no further blending)
+                Mat result = BordersRemover.RemoveBordersByRowColWhite(_token, src, threshFrac, contrastThr, centralSample, maxRemoveFrac);
                 return result;
-
-                // cut ++++++
-
-
-                //int margin = 100; // <-- ваш n: положительное = расширить, отрицательное = врезать внутрь
-
-                //// ensure mask is CV_8U with values 0/255
-                //Mat modMask = new Mat();
-                //if (selectedMask.Type() != MatType.CV_8U)
-                //    selectedMask.ConvertTo(modMask, MatType.CV_8U);
-                //else
-                //    modMask = selectedMask.Clone();
-
-                //if (margin > 0)
-                //{
-                //    // use a square kernel of size (2*margin+1)
-                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
-                //    Cv2.Dilate(modMask, modMask, k, iterations: 1);
-                //}
-                //else if (margin < 0)
-                //{
-                //    int m = -margin;
-                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
-                //    Cv2.Erode(modMask, modMask, k, iterations: 1);
-                //}
-
-                filled.SetTo(chosenBg, selectedMask);
-
-
-                //filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
-
-                //Cv2.ImWrite("dbg_working.png", working);
-                //Cv2.ImWrite("dbg_selectedMask.png", selectedMask);
-                //Cv2.ImWrite("dbg_filled_after_setto.png", filled);
-
-                // 4) smooth the seam: create blurred (soft) mask and do local per-pixel blend in ROI
-                // create blurred mask (CV_8U -> blurred uchar)
-                using var blurred = new Mat();
-                int ksize = Math.Max(3, (featherPx / 2) * 2 + 1);
-                Cv2.GaussianBlur(selectedMask, blurred, new OpenCvSharp.Size(ksize, ksize), 0);
-
-                // compute bounding box of blurred mask (scan for nonzero)
-                int top = -1, bottom = -1, left = -1, right = -1;
-                for (int r = 0; r < rows; r++)
-                {
-                    for (int c = 0; c < cols; c++)
-                    {
-                        if (blurred.At<byte>(r, c) != 0)
-                        {
-                            if (top == -1 || r < top) top = r;
-                            if (bottom == -1 || r > bottom) bottom = r;
-                            if (left == -1 || c < left) left = c;
-                            if (right == -1 || c > right) right = c;
-                        }
-                    }
-                }
-
-                // if no nonzero found (should not), return filled
-                if (top == -1) return filled.Clone();
-
-                // expand ROI a bit
-                top = Math.Max(0, top - featherPx);
-                bottom = Math.Min(rows - 1, bottom + featherPx);
-                left = Math.Max(0, left - featherPx);
-                right = Math.Min(cols - 1, right + featherPx);
-
-                // per-pixel blend inside ROI using blurred mask as alpha (0..255)
-                for (int r = top; r <= bottom; r++)
-                {
-                    for (int c = left; c <= right; c++)
-                    {
-                        byte a = blurred.At<byte>(r, c); // 0..255
-                        if (a == 0) continue; // no change
-                        if (a == 255)
-                        {
-                            // fully filled already
-                            // ensure pixel in result is bg (it is because filled.SetTo done)
-                            continue;
-                        }
-                        // alpha normalized
-                        double alpha = a / 255.0;
-                        var origB = working.At<Vec3b>(r, c);
-                        var fillB = filled.At<Vec3b>(r, c);
-                        byte nb = (byte)Math.Round(fillB.Item0 * alpha + origB.Item0 * (1 - alpha));
-                        byte ng = (byte)Math.Round(fillB.Item1 * alpha + origB.Item1 * (1 - alpha));
-                        byte nr = (byte)Math.Round(fillB.Item2 * alpha + origB.Item2 * (1 - alpha));
-                        // write to filled result
-                        filled.Set<Vec3b>(r, c, new Vec3b(nb, ng, nr));
-                        //filled.Set<Vec3b>(r, c, new Vec3b(0, 0, 255));
-                    }
-                }
-
-
-                return filled;
             }
-            finally
+            catch (OperationCanceledException)
             {
-                if (disposeWorking && working != null) working.Dispose();
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error while removing borders (By contrast): {ex.Message}");
+                return null;
+            }
+        }
+
+        private Mat? RemoveBorders_Auto(Mat src, byte darkThresh, Scalar? bgColor, int minAreaPx, double minSpanFraction, double solidityThreshold,
+                                    double minDepthFraction, int featherPx)
+        {
+            try
+            {
+                Mat result = BordersRemover.RemoveBorderArtifactsGeneric_Safe(_token, src,
+                                                    darkThresh,
+                                                    bgColor,
+                                                    minAreaPx,
+                                                    minSpanFraction,
+                                                    solidityThreshold,
+                                                    minDepthFraction,
+                                                    featherPx
+                                                );
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error while removing borders (Auto): {ex.Message}");
+                return null;
             }
         }
 
@@ -2814,351 +2404,351 @@ namespace ImgViewer.Models
         }
 
 
-        Mat PrecomputeDarkMask_Otsu(Mat src)
-        {
-            var gray = new Mat();
-            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+        //Mat PrecomputeDarkMask_Otsu(Mat src)
+        //{
+        //    var gray = new Mat();
+        //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
 
-            // небольшая фильтрация шума
-            Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
+        //    // небольшая фильтрация шума
+        //    Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
 
-            // Otsu + инверсия: dark -> 255
-            var darkMask = new Mat();
-            Cv2.Threshold(gray, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
+        //    // Otsu + инверсия: dark -> 255
+        //    var darkMask = new Mat();
+        //    Cv2.Threshold(gray, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
 
-            // убираем мелкие отверстия/шум
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-            Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
+        //    // убираем мелкие отверстия/шум
+        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
+        //    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
 
-            gray.Dispose();
-            return darkMask; // caller обязан Dispose
-        }
+        //    gray.Dispose();
+        //    return darkMask; // caller обязан Dispose
+        //}
 
-        Mat PrecomputeDarkMask_Adaptive(Mat src, int blockSize = 31, int C = 10)
-        {
-            var gray = new Mat();
-            // лучше работать с яркостным каналом Y
-            var ycrcb = new Mat();
-            Cv2.CvtColor(src, ycrcb, ColorConversionCodes.BGR2YCrCb);
-            Cv2.ExtractChannel(ycrcb, gray, 0); // Y канал
-            ycrcb.Dispose();
+        //Mat PrecomputeDarkMask_Adaptive(Mat src, int blockSize = 31, int C = 10)
+        //{
+        //    var gray = new Mat();
+        //    // лучше работать с яркостным каналом Y
+        //    var ycrcb = new Mat();
+        //    Cv2.CvtColor(src, ycrcb, ColorConversionCodes.BGR2YCrCb);
+        //    Cv2.ExtractChannel(ycrcb, gray, 0); // Y канал
+        //    ycrcb.Dispose();
 
-            // опционально CLAHE, чтобы усилить контраст
-            var clahe = Cv2.CreateCLAHE(2.0, new OpenCvSharp.Size(8, 8));
-            clahe.Apply(gray, gray);
+        //    // опционально CLAHE, чтобы усилить контраст
+        //    var clahe = Cv2.CreateCLAHE(2.0, new OpenCvSharp.Size(8, 8));
+        //    clahe.Apply(gray, gray);
 
-            // сглаживание
-            Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
+        //    // сглаживание
+        //    Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
 
-            var darkMask = new Mat();
-            // AdaptiveThreshold: используем BinaryInv чтобы тёмные стали 255
-            Cv2.AdaptiveThreshold(gray, darkMask, 255,
-                AdaptiveThresholdTypes.GaussianC, ThresholdTypes.BinaryInv, blockSize, C);
+        //    var darkMask = new Mat();
+        //    // AdaptiveThreshold: используем BinaryInv чтобы тёмные стали 255
+        //    Cv2.AdaptiveThreshold(gray, darkMask, 255,
+        //        AdaptiveThresholdTypes.GaussianC, ThresholdTypes.BinaryInv, blockSize, C);
 
-            // морфологическая очистка
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-            Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
+        //    // морфологическая очистка
+        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
+        //    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
 
-            gray.Dispose();
-            clahe.Dispose();
-            return darkMask;
-        }
-
-
+        //    gray.Dispose();
+        //    clahe.Dispose();
+        //    return darkMask;
+        //}
 
 
 
-        public Mat FillBlackBorderAreas(
-            Mat src,
-            Scalar? bgColor = null,
-            byte blackThreshold = 8,
-            double minSpanFraction = 0.8,    // доля ширины/высоты, чтобы считать компонент "полосой"
-            int minAreaPx = 2000,            // если компонент >= этой площади — можно считать большим
-            double solidityThreshold = 0.55  // если заполненность bbox >= threshold => считать сплошной
-        )
-        {
-            if (src == null) throw new ArgumentNullException(nameof(src));
-            if (src.Empty()) return src;
 
-            using var srcClone = src.Clone();
 
-            Mat working;
-            bool createdWorking = false;
-            if (srcClone.Channels() == 1)
-            {
-                working = new Mat();
-                Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
-                createdWorking = true;
-            }
-            else if (srcClone.Type() != MatType.CV_8UC3)
-            {
-                working = new Mat();
-                srcClone.ConvertTo(working, MatType.CV_8UC3);
-                createdWorking = true;
-            }
-            else
-            {
-                working = srcClone;
-                createdWorking = false;
-            }
+        //public Mat FillBlackBorderAreas(
+        //    Mat src,
+        //    Scalar? bgColor = null,
+        //    byte blackThreshold = 8,
+        //    double minSpanFraction = 0.8,    // доля ширины/высоты, чтобы считать компонент "полосой"
+        //    int minAreaPx = 2000,            // если компонент >= этой площади — можно считать большим
+        //    double solidityThreshold = 0.55  // если заполненность bbox >= threshold => считать сплошной
+        //)
+        //{
+        //    if (src == null) throw new ArgumentNullException(nameof(src));
+        //    if (src.Empty()) return src;
 
-            try
-            {
-                int rows = working.Rows;
-                int cols = working.Cols;
+        //    using var srcClone = src.Clone();
 
-                // --- опред. цвета фона (углы) ---
-                Scalar chosenBg;
-                if (bgColor.HasValue) chosenBg = bgColor.Value;
-                else
-                {
-                    int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
-                    var cornerMeans = new List<Scalar>();
-                    var rects = new[]
-                    {
-                        new Rect(0, 0, cornerSize, cornerSize),
-                        new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
-                        new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
-                        new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
-                    };
-                    foreach (var r in rects)
-                    {
-                        if (r.Width <= 0 || r.Height <= 0) continue;
-                        using var patch = new Mat(working, r);
-                        var mean = Cv2.Mean(patch);
-                        double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
-                        if (brightness > blackThreshold * 1.5) cornerMeans.Add(mean);
-                    }
-                    if (cornerMeans.Count > 0)
-                    {
-                        double b = 0, g = 0, rr = 0;
-                        foreach (var s in cornerMeans) { b += s.Val0; g += s.Val1; rr += s.Val2; }
-                        chosenBg = new Scalar(b / cornerMeans.Count, g / cornerMeans.Count, rr / cornerMeans.Count);
-                    }
-                    else chosenBg = new Scalar(255, 255, 255);
-                }
+        //    Mat working;
+        //    bool createdWorking = false;
+        //    if (srcClone.Channels() == 1)
+        //    {
+        //        working = new Mat();
+        //        Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
+        //        createdWorking = true;
+        //    }
+        //    else if (srcClone.Type() != MatType.CV_8UC3)
+        //    {
+        //        working = new Mat();
+        //        srcClone.ConvertTo(working, MatType.CV_8UC3);
+        //        createdWorking = true;
+        //    }
+        //    else
+        //    {
+        //        working = srcClone;
+        //        createdWorking = false;
+        //    }
 
-                // --- маска тёмных пикселей ---
-                using var gray = new Mat();
-                Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
+        //    try
+        //    {
+        //        int rows = working.Rows;
+        //        int cols = working.Cols;
 
-                using var darkMask = new Mat();
-                Cv2.Threshold(gray, darkMask, blackThreshold, 255, ThresholdTypes.BinaryInv); // dark -> 255
+        //        // --- опред. цвета фона (углы) ---
+        //        Scalar chosenBg;
+        //        if (bgColor.HasValue) chosenBg = bgColor.Value;
+        //        else
+        //        {
+        //            int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
+        //            var cornerMeans = new List<Scalar>();
+        //            var rects = new[]
+        //            {
+        //                new Rect(0, 0, cornerSize, cornerSize),
+        //                new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
+        //                new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
+        //                new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
+        //            };
+        //            foreach (var r in rects)
+        //            {
+        //                if (r.Width <= 0 || r.Height <= 0) continue;
+        //                using var patch = new Mat(working, r);
+        //                var mean = Cv2.Mean(patch);
+        //                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
+        //                if (brightness > blackThreshold * 1.5) cornerMeans.Add(mean);
+        //            }
+        //            if (cornerMeans.Count > 0)
+        //            {
+        //                double b = 0, g = 0, rr = 0;
+        //                foreach (var s in cornerMeans) { b += s.Val0; g += s.Val1; rr += s.Val2; }
+        //                chosenBg = new Scalar(b / cornerMeans.Count, g / cornerMeans.Count, rr / cornerMeans.Count);
+        //            }
+        //            else chosenBg = new Scalar(255, 255, 255);
+        //        }
 
-                // --- компоненты связности ---
-                using var labels = new Mat();
-                using var stats = new Mat();
-                using var cents = new Mat();
-                int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, cents);
+        //        // --- маска тёмных пикселей ---
+        //        using var gray = new Mat();
+        //        Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
 
-                var filled = working.Clone();
+        //        using var darkMask = new Mat();
+        //        Cv2.Threshold(gray, darkMask, blackThreshold, 255, ThresholdTypes.BinaryInv); // dark -> 255
 
-                if (nLabels > 1)
-                {
-                    for (int i = 1; i < nLabels; i++)
-                    {
-                        int x = stats.At<int>(i, 0);
-                        int y = stats.At<int>(i, 1);
-                        int w = stats.At<int>(i, 2);
-                        int h = stats.At<int>(i, 3);
-                        int area = stats.At<int>(i, 4);
+        //        // --- компоненты связности ---
+        //        using var labels = new Mat();
+        //        using var stats = new Mat();
+        //        using var cents = new Mat();
+        //        int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, cents);
 
-                        bool touchesLeft = x <= 0;
-                        bool touchesTop = y <= 0;
-                        bool touchesRight = (x + w) >= (cols);
-                        bool touchesBottom = (y + h) >= (rows);
+        //        var filled = working.Clone();
 
-                        bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
-                        if (!touchesAny) continue;
+        //        if (nLabels > 1)
+        //        {
+        //            for (int i = 1; i < nLabels; i++)
+        //            {
+        //                int x = stats.At<int>(i, 0);
+        //                int y = stats.At<int>(i, 1);
+        //                int w = stats.At<int>(i, 2);
+        //                int h = stats.At<int>(i, 3);
+        //                int area = stats.At<int>(i, 4);
 
-                        // основные эвристики:
-                        bool considerAsBorder = false;
+        //                bool touchesLeft = x <= 0;
+        //                bool touchesTop = y <= 0;
+        //                bool touchesRight = (x + w) >= (cols);
+        //                bool touchesBottom = (y + h) >= (rows);
 
-                        // 1) span: если касается top/bottom — смотрим ширину
-                        if (touchesTop || touchesBottom)
-                        {
-                            double widthFraction = (double)w / cols;
-                            if (widthFraction >= minSpanFraction) considerAsBorder = true;
-                        }
+        //                bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
+        //                if (!touchesAny) continue;
 
-                        // 2) span: если касается left/right — смотрим высоту
-                        if (touchesLeft || touchesRight)
-                        {
-                            double heightFraction = (double)h / rows;
-                            if (heightFraction >= minSpanFraction) considerAsBorder = true;
-                        }
+        //                // основные эвристики:
+        //                bool considerAsBorder = false;
 
-                        // 3) площадь: очень большие объекты можно закрашивать
-                        if (area >= minAreaPx) considerAsBorder = true;
+        //                // 1) span: если касается top/bottom — смотрим ширину
+        //                if (touchesTop || touchesBottom)
+        //                {
+        //                    double widthFraction = (double)w / cols;
+        //                    if (widthFraction >= minSpanFraction) considerAsBorder = true;
+        //                }
 
-                        // 4) противоположные стороны -> явно полоса
-                        if ((touchesLeft && touchesRight) || (touchesTop && touchesBottom))
-                            considerAsBorder = true;
+        //                // 2) span: если касается left/right — смотрим высоту
+        //                if (touchesLeft || touchesRight)
+        //                {
+        //                    double heightFraction = (double)h / rows;
+        //                    if (heightFraction >= minSpanFraction) considerAsBorder = true;
+        //                }
 
-                        // 5) solidity = area / (w*h) — для сплошной заливки близко к 1, для текста значительно меньше.
-                        double solidity = 0.0;
-                        if (w > 0 && h > 0) solidity = (double)area / (w * h);
-                        if (solidity >= solidityThreshold) considerAsBorder = true;
+        //                // 3) площадь: очень большие объекты можно закрашивать
+        //                if (area >= minAreaPx) considerAsBorder = true;
 
-                        // Доп. эвристика: плотность внутри (простая) — если плотность пикселей низкая, это обычно текст (пропускаем)
-                        // (но уже учтено в solidity)
+        //                // 4) противоположные стороны -> явно полоса
+        //                if ((touchesLeft && touchesRight) || (touchesTop && touchesBottom))
+        //                    considerAsBorder = true;
 
-                        if (!considerAsBorder) continue;
+        //                // 5) solidity = area / (w*h) — для сплошной заливки близко к 1, для текста значительно меньше.
+        //                double solidity = 0.0;
+        //                if (w > 0 && h > 0) solidity = (double)area / (w * h);
+        //                if (solidity >= solidityThreshold) considerAsBorder = true;
 
-                        // наконец — маска этой компоненты
-                        using var compMask = new Mat();
-                        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask);
+        //                // Доп. эвристика: плотность внутри (простая) — если плотность пикселей низкая, это обычно текст (пропускаем)
+        //                // (но уже учтено в solidity)
 
-                        // Но перед заливкой: можно дополнительно убедиться, что средняя яркость
-                        // внутри bbox не слишком похожа на внутреннюю область документа (опционально).
-                        // Для простоты — сразу зальём:
-                        //-------
+        //                if (!considerAsBorder) continue;
 
-                        filled.SetTo(chosenBg, compMask);
-                    }
-                }
+        //                // наконец — маска этой компоненты
+        //                using var compMask = new Mat();
+        //                Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask);
 
-                var result = filled.Clone();
-                filled.Dispose();
-                return result;
-            }
-            finally
-            {
-                if (createdWorking && working != null) working.Dispose();
-            }
-        }
+        //                // Но перед заливкой: можно дополнительно убедиться, что средняя яркость
+        //                // внутри bbox не слишком похожа на внутреннюю область документа (опционально).
+        //                // Для простоты — сразу зальём:
+        //                //-------
 
-        public Mat FillBlackBorderAreasOld(Mat src, Scalar? bgColor = null, byte blackThreshold = 8)
-        {
-            if (src == null) throw new ArgumentNullException(nameof(src));
-            if (src.Empty()) return src;
+        //                filled.SetTo(chosenBg, compMask);
+        //            }
+        //        }
 
-            // работаем с клоном входа
-            using var srcClone = src.Clone();
+        //        var result = filled.Clone();
+        //        filled.Dispose();
+        //        return result;
+        //    }
+        //    finally
+        //    {
+        //        if (createdWorking && working != null) working.Dispose();
+        //    }
+        //}
 
-            Mat working = null;
-            bool createdWorking = false;
-            if (srcClone.Channels() == 1)
-            {
-                working = new Mat();
-                Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
-                createdWorking = true;
-            }
-            else if (srcClone.Type() != MatType.CV_8UC3)
-            {
-                working = new Mat();
-                srcClone.ConvertTo(working, MatType.CV_8UC3);
-                createdWorking = true;
-            }
-            else
-            {
-                working = srcClone;
-                createdWorking = false;
-            }
+        //public Mat FillBlackBorderAreasOld(Mat src, Scalar? bgColor = null, byte blackThreshold = 8)
+        //{
+        //    if (src == null) throw new ArgumentNullException(nameof(src));
+        //    if (src.Empty()) return src;
 
-            try
-            {
-                int rows = working.Rows;
-                int cols = working.Cols;
+        //    // работаем с клоном входа
+        //    using var srcClone = src.Clone();
 
-                // --- определяем цвет фона (простая стратегия по углам) ---
-                Scalar chosenBg;
-                if (bgColor.HasValue)
-                {
-                    chosenBg = bgColor.Value;
-                }
-                else
-                {
-                    int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
-                    var corners = new List<Scalar>();
-                    var rects = new[]
-                    {
-                new Rect(0, 0, cornerSize, cornerSize),
-                new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
-                new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
-                new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
-            };
+        //    Mat working = null;
+        //    bool createdWorking = false;
+        //    if (srcClone.Channels() == 1)
+        //    {
+        //        working = new Mat();
+        //        Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
+        //        createdWorking = true;
+        //    }
+        //    else if (srcClone.Type() != MatType.CV_8UC3)
+        //    {
+        //        working = new Mat();
+        //        srcClone.ConvertTo(working, MatType.CV_8UC3);
+        //        createdWorking = true;
+        //    }
+        //    else
+        //    {
+        //        working = srcClone;
+        //        createdWorking = false;
+        //    }
 
-                    foreach (var r in rects)
-                    {
-                        if (r.Width <= 0 || r.Height <= 0) continue;
-                        using var patch = new Mat(working, r);
-                        var mean = Cv2.Mean(patch);
-                        double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
-                        if (brightness > blackThreshold * 1.5)
-                            corners.Add(mean);
-                    }
+        //    try
+        //    {
+        //        int rows = working.Rows;
+        //        int cols = working.Cols;
 
-                    if (corners.Count > 0)
-                    {
-                        double b = 0, g = 0, r = 0;
-                        foreach (var s in corners) { b += s.Val0; g += s.Val1; r += s.Val2; }
-                        chosenBg = new Scalar(b / corners.Count, g / corners.Count, r / corners.Count);
-                    }
-                    else
-                    {
-                        chosenBg = new Scalar(255, 255, 255);
-                    }
-                }
+        //        // --- определяем цвет фона (простая стратегия по углам) ---
+        //        Scalar chosenBg;
+        //        if (bgColor.HasValue)
+        //        {
+        //            chosenBg = bgColor.Value;
+        //        }
+        //        else
+        //        {
+        //            int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
+        //            var corners = new List<Scalar>();
+        //            var rects = new[]
+        //            {
+        //        new Rect(0, 0, cornerSize, cornerSize),
+        //        new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
+        //        new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
+        //        new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
+        //    };
 
-                // --- маска темных пикселей ---
-                using var gray = new Mat();
-                Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
+        //            foreach (var r in rects)
+        //            {
+        //                if (r.Width <= 0 || r.Height <= 0) continue;
+        //                using var patch = new Mat(working, r);
+        //                var mean = Cv2.Mean(patch);
+        //                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
+        //                if (brightness > blackThreshold * 1.5)
+        //                    corners.Add(mean);
+        //            }
 
-                using var darkMask = new Mat();
-                Cv2.Threshold(gray, darkMask, blackThreshold, 255, ThresholdTypes.BinaryInv); // темные -> 255
+        //            if (corners.Count > 0)
+        //            {
+        //                double b = 0, g = 0, r = 0;
+        //                foreach (var s in corners) { b += s.Val0; g += s.Val1; r += s.Val2; }
+        //                chosenBg = new Scalar(b / corners.Count, g / corners.Count, r / corners.Count);
+        //            }
+        //            else
+        //            {
+        //                chosenBg = new Scalar(255, 255, 255);
+        //            }
+        //        }
 
-                // --- connected components: создаём Mats заранее (не используя out) ---
-                var labels = new Mat();
-                var stats = new Mat();
-                var centroids = new Mat();
+        //        // --- маска темных пикселей ---
+        //        using var gray = new Mat();
+        //        Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
 
-                try
-                {
-                    // В разных версиях OpenCvSharp есть разные перегрузки; эта вызовет нужную версию
-                    int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, centroids);
+        //        using var darkMask = new Mat();
+        //        Cv2.Threshold(gray, darkMask, blackThreshold, 255, ThresholdTypes.BinaryInv); // темные -> 255
 
-                    // Копия для заполнения
-                    var filled = working.Clone();
+        //        // --- connected components: создаём Mats заранее (не используя out) ---
+        //        var labels = new Mat();
+        //        var stats = new Mat();
+        //        var centroids = new Mat();
 
-                    if (nLabels > 1)
-                    {
-                        for (int i = 1; i < nLabels; i++)
-                        {
-                            int x = stats.At<int>(i, 0);
-                            int y = stats.At<int>(i, 1);
-                            int w = stats.At<int>(i, 2);
-                            int h = stats.At<int>(i, 3);
+        //        try
+        //        {
+        //            // В разных версиях OpenCvSharp есть разные перегрузки; эта вызовет нужную версию
+        //            int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, centroids);
 
-                            bool touches = (x <= 0) || (y <= 0) || (x + w >= cols - 1) || (y + h >= rows - 1);
-                            if (!touches) continue;
+        //            // Копия для заполнения
+        //            var filled = working.Clone();
 
-                            // compMask: где labels == i
-                            using var compMask = new Mat();
-                            Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // эквивалент labels==i
+        //            if (nLabels > 1)
+        //            {
+        //                for (int i = 1; i < nLabels; i++)
+        //                {
+        //                    int x = stats.At<int>(i, 0);
+        //                    int y = stats.At<int>(i, 1);
+        //                    int w = stats.At<int>(i, 2);
+        //                    int h = stats.At<int>(i, 3);
 
-                            // заполняем эту компоненту цветом фона
-                            filled.SetTo(chosenBg, compMask);
-                        }
-                    }
+        //                    bool touches = (x <= 0) || (y <= 0) || (x + w >= cols - 1) || (y + h >= rows - 1);
+        //                    if (!touches) continue;
 
-                    var result = filled.Clone();
-                    filled.Dispose();
-                    return result;
-                }
-                finally
-                {
-                    labels.Dispose();
-                    stats.Dispose();
-                    centroids.Dispose();
-                }
-            }
-            finally
-            {
-                if (createdWorking && working != null)
-                    working.Dispose();
-            }
-        }
+        //                    // compMask: где labels == i
+        //                    using var compMask = new Mat();
+        //                    Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // эквивалент labels==i
+
+        //                    // заполняем эту компоненту цветом фона
+        //                    filled.SetTo(chosenBg, compMask);
+        //                }
+        //            }
+
+        //            var result = filled.Clone();
+        //            filled.Dispose();
+        //            return result;
+        //        }
+        //        finally
+        //        {
+        //            labels.Dispose();
+        //            stats.Dispose();
+        //            centroids.Dispose();
+        //        }
+        //    }
+        //    finally
+        //    {
+        //        if (createdWorking && working != null)
+        //            working.Dispose();
+        //    }
+        //}
 
         private Mat RotateImageForDetection(Mat srcGrayBinary, double angle)
         {
@@ -3228,81 +2818,81 @@ namespace ImgViewer.Models
             return -median;
         }
 
-        public double GetSkewAngleByProjection(Mat src, double minAngle = -15, double maxAngle = 15, double coarseStep = 1.0, double refineStep = 0.1)
-        {
-            // Метод: ищем угол, при котором горизонтальные проекции (row sums) дают наиболее выраженные пики => максимальная дисперсия
-            // Для скорости работаем на уменьшенной серой бинарной картинке.
-            int detectWidth = 1000;
-            Mat small = src.Width > detectWidth ? src.Resize(new OpenCvSharp.Size(detectWidth, (int)(src.Height * (detectWidth / (double)src.Width)))) : src.Clone();
+        //public double GetSkewAngleByProjection(Mat src, double minAngle = -15, double maxAngle = 15, double coarseStep = 1.0, double refineStep = 0.1)
+        //{
+        //    // Метод: ищем угол, при котором горизонтальные проекции (row sums) дают наиболее выраженные пики => максимальная дисперсия
+        //    // Для скорости работаем на уменьшенной серой бинарной картинке.
+        //    int detectWidth = 1000;
+        //    Mat small = src.Width > detectWidth ? src.Resize(new OpenCvSharp.Size(detectWidth, (int)(src.Height * (detectWidth / (double)src.Width)))) : src.Clone();
 
-            using var gray = new Mat();
-            Cv2.CvtColor(small, gray, ColorConversionCodes.BGR2GRAY);
+        //    using var gray = new Mat();
+        //    Cv2.CvtColor(small, gray, ColorConversionCodes.BGR2GRAY);
 
-            // Adaptive threshold или Otsu
-            using var bw = new Mat();
-            Cv2.Threshold(gray, bw, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-            // Инвертируем: текст = 1
-            Cv2.BitwiseNot(bw, bw);
+        //    // Adaptive threshold или Otsu
+        //    using var bw = new Mat();
+        //    Cv2.Threshold(gray, bw, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+        //    // Инвертируем: текст = 1
+        //    Cv2.BitwiseNot(bw, bw);
 
-            // Убираем мелкие шумы (опционно)
-            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-            Cv2.MorphologyEx(bw, bw, MorphTypes.Open, kernel);
+        //    // Убираем мелкие шумы (опционно)
+        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
+        //    Cv2.MorphologyEx(bw, bw, MorphTypes.Open, kernel);
 
-            Func<Mat, double> scoreFor = (Mat m) =>
-            {
-                // считаем сумму по строкам (double[])
-                var rowSums = new double[m.Rows];
-                Func<Mat, double> scoreFor = (Mat m) =>
-                {
-                    int rows = m.Rows;
-                    int cols = m.Cols;
-                    int stride = (int)m.Step();
-                    var buffer = new byte[stride * rows];
-                    Marshal.Copy(m.Data, buffer, 0, buffer.Length);
+        //    Func<Mat, double> scoreFor = (Mat m) =>
+        //    {
+        //        // считаем сумму по строкам (double[])
+        //        var rowSums = new double[m.Rows];
+        //        Func<Mat, double> scoreFor = (Mat m) =>
+        //        {
+        //            int rows = m.Rows;
+        //            int cols = m.Cols;
+        //            int stride = (int)m.Step();
+        //            var buffer = new byte[stride * rows];
+        //            Marshal.Copy(m.Data, buffer, 0, buffer.Length);
 
-                    double[] rowSums = new double[rows];
-                    for (int r = 0; r < rows; r++)
-                    {
-                        int off = r * stride;
-                        double sum = 0;
-                        for (int c = 0; c < cols; c++)
-                            sum += buffer[off + c];
-                        rowSums[r] = sum;
-                    }
+        //            double[] rowSums = new double[rows];
+        //            for (int r = 0; r < rows; r++)
+        //            {
+        //                int off = r * stride;
+        //                double sum = 0;
+        //                for (int c = 0; c < cols; c++)
+        //                    sum += buffer[off + c];
+        //                rowSums[r] = sum;
+        //            }
 
-                    double mean = rowSums.Average();
-                    double var = rowSums.Select(v => (v - mean) * (v - mean)).Average();
-                    return var;
-                };
-                // Нормализуем и считаем дисперсию — большие пики (строки текста) дают большую дисперсию
-                double mean = rowSums.Average();
-                double var = rowSums.Select(v => (v - mean) * (v - mean)).Average();
-                return var;
-            };
+        //            double mean = rowSums.Average();
+        //            double var = rowSums.Select(v => (v - mean) * (v - mean)).Average();
+        //            return var;
+        //        };
+        //        // Нормализуем и считаем дисперсию — большие пики (строки текста) дают большую дисперсию
+        //        double mean = rowSums.Average();
+        //        double var = rowSums.Select(v => (v - mean) * (v - mean)).Average();
+        //        return var;
+        //    };
 
-            // coarse search
-            double bestAngle = 0;
-            double bestScore = double.MinValue;
-            for (double a = minAngle; a <= maxAngle; a += coarseStep)
-            {
-                using var rot = RotateImageForDetection(bw, a);
-                double s = scoreFor(rot);
-                if (s > bestScore) { bestScore = s; bestAngle = a; }
-            }
+        //    // coarse search
+        //    double bestAngle = 0;
+        //    double bestScore = double.MinValue;
+        //    for (double a = minAngle; a <= maxAngle; a += coarseStep)
+        //    {
+        //        using var rot = RotateImageForDetection(bw, a);
+        //        double s = scoreFor(rot);
+        //        if (s > bestScore) { bestScore = s; bestAngle = a; }
+        //    }
 
-            // refine around bestAngle
-            double refineMin = Math.Max(minAngle, bestAngle - coarseStep);
-            double refineMax = Math.Min(maxAngle, bestAngle + coarseStep);
-            for (double a = refineMin; a <= refineMax; a += refineStep)
-            {
-                using var rot = RotateImageForDetection(bw, a);
-                double s = scoreFor(rot);
-                if (s > bestScore) { bestScore = s; bestAngle = a; }
-            }
+        //    // refine around bestAngle
+        //    double refineMin = Math.Max(minAngle, bestAngle - coarseStep);
+        //    double refineMax = Math.Min(maxAngle, bestAngle + coarseStep);
+        //    for (double a = refineMin; a <= refineMax; a += refineStep)
+        //    {
+        //        using var rot = RotateImageForDetection(bw, a);
+        //        double s = scoreFor(rot);
+        //        if (s > bestScore) { bestScore = s; bestAngle = a; }
+        //    }
 
-            small.Dispose();
-            return -bestAngle; // возвращаем знак для поворота (чтобы выпрямить)
-        }
+        //    small.Dispose();
+        //    return -bestAngle; // возвращаем знак для поворота (чтобы выпрямить)
+        //}
 
         // Sauvola локальная бинаризация (быстро через boxFilter)
         // srcGray: CV_8UC1 grayscale

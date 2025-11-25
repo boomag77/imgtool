@@ -1,4 +1,4 @@
-ï»¿using ImgViewer.Interfaces;
+using ImgViewer.Interfaces;
 using ImgViewer.Views;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -349,7 +349,7 @@ namespace ImgViewer.Models
             }
             else
             {
-                // fallback if binAlgo missing â€” keep previous behaviour
+                // fallback if binAlgo missing — keep previous behaviour
                 isAdaptive = (selectedOption ?? "").Trim().Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
             }
 
@@ -422,7 +422,7 @@ namespace ImgViewer.Models
             }
             else
             {
-                // fallback if bordersAlgo missing â€” keep previous behaviour
+                // fallback if bordersAlgo missing — keep previous behaviour
                 isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
             }
             Debug.WriteLine("Borders Algo - ", bordersAlgo);

@@ -118,6 +118,12 @@ namespace ImgViewer.Models
         Both
     }
 
+    public enum BordersRemovalMethod
+    {
+        Auto,
+        ByContrast
+    }
+
     public class PunchSpec
     {
         public PunchShape Shape { get; set; }
