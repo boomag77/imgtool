@@ -22,6 +22,7 @@ namespace ImgViewer.Models
         private PipelineOperationType _type;
         private string _displayName;
         private ProcessorCommand _processorCommand;
+        private bool _isExpanded = true;
 
         public PipelineOperation(PipelineOperationType type, ProcessorCommand procCommand, string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<PipelineOperation>? execute = null)
         {
@@ -35,6 +36,18 @@ namespace ImgViewer.Models
 
             InitializeParameterVisibilityRules();
             HookParameterChanges();
+        }
+
+        
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                if (_isExpanded == value) return;
+                _isExpanded = value;
+                OnPropertyChanged(); // ??? RaisePropertyChanged, ??? ? ???? ???????
+            }
         }
 
         public ProcessorCommand Command
