@@ -5,6 +5,8 @@ using System.Linq;
 using Size = OpenCvSharp.Size;
 using Point = OpenCvSharp.Point;
 using Point2f = OpenCvSharp.Point2f;
+using System.Diagnostics;
+using ImageMagick;
 
 public static class PunchHoleRemover
 {
@@ -21,7 +23,7 @@ public static class PunchHoleRemover
     /// 
 
     public static Mat RemovePunchHoles(CancellationToken token, Mat src,
-                                      List<PunchSpec> specs,
+                                      List<PunchSpec> specs, double roundness, double fr,
                                       int offsetTop, int offsetBottom,
                                       int offsetLeft, int offsetRight)
     {
@@ -40,7 +42,7 @@ public static class PunchHoleRemover
         else gray = src.Clone();
 
         token.ThrowIfCancellationRequested();
-        Cv2.GaussianBlur(gray, gray, new Size(5, 5), 0);
+        Cv2.GaussianBlur(gray, gray, new Size(9, 9), 2, 2);
 
         // 2) Build search mask (areas near edges where holes expected)
         Mat searchMask = Mat.Zeros(gray.Size(), MatType.CV_8UC1);
@@ -92,6 +94,25 @@ public static class PunchHoleRemover
                 Mat maskedGray = new Mat();
                 gray.CopyTo(maskedGray, searchMask);
 
+
+                /// ??????
+                if (maskedGray.Type() != MatType.CV_8UC1)
+                {
+                    var tmp = new Mat();
+                    maskedGray.ConvertTo(tmp, MatType.CV_8UC1);
+                    maskedGray.Dispose();
+                    maskedGray = tmp;
+                }
+
+                // ???????
+
+                // если по маске вообще нет данных — смысла вызывать Hough нет
+                if (Cv2.CountNonZero(maskedGray) == 0)
+                {
+                    maskedGray.Dispose();
+                    continue; // к следующему spec
+                }
+
                 // HoughCircles expects 8-bit single-channel blurred image
                 // determine min/max radius from spec.Diameter with tolerance
 
@@ -108,17 +129,22 @@ public static class PunchHoleRemover
                 int maxR = Math.Max(minR, (int)Math.Ceiling(radius * (1.0 + spec.SizeToleranceFraction)));
 
                 // parameters tuned as initial guesses — may need adjustment
-                double dp = 1.5;
-                double minDist = Math.Max(10, radius * 1.0);
-                double param1 = 100; // Canny higher threshold
-                double param2 = 30;  // accumulator threshold
+                double dp = 1;
+                double minDist = Math.Max(10, radius * 2.0);
+                //double param1 = 100; // Canny higher threshold
+                //double param2 = 30;  // accumulator threshold
+
+                double param1 = 300;
+                double param2 = roundness;
+
                 CircleSegment[] circles;
                 try
                 {
-                    circles = Cv2.HoughCircles(maskedGray, HoughModes.Gradient, dp, minDist, param1, param2, minR, maxR);
+                    circles = Cv2.HoughCircles(maskedGray, HoughModes.GradientAlt, dp, minDist, param1, param2, minR, maxR);
                 }
-                catch
+                catch (OpenCVException ex)
                 {
+                    Debug.WriteLine($"Circle Hough exeption: {ex}");
                     circles = new CircleSegment[0];
                 }
 
@@ -220,6 +246,10 @@ public static class PunchHoleRemover
                     if (rect.Height < expH) continue;
                     if (rect.Width > maxW) continue;
                     if (rect.Height > maxH) continue;
+
+                    double rectArea = rect.Width * rect.Height;
+                    double fillRatio = area / rectArea; // 0..1
+                    if (fillRatio < fr) continue;
 
                     // center check inside searchMask region
                     var center = new Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);

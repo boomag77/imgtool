@@ -1102,6 +1102,8 @@ namespace ImgViewer.Models
                             int rightOffset = 100;
                             int topOffset = 100;
                             int bottomOffset = 100;
+                            double fillRatio = 0.9;
+                            double roundness = 0.9;
 
                             foreach (var kv in parameters)
                             {
@@ -1109,20 +1111,27 @@ namespace ImgViewer.Models
 
                                 switch (kv.Key)
                                 {
-                                    case "Circle":
-                                        shape = PunchShape.Circle;
-                                        break;
-                                    case "Rect":
-                                        shape = PunchShape.Rect;
-                                        break;
+                                    //case "Circle":
+                                    //    shape = PunchShape.Circle;
+                                    //    break;
+                                    //case "Rect":
+                                    //    shape = PunchShape.Rect;
+                                    //    break;
                                     case "diameter":
                                         diameter = SafeInt(kv.Value, diameter);
+                                        break;
+                                    case "roundness":
+                                        roundness = SafeDouble(kv.Value, roundness);
+                                        break;
                                         break;
                                     case "height":
                                         height = SafeInt(kv.Value, height);
                                         break;
                                     case "width":
                                         width = SafeInt(kv.Value, width);
+                                        break;
+                                    case "fillRatio":
+                                        fillRatio = SafeDouble(kv.Value, fillRatio);
                                         break;
                                     case "density":
                                         density = SafeDouble(kv.Value, density);
@@ -1160,6 +1169,10 @@ namespace ImgViewer.Models
                                         case "Rect":
                                             shape = PunchShape.Rect;
                                             break;
+                                        case "Both":
+                                            shape = PunchShape.Both;
+                                            //Debug.WriteLine($"IN CASE Both SHAPE = {shape}");
+                                            break;
                                     }
                                 }
 
@@ -1173,6 +1186,7 @@ namespace ImgViewer.Models
                             spec1.RectSize = new OpenCvSharp.Size(width, height);
                             spec1.Density = density;
                             spec1.SizeToleranceFraction = sizeTolerance;
+
                             Debug.WriteLine(spec1.Shape.ToString());
                             Debug.WriteLine(spec1.Diameter.ToString());
                             Debug.WriteLine(width.ToString());
@@ -1180,27 +1194,45 @@ namespace ImgViewer.Models
                             Debug.WriteLine(spec1.Count.ToString());
                             Debug.WriteLine(spec1.Density.ToString());
                             Debug.WriteLine(spec1.SizeToleranceFraction.ToString());
-                            //Debug.WriteLine(offset.ToString());
 
-
-                            specs.Add(spec1);
                             PunchSpec spec2 = new PunchSpec();
                             spec2.Diameter = diameter;
                             spec2.RectSize = new OpenCvSharp.Size(width, height);
                             spec2.Density = density;
                             spec2.SizeToleranceFraction = sizeTolerance;
+
+
                             if (spec1.Shape == PunchShape.Circle)
                             {
-                                spec2.Shape = PunchShape.Rect;
+
+                                specs.Add(spec1);
 
                             }
-                            else
+                            else if (spec1.Shape == PunchShape.Rect)
                             {
-                                spec2.Shape = PunchShape.Circle;
+                                specs.Add(spec1);
                             }
-                            specs.Add(spec1);
-                            specs.Add(spec2);
-                            WorkingImage = PunchHolesRemove(src, specs, topOffset, bottomOffset, leftOffset, rightOffset);
+                            else if (spec1.Shape == PunchShape.Both)
+                            {
+                                spec1.Shape = PunchShape.Circle;
+                                spec2.Shape = PunchShape.Rect;
+                                specs.Add(spec1);
+                                specs.Add(spec2);
+                            }
+                            Debug.WriteLine($"Shape: {spec1.Shape}");
+
+                            Debug.WriteLine($"Specs len: {specs.Count}");
+
+                            var offsets = new Offsets
+                            {
+                                left = leftOffset,
+                                right = rightOffset,
+                                top = topOffset,
+                                bottom = bottomOffset,
+                            };
+
+                            
+                            WorkingImage = PunchHolesRemove(src, specs, roundness, fillRatio, offsets);
 
 
 
@@ -1212,6 +1244,7 @@ namespace ImgViewer.Models
 
 
         }
+
 
         public void UpdateCancellationToken(CancellationToken token)
         {
@@ -1328,19 +1361,24 @@ namespace ImgViewer.Models
             return grayU8;
         }
 
-        private Mat? PunchHolesRemove(Mat src, List<PunchSpec> specs, int offsetTop, int offsetBottom, int offsetLeft, int offsetRight)
+        private Mat? PunchHolesRemove(Mat src, List<PunchSpec> specs, double roundness, double fillRatio, Offsets offsets)
         {
             if (src == null || src.Empty()) return new Mat();
             try
             {
-                return PunchHoleRemover.RemovePunchHoles(_token, src, specs, offsetTop, offsetBottom, offsetLeft, offsetRight);
+                return PunchHoleRemover.RemovePunchHoles(_token, src, specs, roundness, fillRatio, offsets.top, offsets.bottom, offsets.left, offsets.right);
             }
             catch (OperationCanceledException)
             {
                 Debug.WriteLine("PunchHoles Removal cancelled!");
+                return null;
             }
-
-            return null;
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                return null;
+            }
+            
         }
 
 

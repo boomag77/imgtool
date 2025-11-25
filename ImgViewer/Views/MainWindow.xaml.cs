@@ -167,6 +167,7 @@ namespace ImgViewer.Views
         {
             if (_viewModel.OriginalImage == null) return;
 
+            List<PipelineOperation> opsSnapshot;
 
             lock (_liveLock)
             {
@@ -177,22 +178,26 @@ namespace ImgViewer.Views
 
             try
             {
+                opsSnapshot = await Dispatcher.InvokeAsync(() =>
+                     _pipeline.Operations
+                     .Where(op => op.InPipeline && op.Live)
+                     .ToList()
+                );
+
                 _manager.CancelImageProcessing();
                 await ResetPreview();
 
-                foreach (var pipelineOp in _pipeline.Operations)
+                foreach (var pipelineOp in opsSnapshot)
                 {
-                    if (!pipelineOp.InPipeline || !pipelineOp.Live)
-                        continue;
                     ProcessorCommand opCommand = pipelineOp.Command;
-                    if (opCommand == null) return; 
+
+                    if (opCommand == null) continue; 
+
                     await _manager.ApplyCommandToProcessingImage(opCommand, pipelineOp.CreateParameterDictionary());
-                    //pipelineOp.Execute();
                 }
             }
             finally
             {
-                //_viewModel.Status = "StandBy";
                 lock (_liveLock) _livePipelineRunning = false;
             }
         }

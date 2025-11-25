@@ -217,12 +217,14 @@ namespace ImgViewer.Models
                             buttonText,
                             new[]
                             {
-                                new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect"}, 0),
+                                new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect", "Both"}, 0),
                                 // Circle
                                 new PipeLineParameter("Diameter", "diameter",50, 1, 500, 1),
+                                new PipeLineParameter("Roundness", "roundness", 0.9, 0.01, 1.00, 0.01),
                                 // Rect
                                 new PipeLineParameter("Height", "height", 80, 1, 500, 1),
                                 new PipeLineParameter("Width", "width", 50, 1, 100, 1),
+                                new PipeLineParameter("Fill ratio", "fillRatio", 0.9, 0.01, 1.0, 0.01),
                    
                                 // common
                                 new PipeLineParameter("Density", "density", 1.00, 0.00, 1.00, 0.05),

@@ -135,6 +135,20 @@ namespace ImgViewer.Models
                 };
             }
 
+            var shape = _parameters.FirstOrDefault(p => p.Key == "punchShape");
+            if (shape != null)
+            {
+                ApplyPunchRemoveVisibility(shape.SelectedOption);
+                shape.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex))
+                    {
+                        ApplyPunchRemoveVisibility(shape.SelectedOption);
+                    }
+                };
+            }
+
+
             // Binarize algorithm rules example
             var binAlgo = _parameters.FirstOrDefault(p => p.Key == "method");
             if (binAlgo != null)
@@ -174,6 +188,8 @@ namespace ImgViewer.Models
                 };
             }
 
+            
+
             // Border removal algorithm rules
             var bordersAlgo = _parameters.FirstOrDefault(p => p.Key == "borderRemovalAlgorithm");
             if (bordersAlgo != null)
@@ -197,6 +213,8 @@ namespace ImgViewer.Models
                     }
                 };
             }
+
+
         }
 
         private void ApplyMorphVisibility(bool enabled)
@@ -261,6 +279,43 @@ namespace ImgViewer.Models
                 }
             }
         }
+
+        private void ApplyPunchRemoveVisibility(string? selectedOption)
+        {
+
+            var selected = (selectedOption ?? "Circle").Trim();
+
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "punchShape":
+                        p.IsVisible = true; // algorithm selector always visible
+                        break;
+
+                    // show these only for Circle shape
+                    case "diameter":
+                    case "roundness":
+                        p.IsVisible = selected.Equals("Circle", StringComparison.OrdinalIgnoreCase) ||
+                                        selected.Equals("Both", StringComparison.OrdinalIgnoreCase);
+                        break;
+
+                    // show these only for Rect Shape
+                    case "width":
+                    case "height":
+                    case "fillRatio":
+                        p.IsVisible = selected.Equals("Rect", StringComparison.OrdinalIgnoreCase) ||
+                                       selected.Equals("Both", StringComparison.OrdinalIgnoreCase);
+                        break;
+
+                    default:
+                        p.IsVisible = true;
+                        break;
+                }
+            }
+        }
+
+        
 
         private void ApplyBinarizeVisibility(string? selectedOption)
         {
@@ -439,6 +494,8 @@ namespace ImgViewer.Models
                     q.IsVisible = isSauvola && useClahe;
             }
         }
+
+
 
         private void MorphFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {

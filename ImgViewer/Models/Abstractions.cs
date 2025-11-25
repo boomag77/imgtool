@@ -84,6 +84,14 @@ namespace ImgViewer.Models
         Majority
     }
 
+    public struct Offsets
+    {
+        public int left;
+        public int right;
+        public int top;
+        public int bottom;
+    }
+
     public struct DoubleOperationParameter
     {
         public string DisplayName;
@@ -106,7 +114,8 @@ namespace ImgViewer.Models
     public enum PunchShape
     {
         Circle,
-        Rect
+        Rect,
+        Both
     }
 
     public class PunchSpec
@@ -120,6 +129,10 @@ namespace ImgViewer.Models
         public double Density { get; set; } = 0.5;
         // if you want extra tolerance in size matching (fraction)
         public double SizeToleranceFraction { get; set; } = 0.4; // ±40%
+
+        public double FillRatio { get; set; } = 0.9;
+
+        public double Roundness { get; set; } = 0.9;
     }
 
     public class DeskewOperation
