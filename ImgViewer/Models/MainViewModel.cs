@@ -15,6 +15,8 @@ namespace ImgViewer.Models
         private string? _imageOnPreviewPath;
         private string _tiffCompressionLabel;
 
+        private bool _isSelectionAvailable = true;
+
         private bool _originalImageIsExpanded = true;
 
         //private string? _lastOpenedFolder;
@@ -22,6 +24,18 @@ namespace ImgViewer.Models
         private string _status = "Ready";
 
         private CancellationTokenSource? _cts;
+
+        public bool IsSelectionAvaliable
+        {
+                       get
+            {
+                return _isSelectionAvailable;
+            }
+            set
+            {
+                _isSelectionAvailable = value;
+            }
+        }
 
         public bool OriginalImageIsExpanded
         {

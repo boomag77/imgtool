@@ -32,7 +32,14 @@ namespace ImgViewer.Views
         //private readonly IImageProcessor _processor;
         private readonly IFileProcessor _explorer;
 
-        private readonly HashSet<PipelineOperation> _handlingOps = new();
+        //private readonly HashSet<PipelineOperation> _handlingOps = new();
+
+        private DraggedItemAdorner? _draggedItemAdorner;
+        private MagnifierAdorner? _magnifierAdorner;
+        private MagnifierAdorner? _originalMagnifierAdorner;
+        private SelectionAdorner? _selectionAdorner;
+        private Rect _selectedRect = Rect.Empty;
+
 
         private PipelineOperation? _draggedOperation;
         private PipelineOperation? _activeOperation;
@@ -42,14 +49,12 @@ namespace ImgViewer.Views
         private bool _isDragging;
         private bool _dropHandled;
         private Point _dragStartPoint;
-        private DraggedItemAdorner? _draggedItemAdorner;
+        
         private InsertionIndicatorAdorner? _insertionAdorner;
 
         private GridLength _originalImageColumnWidth = new GridLength(4, GridUnitType.Star);
 
         // Magnifier
-        private MagnifierAdorner? _magnifierAdorner;
-        private MagnifierAdorner? _originalMagnifierAdorner;
         private bool _magnifierEnabled;
         private double _magnifierZoom = 2.0;
         private const double MagnifierMinZoom = 1.0;
@@ -72,6 +77,37 @@ namespace ImgViewer.Views
         private bool _livePipelineRestartPending;
         private readonly object _liveLock = new();
         private readonly HashSet<PipelineOperation> _liveRunning = new();
+
+
+        // Rect selection
+
+        private double _leftSelected;
+        private double _topSelected;
+        private double _rightSelected;
+        private double _bottomSelected;
+
+        private enum SelectionMode
+        {
+            None,
+            Creating,
+            Moving,
+            ResizeLeft,
+            ResizeRight,
+            ResizeTop,
+            ResizeBottom,
+            ResizeTopLeft,
+            ResizeTopRight,
+            ResizeBottomLeft,
+            ResizeBottomRight
+        }
+
+        private SelectionMode _selectionMode = SelectionMode.None;
+        private Point _selectionDragStart;   // точка, где начался drag
+        private Rect _selectionStartRect;    // прямоугольник на момент начала drag
+
+        // radius hit-zones вокруг углов/граней
+        private const double SelectionHandleHit = 8.0;
+        private const double SelectionMinSize = 5.0;
 
         // debounce для Live-пайплайна
         private CancellationTokenSource? _liveDebounceCts;
@@ -100,7 +136,7 @@ namespace ImgViewer.Views
         private CancellationTokenSource? _currentLoadThumbnailsCts;
 
 
-
+        
 
         //private string _lastOpenedFolder = string.Empty;
 
@@ -315,6 +351,8 @@ namespace ImgViewer.Views
         // --- Replace this existing method with the code below ---
         private void OnOperationParameterChanged(PipelineOperation op, PipeLineParameter? param)
         {
+            
+           
             // если операция не включена в pipeline, игнорируем изменение параметров
             if (!op.InPipeline || !op.Live)
                 return;
@@ -1548,39 +1586,185 @@ namespace ImgViewer.Views
             }
         }
 
+        //private void PreviewImgBox_MouseMove(object sender, MouseEventArgs e)
+        //{
+        //    if (!_magnifierEnabled || _magnifierAdorner == null)
+        //        return;
+
+        //    var pos = e.GetPosition(PreviewViewbox);
+        //    _magnifierAdorner.UpdatePosition(pos);
+
+        //    // --- считаем нормализованные координаты центра лупы ---
+        //    var size = PreviewViewbox.RenderSize;
+        //    if (size.Width > 0 && size.Height > 0)
+        //    {
+        //        _magnifierNormalizedPos = new Point(
+        //            pos.X / size.Width,
+        //            pos.Y / size.Height
+        //        );
+
+        //        // если включена лупа на оригинале — двигаем её в то же относительное место
+        //        if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
+        //        {
+        //            var sizeOrig = OrigViewbox.RenderSize;
+        //            if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
+        //            {
+        //                var origPos = new Point(
+        //                    _magnifierNormalizedPos.X * sizeOrig.Width,
+        //                    _magnifierNormalizedPos.Y * sizeOrig.Height
+        //                );
+
+        //                _originalMagnifierAdorner.UpdatePosition(origPos);
+        //            }
+        //        }
+        //    }
+        //}
+
         private void PreviewImgBox_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!_magnifierEnabled || _magnifierAdorner == null)
+            if (PreviewViewbox == null)
                 return;
 
             var pos = e.GetPosition(PreviewViewbox);
-            _magnifierAdorner.UpdatePosition(pos);
 
-            // --- считаем нормализованные координаты центра лупы ---
-            var size = PreviewViewbox.RenderSize;
-            if (size.Width > 0 && size.Height > 0)
+            // --- 1) Обновление selection (если идёт drag) ---
+            if (_selectionMode != SelectionMode.None &&
+                e.LeftButton == MouseButtonState.Pressed)
             {
-                _magnifierNormalizedPos = new Point(
-                    pos.X / size.Width,
-                    pos.Y / size.Height
-                );
-
-                // если включена лупа на оригинале — двигаем её в то же относительное место
-                if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
+                var size = PreviewViewbox.RenderSize;
+                if (size.Width > 0 && size.Height > 0)
                 {
-                    var sizeOrig = OrigViewbox.RenderSize;
-                    if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
-                    {
-                        var origPos = new Point(
-                            _magnifierNormalizedPos.X * sizeOrig.Width,
-                            _magnifierNormalizedPos.Y * sizeOrig.Height
-                        );
+                    Rect newRect = _selectedRect;
 
-                        _originalMagnifierAdorner.UpdatePosition(origPos);
+                    switch (_selectionMode)
+                    {
+                        case SelectionMode.Creating:
+                            {
+                                double x1 = Math.Min(_selectionDragStart.X, pos.X);
+                                double y1 = Math.Min(_selectionDragStart.Y, pos.Y);
+                                double x2 = Math.Max(_selectionDragStart.X, pos.X);
+                                double y2 = Math.Max(_selectionDragStart.Y, pos.Y);
+                                newRect = new Rect(new Point(x1, y1), new Point(x2, y2));
+                                break;
+                            }
+
+                        case SelectionMode.Moving:
+                            {
+                                double dx = pos.X - _selectionDragStart.X;
+                                double dy = pos.Y - _selectionDragStart.Y;
+                                newRect = new Rect(
+                                    _selectionStartRect.X + dx,
+                                    _selectionStartRect.Y + dy,
+                                    _selectionStartRect.Width,
+                                    _selectionStartRect.Height);
+                                break;
+                            }
+
+                        case SelectionMode.ResizeLeft:
+                            {
+                                double newLeft = pos.X;
+                                newRect = new Rect(
+                                    new Point(newLeft, _selectionStartRect.Top),
+                                    new Point(_selectionStartRect.Right, _selectionStartRect.Bottom));
+                                break;
+                            }
+                        case SelectionMode.ResizeRight:
+                            {
+                                double newRight = pos.X;
+                                newRect = new Rect(
+                                    new Point(_selectionStartRect.Left, _selectionStartRect.Top),
+                                    new Point(newRight, _selectionStartRect.Bottom));
+                                break;
+                            }
+                        case SelectionMode.ResizeTop:
+                            {
+                                double newTop = pos.Y;
+                                newRect = new Rect(
+                                    new Point(_selectionStartRect.Left, newTop),
+                                    new Point(_selectionStartRect.Right, _selectionStartRect.Bottom));
+                                break;
+                            }
+                        case SelectionMode.ResizeBottom:
+                            {
+                                double newBottom = pos.Y;
+                                newRect = new Rect(
+                                    new Point(_selectionStartRect.Left, _selectionStartRect.Top),
+                                    new Point(_selectionStartRect.Right, newBottom));
+                                break;
+                            }
+
+                        case SelectionMode.ResizeTopLeft:
+                            {
+                                double newLeft = pos.X;
+                                double newTop = pos.Y;
+                                newRect = new Rect(
+                                    new Point(newLeft, newTop),
+                                    new Point(_selectionStartRect.Right, _selectionStartRect.Bottom));
+                                break;
+                            }
+                        case SelectionMode.ResizeTopRight:
+                            {
+                                double newRight = pos.X;
+                                double newTop = pos.Y;
+                                newRect = new Rect(
+                                    new Point(_selectionStartRect.Left, newTop),
+                                    new Point(newRight, _selectionStartRect.Bottom));
+                                break;
+                            }
+                        case SelectionMode.ResizeBottomLeft:
+                            {
+                                double newLeft = pos.X;
+                                double newBottom = pos.Y;
+                                newRect = new Rect(
+                                    new Point(newLeft, _selectionStartRect.Top),
+                                    new Point(_selectionStartRect.Right, newBottom));
+                                break;
+                            }
+                        case SelectionMode.ResizeBottomRight:
+                            {
+                                double newRight = pos.X;
+                                double newBottom = pos.Y;
+                                newRect = new Rect(
+                                    new Point(_selectionStartRect.Left, _selectionStartRect.Top),
+                                    new Point(newRight, newBottom));
+                                break;
+                            }
+                    }
+
+                    UpdateSelectedRect(newRect);
+                }
+            }
+
+            // --- 2) Лупа (не трогаем твою логику синхронизации) ---
+            if (_magnifierEnabled && _magnifierAdorner != null)
+            {
+                _magnifierAdorner.UpdatePosition(pos);
+
+                var size = PreviewViewbox.RenderSize;
+                if (size.Width > 0 && size.Height > 0)
+                {
+                    _magnifierNormalizedPos = new Point(
+                        pos.X / size.Width,
+                        pos.Y / size.Height
+                    );
+
+                    if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
+                    {
+                        var sizeOrig = OrigViewbox.RenderSize;
+                        if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
+                        {
+                            var origPos = new Point(
+                                _magnifierNormalizedPos.X * sizeOrig.Width,
+                                _magnifierNormalizedPos.Y * sizeOrig.Height
+                            );
+
+                            _originalMagnifierAdorner.UpdatePosition(origPos);
+                        }
                     }
                 }
             }
         }
+
 
         private void PreviewImgBox_MouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -1744,6 +1928,236 @@ namespace ImgViewer.Views
             {
                 _layer.Remove(this);
             }
+        }
+
+        private sealed class SelectionAdorner : Adorner
+        {
+            private readonly AdornerLayer _layer;
+            private Rect _rect;
+
+            private readonly Pen _borderPen;
+            private readonly Brush _fillBrush;
+            private readonly Brush _handleBrush;
+
+            private const double HandleSize = 6.0;
+
+            public SelectionAdorner(UIElement adornedElement, AdornerLayer layer)
+                : base(adornedElement)
+            {
+                _layer = layer;
+                IsHitTestVisible = false;
+
+                var borderColor = Color.FromArgb(220, 0, 120, 215); // синий
+                var borderBrush = new SolidColorBrush(borderColor);
+                borderBrush.Freeze();
+                _borderPen = new Pen(borderBrush, 1.0);
+                _borderPen.Freeze();
+
+                _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215)); // полупрозрачный
+                _fillBrush.Freeze();
+
+                _handleBrush = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+                _handleBrush.Freeze();
+
+                _layer.Add(this);
+            }
+
+            public void UpdateRect(Rect rect)
+            {
+                _rect = rect;
+                InvalidateVisual();
+            }
+
+            protected override void OnRender(DrawingContext drawingContext)
+            {
+                base.OnRender(drawingContext);
+
+                if (_rect.IsEmpty || _rect.Width <= 0 || _rect.Height <= 0)
+                    return;
+
+                // заполнение + рамка
+                drawingContext.DrawRectangle(_fillBrush, _borderPen, _rect);
+
+                double hs = HandleSize / 2.0;
+
+                DrawHandle(drawingContext, _rect.TopLeft, hs);
+                DrawHandle(drawingContext, _rect.TopRight, hs);
+                DrawHandle(drawingContext, _rect.BottomLeft, hs);
+                DrawHandle(drawingContext, _rect.BottomRight, hs);
+            }
+
+            private void DrawHandle(DrawingContext ctx, Point center, double hs)
+            {
+                var rect = new Rect(
+                    new Point(center.X - hs, center.Y - hs),
+                    new Size(HandleSize, HandleSize));
+
+                ctx.DrawRectangle(_handleBrush, null, rect);
+            }
+
+            public void Remove()
+            {
+                _layer.Remove(this);
+            }
+        }
+
+        private void PreviewViewbox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (PreviewViewbox == null || !_viewModel.IsSelectionAvaliable)
+                return;
+
+            var pos = e.GetPosition(PreviewViewbox);
+
+            EnsureSelectionAdorner();
+
+            // если уже есть selection — проверим, попали ли в него
+            if (HasSelection)
+            {
+                var mode = HitTestSelection(pos);
+                if (mode != SelectionMode.None)
+                {
+                    _selectionMode = mode;
+                    _selectionDragStart = pos;
+                    _selectionStartRect = _selectedRect;
+                    PreviewViewbox.CaptureMouse();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // иначе начинаем новый selection
+            _selectionMode = SelectionMode.Creating;
+            _selectionDragStart = pos;
+            _selectionStartRect = Rect.Empty;
+
+            // начальный прямоугольник нулевого размера
+            UpdateSelectedRect(new Rect(pos, new Size(0, 0)));
+            PreviewViewbox.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void PreviewViewbox_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (PreviewViewbox == null)
+                return;
+
+            if (_selectionMode != SelectionMode.None)
+            {
+                PreviewViewbox.ReleaseMouseCapture();
+                _selectionMode = SelectionMode.None;
+                e.Handled = true;
+            }
+        }
+
+
+
+
+        private void EnsureSelectionAdorner()
+        {
+            if (_selectionAdorner != null || PreviewViewbox == null)
+                return;
+
+            var layer = AdornerLayer.GetAdornerLayer(PreviewViewbox);
+            if (layer != null)
+            {
+                _selectionAdorner = new SelectionAdorner(PreviewViewbox, layer);
+            }
+        }
+
+        private void UpdateSelectedRect(Rect rect)
+        {
+            if (PreviewViewbox == null)
+                return;
+
+            var size = PreviewViewbox.RenderSize;
+            if (size.Width <= 0 || size.Height <= 0)
+                return;
+
+            // клампим внутрь PreviewViewbox
+            double left = Math.Max(0, Math.Min(rect.Left, size.Width));
+            double top = Math.Max(0, Math.Min(rect.Top, size.Height));
+            double right = Math.Max(0, Math.Min(rect.Right, size.Width));
+            double bottom = Math.Max(0, Math.Min(rect.Bottom, size.Height));
+
+            if (right < left) (left, right) = (right, left);
+            if (bottom < top) (top, bottom) = (bottom, top);
+
+            Rect clamped = new Rect(new Point(left, top), new Point(right, bottom));
+
+            if (clamped.Width < SelectionMinSize || clamped.Height < SelectionMinSize)
+            {
+                // даём сделать совсем маленький, но не отрицательный
+                clamped = new Rect(clamped.X, clamped.Y,
+                                   Math.Max(clamped.Width, SelectionMinSize),
+                                   Math.Max(clamped.Height, SelectionMinSize));
+            }
+
+            _selectedRect = clamped;
+
+            _leftSelected = _selectedRect.Left;
+            _topSelected = _selectedRect.Top;
+            _rightSelected = _selectedRect.Right;
+            _bottomSelected = _selectedRect.Bottom;
+
+            _selectionAdorner?.UpdateRect(_selectedRect);
+
+#if DEBUG
+            Debug.WriteLine($"Selection: L={_leftSelected:0.##}, T={_topSelected:0.##}, R={_rightSelected:0.##}, B={_bottomSelected:0.##}");
+#endif
+        }
+
+        // простой хелпер, чтобы узнать — есть ли уже выбор
+        private bool HasSelection =>
+            !_selectedRect.IsEmpty &&
+            _selectedRect.Width > 0 &&
+            _selectedRect.Height > 0;
+
+        private SelectionMode HitTestSelection(Point pos)
+        {
+            if (!HasSelection)
+                return SelectionMode.None;
+
+            var r = _selectedRect;
+
+            // углы
+            if (Distance(pos, r.TopLeft) <= SelectionHandleHit)
+                return SelectionMode.ResizeTopLeft;
+            if (Distance(pos, r.TopRight) <= SelectionHandleHit)
+                return SelectionMode.ResizeTopRight;
+            if (Distance(pos, r.BottomLeft) <= SelectionHandleHit)
+                return SelectionMode.ResizeBottomLeft;
+            if (Distance(pos, r.BottomRight) <= SelectionHandleHit)
+                return SelectionMode.ResizeBottomRight;
+
+            // грани
+            if (Math.Abs(pos.X - r.Left) <= SelectionHandleHit &&
+                pos.Y >= r.Top && pos.Y <= r.Bottom)
+                return SelectionMode.ResizeLeft;
+
+            if (Math.Abs(pos.X - r.Right) <= SelectionHandleHit &&
+                pos.Y >= r.Top && pos.Y <= r.Bottom)
+                return SelectionMode.ResizeRight;
+
+            if (Math.Abs(pos.Y - r.Top) <= SelectionHandleHit &&
+                pos.X >= r.Left && pos.X <= r.Right)
+                return SelectionMode.ResizeTop;
+
+            if (Math.Abs(pos.Y - r.Bottom) <= SelectionHandleHit &&
+                pos.X >= r.Left && pos.X <= r.Right)
+                return SelectionMode.ResizeBottom;
+
+            // внутри — move
+            if (r.Contains(pos))
+                return SelectionMode.Moving;
+
+            return SelectionMode.None;
+        }
+
+        private static double Distance(Point a, Point b)
+        {
+            double dx = a.X - b.X;
+            double dy = a.Y - b.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
         }
 
 

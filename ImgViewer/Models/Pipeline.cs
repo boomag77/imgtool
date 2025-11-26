@@ -148,7 +148,7 @@ namespace ImgViewer.Models
                             buttonText,
                             new[]
                             {
-                                new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast"}, 0),
+                                new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast", "Manual"}, 0),
                                 // By contrast
                                 new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
                                 new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 250, 1),
@@ -165,6 +165,11 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 20, 1),
+                                // Manual
+                                new PipeLineParameter("Left", "manualLeft", 0, 0, 10000, 1),
+                                new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),
+                                new PipeLineParameter("Top", "manualTop", 0, 0, 10000, 1),
+                                new PipeLineParameter("Bottom", "manualBottom", 0, 0, 10000, 1),
 
                             },
                             operation => ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));

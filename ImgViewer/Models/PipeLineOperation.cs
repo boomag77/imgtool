@@ -423,13 +423,18 @@ namespace ImgViewer.Models
         {
             var bordersAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
             bool isAuto = false;
+            bool isManual = false;
             var autoThreshFlag = _parameters.FirstOrDefault(x => x.Key == "autoThresh");
             bool autoThresh = autoThreshFlag != null && autoThreshFlag.IsBool && autoThreshFlag.BoolValue;
             if (bordersAlgo != null)
             {
                 var opt = (bordersAlgo.SelectedOption ?? string.Empty).Trim();
                 if (!string.IsNullOrEmpty(opt))
+                {
                     isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+                    isManual = opt.Equals("Manual", StringComparison.OrdinalIgnoreCase);
+                }
+                    
                 else
                     isAuto = bordersAlgo.SelectedIndex == 0; // defensive fallback: index 0 = Auto
             }
@@ -438,7 +443,6 @@ namespace ImgViewer.Models
                 // fallback if bordersAlgo missing — keep previous behaviour
                 isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
             }
-            Debug.WriteLine("Borders Algo - ", bordersAlgo);
             foreach (var p in _parameters)
             {
                 switch (p.Key)
@@ -474,6 +478,12 @@ namespace ImgViewer.Models
                     case "minDepthFraction":
                     case "featherPx":
                         p.IsVisible = isAuto;
+                        break;
+                    case "manualLeft":
+                    case "manualTop":
+                    case "manualRight":
+                    case "manualBottom":    
+                        p.IsVisible = isManual;
                         break;
                     default:
                         p.IsVisible = true;

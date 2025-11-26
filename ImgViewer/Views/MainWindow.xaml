@@ -928,13 +928,17 @@
                 VerticalAlignment="Center"
                 SnapsToDevicePixels="True"
                 CornerRadius="6">
-                <Viewbox x:Name="PreviewViewbox" Stretch="Uniform">
+                <Viewbox x:Name="PreviewViewbox"
+                         Stretch="Uniform"
+                         MouseMove="PreviewImgBox_MouseMove"
+                         MouseWheel="PreviewImgBox_MouseWheel"
+                         PreviewMouseLeftButtonDown="PreviewViewbox_PreviewMouseLeftButtonDown"
+                         PreviewMouseLeftButtonUp="PreviewViewbox_PreviewMouseLeftButtonUp">
                 <Image x:Name="PreviewImgBox"
                        RenderOptions.BitmapScalingMode="HighQuality"
                        Source="{Binding ImageOnPreview}"
                        Stretch="None" 
-                       MouseMove="PreviewImgBox_MouseMove"
-                       MouseWheel="PreviewImgBox_MouseWheel"/>
+                       />
             </Viewbox>
         </Border>
 

@@ -595,5 +595,25 @@ namespace ImgViewer.Models
             return (list[mid - 1] + list[mid]) / 2;
         }
 
+
+        public static Mat? ManualCut(CancellationToken token, Mat src, int x,  int y, int w, int h)
+        {
+            token.ThrowIfCancellationRequested();
+            if (src == null || src.Empty())
+                return null;
+            int rows = src.Rows;
+            int cols = src.Cols;
+
+            // clamp
+            x = Math.Max(0, Math.Min(cols - 1, x));
+            y = Math.Max(0, Math.Min(rows - 1, y));
+            w = Math.Max(1, Math.Min(cols - x, w));
+            h = Math.Max(1, Math.Min(rows - y, h));
+
+            var roi = new Rect(x, y, w, h);
+            Mat result = new Mat(src, roi).Clone();
+            return result;
+        }
+
     }
 }
