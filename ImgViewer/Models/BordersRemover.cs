@@ -596,22 +596,46 @@ namespace ImgViewer.Models
         }
 
 
-        public static Mat? ManualCut(CancellationToken token, Mat src, int x,  int y, int w, int h)
+        public static Mat? ManualCut(CancellationToken token, Mat src, int x,  int y, int w, int h, bool debug = true)
         {
+            Debug.WriteLine("Manual cut");
+
             token.ThrowIfCancellationRequested();
             if (src == null || src.Empty())
                 return null;
+
+            Mat srcBgr = src;
+            if (src.Type() != MatType.CV_8UC3)
+            {
+                srcBgr = new Mat();
+                src.ConvertTo(srcBgr, MatType.CV_8UC3);
+            }
+
             int rows = src.Rows;
             int cols = src.Cols;
 
-            // clamp
-            x = Math.Max(0, Math.Min(cols - 1, x));
-            y = Math.Max(0, Math.Min(rows - 1, y));
-            w = Math.Max(1, Math.Min(cols - x, w));
-            h = Math.Max(1, Math.Min(rows - y, h));
+            Mat result = srcBgr.Clone();
 
-            var roi = new Rect(x, y, w, h);
-            Mat result = new Mat(src, roi).Clone();
+            if (debug)
+            {
+                using var mask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(255));
+                var roi = new Rect(x, y, w, h);
+                Cv2.Rectangle(mask, roi, Scalar.All(0), thickness: -1);
+                result.SetTo(new Scalar(0, 0, 255), mask);
+
+            }
+            else
+            {
+                // clamp
+                //x = Math.Max(0, Math.Min(cols - 1, x));
+                //y = Math.Max(0, Math.Min(rows - 1, y));
+                //w = Math.Max(1, Math.Min(cols - x, w));
+                //h = Math.Max(1, Math.Min(rows - y, h));
+
+                //var roi = new Rect(x, y, w, h);
+                //result = new Mat(src, roi).Clone();
+            }
+
             return result;
         }
 

@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 
 namespace ImgViewer.Models
 {
@@ -800,6 +801,7 @@ namespace ImgViewer.Models
                                 double solidityThreshold = 0.6;
                                 double minDepthFraction = 0.05;
                                 int featherPx = 12;
+                                int top = 0, bottom = 0, left = 0, right = 0;
 
 
                                 foreach (var kv in parameters)
@@ -859,6 +861,18 @@ namespace ImgViewer.Models
                                         case "maxRemoveFrac":
                                             maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
                                             break;
+                                        case "manualTop":
+                                            top = SafeInt(kv.Value, top);
+                                            break;
+                                        case "manualBottom":
+                                            bottom = SafeInt(kv.Value, bottom);
+                                            break;
+                                        case "manualLeft":
+                                            left = SafeInt(kv.Value, left);
+                                            break;
+                                        case "manualRight":
+                                            right = SafeInt(kv.Value, right);
+                                            break;
 
                                         default:
                                             // ignore unknown key
@@ -896,6 +910,11 @@ namespace ImgViewer.Models
                                                         maxRemoveFrac: maxRemoveFrac
                                                     );
                                                 break;
+                                            case "Manual":
+                                                
+                                                WorkingImage = RemoveBorders_Manual(src, top, bottom, left, right);
+                                                break;
+
                                         }
                                     }
 
@@ -1123,7 +1142,6 @@ namespace ImgViewer.Models
                                     case "roundness":
                                         roundness = SafeDouble(kv.Value, roundness);
                                         break;
-                                        break;
                                     case "height":
                                         height = SafeInt(kv.Value, height);
                                         break;
@@ -1243,6 +1261,30 @@ namespace ImgViewer.Models
             }
 
 
+        }
+
+        private Mat? RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right)
+        {
+            int x = left;
+            int y = top;
+            int width = src.Cols - left - right;
+            int height = src.Rows - top - bottom;
+            if (width <= 0 || height <= 0) return src.Clone();
+            try
+            {
+                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height, debug: false);
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("Manual Cut cancelled!");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                return null;
+            }
         }
 
 
