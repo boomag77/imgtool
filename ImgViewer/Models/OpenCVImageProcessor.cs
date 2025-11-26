@@ -802,7 +802,7 @@ namespace ImgViewer.Models
                                 double minDepthFraction = 0.05;
                                 int featherPx = 12;
                                 int top = 0, bottom = 0, left = 0, right = 0;
-
+                                bool manualCutDebug = false;
 
                                 foreach (var kv in parameters)
                                 {
@@ -873,6 +873,9 @@ namespace ImgViewer.Models
                                         case "manualRight":
                                             right = SafeInt(kv.Value, right);
                                             break;
+                                        case "manualCutDebug":
+                                            manualCutDebug = SafeBool(kv.Value, manualCutDebug);
+                                            break;
 
                                         default:
                                             // ignore unknown key
@@ -912,7 +915,7 @@ namespace ImgViewer.Models
                                                 break;
                                             case "Manual":
                                                 
-                                                WorkingImage = RemoveBorders_Manual(src, top, bottom, left, right);
+                                                WorkingImage = RemoveBorders_Manual(src, top, bottom, left, right, manualCutDebug);
                                                 break;
 
                                         }
@@ -1263,7 +1266,7 @@ namespace ImgViewer.Models
 
         }
 
-        private Mat? RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right)
+        private Mat? RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool debug)
         {
             int x = left;
             int y = top;
@@ -1272,7 +1275,7 @@ namespace ImgViewer.Models
             if (width <= 0 || height <= 0) return src.Clone();
             try
             {
-                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height, debug: false);
+                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height, debug);
                 return result;
             }
             catch (OperationCanceledException)

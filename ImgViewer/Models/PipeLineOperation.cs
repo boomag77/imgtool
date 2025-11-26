@@ -24,6 +24,8 @@ namespace ImgViewer.Models
         private ProcessorCommand _processorCommand;
         private bool _isExpanded = true;
 
+        private bool _isManualBordersRemove;
+
         public PipelineOperation(PipelineOperationType type, ProcessorCommand procCommand, string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<PipelineOperation>? execute = null)
         {
             _displayName = displayName;
@@ -38,6 +40,17 @@ namespace ImgViewer.Models
             HookParameterChanges();
         }
 
+        public bool IsManualBordersRemove
+        {
+            get
+            {
+                return _isManualBordersRemove;
+            }
+            set
+            {
+                _isManualBordersRemove = value;
+            }
+        }
         
         public bool IsExpanded
         {
@@ -482,7 +495,8 @@ namespace ImgViewer.Models
                     case "manualLeft":
                     case "manualTop":
                     case "manualRight":
-                    case "manualBottom":    
+                    case "manualBottom":  
+                    case "manualCutDebug":
                         p.IsVisible = isManual;
                         break;
                     default:

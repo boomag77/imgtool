@@ -170,6 +170,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),
                                 new PipeLineParameter("Top", "manualTop", 0, 0, 10000, 1),
                                 new PipeLineParameter("Bottom", "manualBottom", 0, 0, 10000, 1),
+                                new PipeLineParameter("Preview cut", "manualCutDebug", false)
 
                             },
                             operation => ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));

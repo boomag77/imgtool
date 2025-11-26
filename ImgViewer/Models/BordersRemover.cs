@@ -605,10 +605,10 @@ namespace ImgViewer.Models
                 return null;
 
             Mat srcBgr = src;
-            if (src.Type() != MatType.CV_8UC3)
+            if (src.Type() != MatType.CV_8UC4)
             {
                 srcBgr = new Mat();
-                src.ConvertTo(srcBgr, MatType.CV_8UC3);
+                src.ConvertTo(srcBgr, MatType.CV_8UC4);
             }
 
             int rows = src.Rows;
@@ -621,19 +621,24 @@ namespace ImgViewer.Models
                 using var mask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(255));
                 var roi = new Rect(x, y, w, h);
                 Cv2.Rectangle(mask, roi, Scalar.All(0), thickness: -1);
-                result.SetTo(new Scalar(0, 0, 255), mask);
+
+                using var overlay = result.Clone();
+                overlay.SetTo(new Scalar(0, 0, 255, 255), mask);
+
+                double alpha = 0.3; // 0.0 = прозрачно, 1.0 = полностью красный
+                Cv2.AddWeighted(overlay, alpha, result, 1.0 - alpha, 0, result);
 
             }
             else
             {
                 // clamp
-                //x = Math.Max(0, Math.Min(cols - 1, x));
-                //y = Math.Max(0, Math.Min(rows - 1, y));
-                //w = Math.Max(1, Math.Min(cols - x, w));
-                //h = Math.Max(1, Math.Min(rows - y, h));
+                x = Math.Max(0, Math.Min(cols - 1, x));
+                y = Math.Max(0, Math.Min(rows - 1, y));
+                w = Math.Max(1, Math.Min(cols - x, w));
+                h = Math.Max(1, Math.Min(rows - y, h));
 
-                //var roi = new Rect(x, y, w, h);
-                //result = new Mat(src, roi).Clone();
+                var roi = new Rect(x, y, w, h);
+                result = new Mat(src, roi).Clone();
             }
 
             return result;

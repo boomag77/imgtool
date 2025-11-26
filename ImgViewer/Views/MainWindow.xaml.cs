@@ -366,7 +366,126 @@ namespace ImgViewer.Views
             Debug.WriteLine("Stopping");
         }
 
+        private void GetFromSelection_Click(object sender, RoutedEventArgs e)
+        {
 
+            var (success, x, y, w, h) = GetWorkingSelectionPixelRect();
+            if (!success)
+            {
+                System.Windows.MessageBox.Show("No selection on working image.");
+                return;
+            }
+
+            foreach (var op in _pipeline.Operations)
+                {
+                    if (op.Type == PipelineOperationType.BordersRemove)
+                    {   
+                        foreach (var p in op.Parameters)
+                        {
+                        if (p.IsCombo && p.SelectedOption.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Rect viewboxRect = _selectedRect;
+
+                            // 1) Viewbox → Image (DIPs в системе координат PreviewImgBox)
+                            GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
+                            Rect imageRectDip = transform.TransformBounds(viewboxRect);
+
+                            if (PreviewImgBox.Source is not BitmapSource bmp)
+                                return;
+
+                            int imgW = bmp.PixelWidth;
+                            int imgH = bmp.PixelHeight;
+
+                            // если параметры — "толщина от краёв"
+                            int manualLeft = x;
+                            int manualTop = y;
+                            int manualRight = imgW - (x + w);
+                            int manualBottom = imgH - (y + h);
+
+
+                            // Set parameters
+                            foreach (var param in op.Parameters)
+                            {
+                                switch (param.Key)
+                                {
+                                    case "manualLeft":
+                                        param.Value = manualLeft;
+                                        break;
+                                    case "manualTop":
+                                        param.Value = manualTop;
+                                        break;
+                                    case "manualRight":
+                                        param.Value = manualRight;
+                                        break;
+                                    case "manualBottom":
+                                        param.Value = manualBottom;
+                                        break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    }
+            }
+        }
+
+        private (bool success, int x, int y, int width, int height) GetWorkingSelectionPixelRect()
+        {
+            if (_selectedRect.IsEmpty || _selectedRect.Width <= 0 || _selectedRect.Height <= 0)
+                return (false, 0, 0, 0, 0);
+
+            if (PreviewViewbox == null || PreviewImgBox == null)
+                return (false, 0, 0, 0, 0);
+
+            if (PreviewImgBox.Source is not BitmapSource bmp)
+                return (false, 0, 0, 0, 0);
+
+            // 1) Viewbox -> Image (DIPs в системе координат PreviewImgBox)
+            Rect viewboxRect = _selectedRect;
+
+            GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
+            Rect imageRectDip = transform.TransformBounds(viewboxRect);
+
+            if (PreviewImgBox.ActualWidth <= 0 || PreviewImgBox.ActualHeight <= 0)
+                return (false, 0, 0, 0, 0);
+
+            // 2) DIPs (Image) -> пиксели BitmapSource
+            double scaleX = bmp.PixelWidth / PreviewImgBox.ActualWidth;
+            double scaleY = bmp.PixelHeight / PreviewImgBox.ActualHeight;
+
+            double pxLeft = imageRectDip.X * scaleX;
+            double pxTop = imageRectDip.Y * scaleY;
+            double pxRight = (imageRectDip.X + imageRectDip.Width) * scaleX;
+            double pxBottom = (imageRectDip.Y + imageRectDip.Height) * scaleY;
+
+            double leftD = Math.Min(pxLeft, pxRight);
+            double topD = Math.Min(pxTop, pxBottom);
+            double rightD = Math.Max(pxLeft, pxRight);
+            double bottomD = Math.Max(pxTop, pxBottom);
+
+            leftD = Math.Max(0, leftD);
+            topD = Math.Max(0, topD);
+            rightD = Math.Min(bmp.PixelWidth, rightD);
+            bottomD = Math.Min(bmp.PixelHeight, bottomD);
+
+            double wD = rightD - leftD;
+            double hD = bottomD - topD;
+
+            if (wD <= 0 || hD <= 0)
+                return (false, 0, 0, 0, 0);
+
+            int x = (int)Math.Round(leftD);
+            int y = (int)Math.Round(topD);
+            int width = (int)Math.Round(wD);
+            int height = (int)Math.Round(hD);
+
+#if DEBUG
+            Debug.WriteLine($"Selection DIP in Image: {imageRectDip}");
+            Debug.WriteLine($"Selection pixels: x={x}, y={y}, w={width}, h={height}, imgW={bmp.PixelWidth}, imgH={bmp.PixelHeight}");
+#endif
+
+            return (true, x, y, width, height);
+        }
 
 
         private void PipelineRunButton_Click(object sender, RoutedEventArgs e)

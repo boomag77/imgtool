@@ -777,6 +777,12 @@
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
+                                                <Button Content="Get from selection"
+                                                        Margin="0,8,0,0"
+                                                        HorizontalAlignment="Right"
+                                                        Padding="12,4"
+                                                        MinWidth="120"
+                                                        Click="GetFromSelection_Click"/>
                                                 <Button Content="{Binding ActionLabel}"
                                                         Margin="0,8,0,0"
                                                         HorizontalAlignment="Right"
