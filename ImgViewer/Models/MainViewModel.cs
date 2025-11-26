@@ -14,11 +14,26 @@ namespace ImgViewer.Models
         private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
         private string _tiffCompressionLabel;
+
+        private bool _originalImageIsExpanded = true;
+
         //private string? _lastOpenedFolder;
         private int _progress;
         private string _status = "Ready";
 
         private CancellationTokenSource? _cts;
+
+        public bool OriginalImageIsExpanded
+        {
+            get
+            {
+                return _originalImageIsExpanded;
+            }
+            set
+            {
+                _originalImageIsExpanded = value;
+            }
+        }
 
 
         public string TiffCompressionLabel

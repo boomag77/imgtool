@@ -4,7 +4,7 @@ namespace ImgViewer.Interfaces
 {
     public interface IViewModel
     {
-
+        public bool OriginalImageIsExpanded { get; set; }
         public string TiffCompressionLabel { get; set; }
         public ImageSource? ImageOnPreview { get; set; }
         public ImageSource? OriginalImage {  get; set; }

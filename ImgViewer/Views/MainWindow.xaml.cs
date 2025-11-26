@@ -45,6 +45,8 @@ namespace ImgViewer.Views
         private DraggedItemAdorner? _draggedItemAdorner;
         private InsertionIndicatorAdorner? _insertionAdorner;
 
+        private GridLength _originalImageColumnWidth = new GridLength(4, GridUnitType.Star);
+
         // Magnifier
         private MagnifierAdorner? _magnifierAdorner;
         private MagnifierAdorner? _originalMagnifierAdorner;
@@ -106,6 +108,8 @@ namespace ImgViewer.Views
         {
             InitializeComponent();
 
+            _originalImageColumnWidth = RootGrid.ColumnDefinitions[0].Width;
+
             _cts = new CancellationTokenSource();
             _manager = new AppManager(this, _cts);
             _pipeline = new Pipeline(_manager);
@@ -129,10 +133,20 @@ namespace ImgViewer.Views
 
         }
 
-        private void UpdatePipeline(List<Operation> ops)
+        private void OrigExpander_Collapsed(object sender, RoutedEventArgs e)
         {
-            //_pipeline.SetOperationsToPipeline(ops);
-            //InitializePipeLineOperations(ops);
+            // Прячем левую колонку с оригиналом
+            _viewModel.OriginalImageIsExpanded = false;
+            RootGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Auto);
+            RootGrid.ColumnDefinitions[2].Width = new GridLength(8, GridUnitType.Star);
+        }
+
+        private void OrigExpander_Expanded(object sender, RoutedEventArgs e)
+        {
+            // Возвращаем исходную ширину (4*)
+            _viewModel.OriginalImageIsExpanded = true;
+            RootGrid.ColumnDefinitions[0].Width = _originalImageColumnWidth;
+            RootGrid.ColumnDefinitions[2].Width = new GridLength(4, GridUnitType.Star);
         }
 
         private void ScheduleLivePipelineRun()
@@ -723,11 +737,6 @@ namespace ImgViewer.Views
                 Debug.WriteLine($"ExecuteManagerCommand error: {ex}");
             }
         }
-
-        //private void ExecuteProcessorCommand(ProcessorCommand command, Dictionary<string, object> parameters)
-        //{
-        //    _processor?.ApplyCommand(command, parameters);
-        //}
 
         private Dictionary<string, object> GetParametersFromSender(object sender)
         {
