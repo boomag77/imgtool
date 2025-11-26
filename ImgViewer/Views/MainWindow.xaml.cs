@@ -45,6 +45,23 @@ namespace ImgViewer.Views
         private DraggedItemAdorner? _draggedItemAdorner;
         private InsertionIndicatorAdorner? _insertionAdorner;
 
+        // Magnifier
+        private MagnifierAdorner? _magnifierAdorner;
+        private MagnifierAdorner? _originalMagnifierAdorner;
+        private bool _magnifierEnabled;
+        private double _magnifierZoom = 2.0;
+        private const double MagnifierMinZoom = 1.0;
+        private const double MagnifierMaxZoom = 12.0;
+        private const double MagnifierZoomStep = 0.2;
+
+        private double _magnifierSize = 300.0;
+        private const double MagnifierMinSize = 80.0;
+        private const double MagnifierMaxSize = 1000.0;
+        private const double MagnifierSizeStep = 20.0;
+        private bool _originalMagnifierEnabled;
+
+        private Point _magnifierNormalizedPos = new Point(0.5, 0.5);
+
         private double EraseOffset = AppSettings.EraseOperationOffset;   // пикселей от левого/правого края
         private bool _eraseModeActive;
         private bool _operationErased;
@@ -79,6 +96,9 @@ namespace ImgViewer.Views
         private CancellationTokenSource _cts;
         private CancellationTokenSource? _currentLoadPreviewCts;
         private CancellationTokenSource? _currentLoadThumbnailsCts;
+
+
+
 
         //private string _lastOpenedFolder = string.Empty;
 
@@ -970,46 +990,7 @@ namespace ImgViewer.Views
             }
         }
 
-        private void ApplyDeskew(object sender, RoutedEventArgs e)
-        {
-            ExecuteManagerCommand(ProcessorCommand.Deskew, GetParametersFromSender(sender));
-        }
-
-        private void ApplyAutoCropRectangleCurrentCommand(object sender, RoutedEventArgs e)
-        {
-            ExecuteManagerCommand(ProcessorCommand.SmartCrop, GetParametersFromSender(sender));
-        }
-
-        private void ApplyDespeckleCommand(object sender, RoutedEventArgs e)
-        {
-            //ExecuteProcessorCommand(ProcessorCommand.Despeckle, GetParametersFromSender(sender));
-            ExecuteManagerCommand(ProcessorCommand.Despeckle, GetParametersFromSender(sender));
-        }
-
-
-        private void ApplyBorderRemoveCommand_Click(object sender, RoutedEventArgs e)
-        {
-
-            ExecuteManagerCommand(ProcessorCommand.BordersRemove, GetParametersFromSender(sender));
-        }
-
-        private void ApplyAutoBinarizeCommand(object sender, RoutedEventArgs e)
-        {
-            ExecuteManagerCommand(ProcessorCommand.Binarize, GetParametersFromSender(sender));
-        }
-
-        private void ApplyLineRemoveCommand(object sender, RoutedEventArgs e)
-        {
-            ExecuteManagerCommand(ProcessorCommand.LinesRemove, GetParametersFromSender(sender));
-            //ExecuteProcessorCommand(ProcessorCommand.LineRemove, GetParametersFromSender(sender));
-        }
-
-        private void ApplyPunchesRemoveCommand(object sender, RoutedEventArgs e)
-        {
-            ExecuteManagerCommand(ProcessorCommand.DotsRemove, GetParametersFromSender(sender));
-            //ExecuteProcessorCommand(ProcessorCommand.DotsRemove, GetParametersFromSender(sender));
-        }
-
+        
 
         private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
         {
@@ -1379,6 +1360,384 @@ namespace ImgViewer.Views
                 _layer.Remove(this);
             }
         }
+
+        private void EnableMagnifier()
+        {
+            if (_magnifierEnabled || PreviewViewbox == null)
+                return;
+
+            var layer = AdornerLayer.GetAdornerLayer(PreviewViewbox);
+            if (layer == null)
+                return;
+
+            if (_magnifierZoom < MagnifierMinZoom)
+                _magnifierZoom = MagnifierMinZoom;
+
+            // сначала клампим глобальный размер
+            //ClampMagnifierSize();
+
+            Debug.WriteLine($"Working magn size: {_magnifierSize}");
+            _magnifierAdorner = new MagnifierAdorner(
+                PreviewViewbox,
+                layer,
+                _magnifierZoom,
+                _magnifierSize
+            );
+            _magnifierEnabled = true;
+
+            // и синхронизируем размер со второй лупой, если она уже включена
+            ApplyMagnifierSizeToAdorners();
+
+            // стартуем из центра превью
+            var center = new Point(PreviewViewbox.ActualWidth / 2.0,
+                                   PreviewViewbox.ActualHeight / 2.0);
+            _magnifierAdorner.UpdatePosition(center);
+        }
+
+        private void DisableMagnifier()
+        {
+            _magnifierEnabled = false;
+            _magnifierAdorner?.Remove();
+            _magnifierAdorner = null;
+        }
+
+        private void EnableOriginalMagnifier()
+        {
+            if (_originalMagnifierEnabled || OrigViewbox == null)
+                return;
+
+            var layer = AdornerLayer.GetAdornerLayer(OrigViewbox);
+            if (layer == null)
+                return;
+
+            // клампим глобальный размер по обоим изображениям
+            //ClampMagnifierSize();
+
+            Debug.WriteLine($"original magn size: {_magnifierSize}");
+            _originalMagnifierAdorner = new MagnifierAdorner(
+                OrigViewbox,
+                layer,
+                _magnifierZoom,
+                _magnifierSize
+            );
+            _originalMagnifierEnabled = true;
+
+            // позиционируем по нормализованным координатам
+            var sizeOrig = OrigViewbox.RenderSize;
+            Point center;
+            if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
+            {
+                center = new Point(
+                    _magnifierNormalizedPos.X * sizeOrig.Width,
+                    _magnifierNormalizedPos.Y * sizeOrig.Height
+                );
+            }
+            else
+            {
+                center = new Point(OrigViewbox.ActualWidth / 2.0,
+                                   OrigViewbox.ActualHeight / 2.0);
+            }
+
+            center = new Point(OrigViewbox.ActualWidth / 2.0,
+                                   OrigViewbox.ActualHeight / 2.0);
+
+            _originalMagnifierAdorner.UpdatePosition(center);
+
+            // СИНХРОНИЗАЦИЯ: вдруг уже есть лупа на превью → подгоняем её тоже
+            ApplyMagnifierSizeToAdorners();
+        }
+
+
+        private void DisableOriginalMagnifier()
+        {
+            _originalMagnifierEnabled = false;
+            _originalMagnifierAdorner?.Remove();
+            _originalMagnifierAdorner = null;
+        }
+
+        private double GetMaxLensSize()
+        {
+            double max = MagnifierMaxSize;
+
+            // ограничиваем по превью
+            if (PreviewViewbox != null)
+            {
+                var s = PreviewViewbox.RenderSize;
+                if (s.Width > 0 && s.Height > 0)
+                {
+                    var localMax = Math.Min(s.Width, s.Height);
+                    max = Math.Min(max, localMax);
+                }
+            }
+
+            // ограничиваем по оригиналу
+            if (OrigViewbox != null)
+            {
+                var s = OrigViewbox.RenderSize;
+                if (s.Width > 0 && s.Height > 0)
+                {
+                    var localMax = Math.Min(s.Width, s.Height);
+                    max = Math.Min(max, localMax);
+                }
+            }
+
+            // БЕЗ Max(MagnifierMinSize, max) — только максимум
+            return max;
+        }
+
+
+        private void ClampMagnifierSize()
+        {
+            double maxAllowed = GetMaxLensSize();
+            _magnifierSize = Math.Max(MagnifierMinSize, Math.Min(_magnifierSize, maxAllowed));
+        }
+
+        private void ApplyMagnifierSizeToAdorners()
+        {
+            _magnifierAdorner?.UpdateSize(_magnifierSize);
+            _originalMagnifierAdorner?.UpdateSize(_magnifierSize);
+        }
+
+
+
+
+
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            // ESC — turn off both magnifiers
+            if (e.Key == Key.Escape)
+            {
+                if (_magnifierEnabled || _originalMagnifierEnabled)
+                {
+                    DisableMagnifier();           // твой метод, который выключает Preview
+                    DisableOriginalMagnifier();   // новый метод, см. ниже
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // M — on/off magnifier on PreviewImgBox (working image)
+            if (e.Key == Key.M)
+            {
+                if (_magnifierEnabled)
+                    DisableMagnifier();
+                else
+                    EnableMagnifier();
+
+                e.Handled = true;
+            }
+
+            // S — on/off synced magnifier on OrigImgBox (original Image)
+            if (e.Key == Key.S)
+            {
+                if (_originalMagnifierEnabled)
+                    DisableOriginalMagnifier();
+                else
+                    EnableOriginalMagnifier();
+
+                e.Handled = true;
+            }
+        }
+
+        private void PreviewImgBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_magnifierEnabled || _magnifierAdorner == null)
+                return;
+
+            var pos = e.GetPosition(PreviewViewbox);
+            _magnifierAdorner.UpdatePosition(pos);
+
+            // --- считаем нормализованные координаты центра лупы ---
+            var size = PreviewViewbox.RenderSize;
+            if (size.Width > 0 && size.Height > 0)
+            {
+                _magnifierNormalizedPos = new Point(
+                    pos.X / size.Width,
+                    pos.Y / size.Height
+                );
+
+                // если включена лупа на оригинале — двигаем её в то же относительное место
+                if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
+                {
+                    var sizeOrig = OrigViewbox.RenderSize;
+                    if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
+                    {
+                        var origPos = new Point(
+                            _magnifierNormalizedPos.X * sizeOrig.Width,
+                            _magnifierNormalizedPos.Y * sizeOrig.Height
+                        );
+
+                        _originalMagnifierAdorner.UpdatePosition(origPos);
+                    }
+                }
+            }
+        }
+
+        private void PreviewImgBox_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (!_magnifierEnabled || _magnifierAdorner == null || PreviewViewbox == null)
+                return;
+
+            //var pos = e.GetPosition(PreviewImgBox);
+
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                // меняем размер
+                double deltaSize = e.Delta > 0 ? MagnifierSizeStep : -MagnifierSizeStep;
+
+                // сначала двигаем
+                _magnifierSize += deltaSize;
+                ClampMagnifierSize();
+                ApplyMagnifierSizeToAdorners();
+
+                var pos = e.GetPosition(PreviewViewbox);
+                _magnifierAdorner?.UpdatePosition(pos);
+
+                e.Handled = true;
+                return;
+            }
+            else
+            {
+                // меняем zoom
+                double deltaZoom = e.Delta > 0 ? MagnifierZoomStep : -MagnifierZoomStep;
+                _magnifierZoom = Math.Max(MagnifierMinZoom,
+                                  Math.Min(MagnifierMaxZoom, _magnifierZoom + deltaZoom));
+
+                _magnifierAdorner?.UpdateZoom(_magnifierZoom);
+                _originalMagnifierAdorner?.UpdateZoom(_magnifierZoom);
+
+                var pos = e.GetPosition(PreviewViewbox);
+                _magnifierAdorner?.UpdatePosition(pos);
+            }
+
+            e.Handled = true;
+        }
+
+        private sealed class MagnifierAdorner : Adorner
+        {
+            private readonly AdornerLayer _layer;
+            private Point _position;
+            private double _zoom;
+            private double _lensSize;
+
+            public MagnifierAdorner(UIElement adornedElement,
+                                    AdornerLayer layer,
+                                    double initialZoom,
+                                    double lensSize)
+                : base(adornedElement)
+            {
+                _layer = layer;
+                _zoom = initialZoom;
+                _lensSize = lensSize;
+
+                IsHitTestVisible = false;
+                _layer.Add(this);
+            }
+
+            public void UpdatePosition(Point position)
+            {
+                _position = position;
+                InvalidateVisual();
+            }
+
+            public void UpdateSize(double lensSize)
+            {
+                _lensSize = lensSize;
+                InvalidateVisual();
+            }
+
+
+            public void UpdateZoom(double zoom)
+            {
+                _zoom = zoom;
+                InvalidateVisual();
+            }
+
+            protected override void OnRender(DrawingContext drawingContext)
+            {
+                base.OnRender(drawingContext);
+
+                if (AdornedElement is not FrameworkElement element || !element.IsVisible)
+                    return;
+
+                var size = element.RenderSize;
+                if (size.Width <= 0 || size.Height <= 0)
+                    return;
+
+                var lensSize = _lensSize;
+                if (lensSize <= 0)
+                    return;
+
+                double half = lensSize / 2.0;
+
+                // центр так, чтобы ВЕСЬ квадрат был внутри элемента
+                double cx = _position.X;
+                double cy = _position.Y;
+
+                cx = Math.Max(half, Math.Min(cx, size.Width - half));
+                cy = Math.Max(half, Math.Min(cy, size.Height - half));
+
+                var center = new Point(cx, cy);
+                var lensRect = new Rect(center.X - half, center.Y - half, lensSize, lensSize);
+
+                // размер окна в источнике под zoom
+                double viewW = lensSize / _zoom;
+                double viewH = lensSize / _zoom;
+
+                if (viewW > size.Width)
+                    viewW = size.Width;
+                if (viewH > size.Height)
+                    viewH = size.Height;
+
+                // PARALLAX:
+                //  положение лупы (0..1) → положение viewbox (0..maxOffset)
+                double travelX = Math.Max(1.0, size.Width - lensSize);
+                double travelY = Math.Max(1.0, size.Height - lensSize);
+
+                double relX = (center.X - half) / travelX; // 0..1
+                double relY = (center.Y - half) / travelY; // 0..1
+
+                relX = Math.Max(0.0, Math.Min(1.0, relX));
+                relY = Math.Max(0.0, Math.Min(1.0, relY));
+
+                double maxOffsetX = Math.Max(0.0, size.Width - viewW);
+                double maxOffsetY = Math.Max(0.0, size.Height - viewH);
+
+                double vx = maxOffsetX * relX;
+                double vy = maxOffsetY * relY;
+
+                var viewbox = new Rect(vx, vy, viewW, viewH);
+
+                var brush = new VisualBrush(AdornedElement)
+                {
+                    Viewbox = viewbox,
+                    ViewboxUnits = BrushMappingMode.Absolute,
+                    Stretch = Stretch.Fill
+                };
+
+                // содержимое лупы
+                drawingContext.PushClip(new RectangleGeometry(lensRect));
+                drawingContext.DrawRectangle(brush, null, lensRect);
+                drawingContext.Pop();
+
+                // рамка
+                var borderBrush = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+                borderBrush.Freeze();
+                var borderPen = new Pen(borderBrush, 1.5);
+                borderPen.Freeze();
+
+                drawingContext.DrawRectangle(null, borderPen, lensRect);
+            }
+
+
+
+            public void Remove()
+            {
+                _layer.Remove(this);
+            }
+        }
+
+
     }
 
 

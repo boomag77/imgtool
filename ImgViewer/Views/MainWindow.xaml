@@ -1,4 +1,5 @@
 ﻿<Window x:Class="ImgViewer.Views.MainWindow"
+        
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -9,7 +10,8 @@
         xmlns:models="clr-namespace:ImgViewer.Models"
         mc:Ignorable="d"
         Title="Image Genie" Width="1024" Height="768"
-        Background="LightGray">
+        Background="LightGray"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -843,7 +845,7 @@
                 VerticalAlignment="Center"
                 SnapsToDevicePixels="True"
                 CornerRadius="6">
-            <Viewbox Stretch="Uniform">
+                <Viewbox x:Name="OrigViewbox" Stretch="Uniform">
                 <Image x:Name="OrigImgBox"
                        RenderOptions.BitmapScalingMode="HighQuality"
                        Source="{Binding OriginalImage}"
@@ -901,11 +903,13 @@
                 VerticalAlignment="Center"
                 SnapsToDevicePixels="True"
                 CornerRadius="6">
-            <Viewbox Stretch="Uniform">
+                <Viewbox x:Name="PreviewViewbox" Stretch="Uniform">
                 <Image x:Name="PreviewImgBox"
                        RenderOptions.BitmapScalingMode="HighQuality"
                        Source="{Binding ImageOnPreview}"
-                       Stretch="None"/>
+                       Stretch="None" 
+                       MouseMove="PreviewImgBox_MouseMove"
+                       MouseWheel="PreviewImgBox_MouseWheel"/>
             </Viewbox>
         </Border>
 
