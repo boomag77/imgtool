@@ -318,7 +318,6 @@ namespace ImgViewer.Models
                         token.ThrowIfCancellationRequested();
                         using var m = new Mat();
                         Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), m); // 255 where label==lbl
-                        token.ThrowIfCancellationRequested();
                         Cv2.BitwiseOr(removeMask, m, removeMask);
                     }
                     token.ThrowIfCancellationRequested();
@@ -411,8 +410,6 @@ namespace ImgViewer.Models
                             outMat = src.Clone();
                             Mat[] chs = Cv2.Split(outMat);
                             Mat alpha = chs.Length >= 4 ? chs[3].Clone() : null;
-
-                            token.ThrowIfCancellationRequested();
                             // пересобираем 4ch (RGB+Alpha)
                             Cv2.Merge(new[]
                             {
