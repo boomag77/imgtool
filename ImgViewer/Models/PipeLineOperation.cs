@@ -49,6 +49,8 @@ namespace ImgViewer.Models
             set
             {
                 _isManualBordersRemove = value;
+                Debug.WriteLine($"[PipelineOperation] {DisplayName}: IsManualBordersRemove = {_isManualBordersRemove}");
+                OnPropertyChanged();
             }
         }
         
@@ -456,6 +458,9 @@ namespace ImgViewer.Models
                 // fallback if bordersAlgo missing — keep previous behaviour
                 isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
             }
+
+            IsManualBordersRemove = isManual;
+
             foreach (var p in _parameters)
             {
                 switch (p.Key)

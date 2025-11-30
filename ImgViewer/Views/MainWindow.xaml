@@ -11,7 +11,8 @@
         mc:Ignorable="d"
         Title="Image Genie" Width="1024" Height="768"
         Background="LightGray"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        MinHeight="600" MinWidth="800">
     <Window.Resources>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -785,6 +786,7 @@
                                                                                Margin="6,0,0,0"
                                                                                FontSize="11"/>
                                                                 </StackPanel>
+                                                                
                                                             </StackPanel>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
@@ -794,7 +796,11 @@
                                                         HorizontalAlignment="Right"
                                                         Padding="12,4"
                                                         MinWidth="120"
-                                                        Click="GetFromSelection_Click"/>
+                                                        Click="GetFromSelection_Click"
+                                                        Visibility="{Binding
+                                                                    SelectedItem.IsManualBordersRemove,
+                                                                    ElementName=PipelineOperation,
+                                                                    Converter={StaticResource BoolToVis}}"/>
                                                 <Button Content="{Binding ActionLabel}"
                                                         Margin="0,8,0,0"
                                                         HorizontalAlignment="Right"

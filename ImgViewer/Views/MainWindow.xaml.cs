@@ -385,56 +385,57 @@ namespace ImgViewer.Views
             }
 
             foreach (var op in _pipeline.Operations)
-                {
+            {
                     if (op.Type == PipelineOperationType.BordersRemove)
                     {   
                         foreach (var p in op.Parameters)
                         {
-                        if (p.IsCombo && p.SelectedOption.Equals("Manual", StringComparison.OrdinalIgnoreCase))
-                        {
-                            Rect viewboxRect = _selectedRect;
-
-                            // 1) Viewbox → Image (DIPs в системе координат PreviewImgBox)
-                            GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
-                            Rect imageRectDip = transform.TransformBounds(viewboxRect);
-
-                            if (PreviewImgBox.Source is not BitmapSource bmp)
-                                return;
-
-                            int imgW = bmp.PixelWidth;
-                            int imgH = bmp.PixelHeight;
-
-                            // если параметры — "толщина от краёв"
-                            int manualLeft = x;
-                            int manualTop = y;
-                            int manualRight = imgW - (x + w);
-                            int manualBottom = imgH - (y + h);
-
-
-                            // Set parameters
-                            foreach (var param in op.Parameters)
+                            if (p.IsCombo && p.SelectedOption.Equals("Manual", StringComparison.OrdinalIgnoreCase))
                             {
-                                switch (param.Key)
+                                Rect viewboxRect = _selectedRect;
+
+                                // 1) Viewbox → Image (DIPs в системе координат PreviewImgBox)
+                                GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
+                                Rect imageRectDip = transform.TransformBounds(viewboxRect);
+
+                                if (PreviewImgBox.Source is not BitmapSource bmp)
+                                    return;
+
+                                int imgW = bmp.PixelWidth;
+                                int imgH = bmp.PixelHeight;
+
+                                // если параметры — "толщина от краёв"
+                                int manualLeft = x;
+                                int manualTop = y;
+                                int manualRight = imgW - (x + w);
+                                int manualBottom = imgH - (y + h);
+
+
+                                // Set parameters
+                                foreach (var param in op.Parameters)
                                 {
-                                    case "manualLeft":
-                                        param.Value = manualLeft;
-                                        break;
-                                    case "manualTop":
-                                        param.Value = manualTop;
-                                        break;
-                                    case "manualRight":
-                                        param.Value = manualRight;
-                                        break;
-                                    case "manualBottom":
-                                        param.Value = manualBottom;
-                                        break;
+                                    switch (param.Key)
+                                    {
+                                        case "manualLeft":
+                                            param.Value = manualLeft;
+                                            break;
+                                        case "manualTop":
+                                            param.Value = manualTop;
+                                            break;
+                                        case "manualRight":
+                                            param.Value = manualRight;
+                                            break;
+                                        case "manualBottom":
+                                            param.Value = manualBottom;
+                                            break;
+                                    }
                                 }
                             }
                         }
-                    }
                     
                     }
             }
+            ResetSelection();
         }
 
         private (bool success, int x, int y, int width, int height) GetWorkingSelectionPixelRect()
@@ -1685,6 +1686,7 @@ namespace ImgViewer.Views
                 {
                     DisableMagnifier();           // твой метод, который выключает Preview
                     DisableOriginalMagnifier();   // новый метод, см. ниже
+                    ResetSelection();
                     e.Handled = true;
                     return;
                 }
@@ -2176,7 +2178,34 @@ namespace ImgViewer.Views
             }
         }
 
+        private void ResetSelection()
+        {
+            // сбрасываем геометрию
+            _selectedRect = Rect.Empty;
 
+            _leftSelected = 0;
+            _topSelected = 0;
+            _rightSelected = 0;
+            _bottomSelected = 0;
+
+            _selectionMode = SelectionMode.None;
+
+            // отпускаем мышь, если держим
+            PreviewViewbox?.ReleaseMouseCapture();
+
+            // убираем адорнер, если хочешь полностью его снять
+            if (_selectionAdorner != null)
+            {
+                _selectionAdorner.UpdateRect(Rect.Empty); // чтобы он ничего не рисовал
+                                                          // или, если у тебя есть метод Remove():
+                                                          // _selectionAdorner.Remove();
+                                                          // _selectionAdorner = null;
+            }
+
+#if DEBUG
+            Debug.WriteLine("Selection reset");
+#endif
+        }
 
 
         private void EnsureSelectionAdorner()
