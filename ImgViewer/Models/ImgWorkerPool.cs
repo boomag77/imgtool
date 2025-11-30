@@ -26,6 +26,7 @@ namespace ImgViewer.Models
         private int _processedCount;
         private readonly int _totalCount;
         private (ProcessorCommand Command, Dictionary<string, object> Params)[] _plOperations;
+        private readonly string _plJson;
 
         public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
@@ -48,6 +49,7 @@ namespace ImgViewer.Models
                 .Select(op => (op.Command, Params: op.CreateParameterDictionary()))
                 .ToArray();
             _plOperations = opsSnapshot;
+            _plJson = pipeline.BuildPipelineForSave();
             //_pipline = pipeline;
 
             int cpuCount = Environment.ProcessorCount;
@@ -162,7 +164,7 @@ namespace ImgViewer.Models
                             if (outStream.CanSeek) outStream.Position = 0;
                             outStream.CopyTo(ms);
                             ms.Position = 0;
-                            fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true);
+                            fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true, _plJson);
                         }
                     }
 
