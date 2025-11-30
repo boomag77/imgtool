@@ -24,7 +24,7 @@ namespace ImgViewer.Models
         {
             _cts = cts;
             _appSettings = new AppSettings();
-            _mainViewModel = new MainViewModel(_appSettings);
+            _mainViewModel = new MainViewModel(this);
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
 
@@ -32,6 +32,26 @@ namespace ImgViewer.Models
             _imageProcessor = new OpenCVImageProcessor(this, _imgProcCts.Token);
 
         }
+
+        public bool SavePipelineToMd
+        {
+            get { return _appSettings.SavePipeLineToMd; }
+            set { _appSettings.SavePipeLineToMd = value; }
+        }
+
+        public TimeSpan ParametersChangedDebounceDelay
+        {
+            get { return _appSettings.ParametersChangedDebounceDelay; }
+            set { _appSettings.ParametersChangedDebounceDelay = value; }
+        }
+
+        public double EraseOperationOffset
+        {
+            get { return _appSettings.EraseOperationOffset; }
+            set { _appSettings.EraseOperationOffset = value; }
+        }
+
+        
 
         public TiffCompression CurrentTiffCompression
         {
@@ -272,7 +292,7 @@ namespace ImgViewer.Models
 
             try
             {
-                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0))
+                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0, SavePipelineToMd))
                 {
                     try
                     {

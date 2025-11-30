@@ -69,7 +69,7 @@ namespace ImgViewer.Views
 
         private Point _magnifierNormalizedPos = new Point(0.5, 0.5);
 
-        private double EraseOffset = AppSettings.EraseOperationOffset;   // пикселей от левого/правого края
+        private double _eraseOffset;   // пикселей от левого/правого края
         private bool _eraseModeActive;
         private bool _operationErased;
 
@@ -77,6 +77,8 @@ namespace ImgViewer.Views
         private bool _livePipelineRestartPending;
         private readonly object _liveLock = new();
         private readonly HashSet<PipelineOperation> _liveRunning = new();
+
+        private bool _savePipelineToMd;
 
 
         // Rect selection
@@ -111,7 +113,7 @@ namespace ImgViewer.Views
 
         // debounce для Live-пайплайна
         private CancellationTokenSource? _liveDebounceCts;
-        private readonly TimeSpan _liveDebounceDelay = AppSettings.ParametersChangedDebounceDelay;
+        private TimeSpan _liveDebounceDelay;
 
         public IViewModel ViewModel
         {
@@ -135,8 +137,11 @@ namespace ImgViewer.Views
         private CancellationTokenSource? _currentLoadPreviewCts;
         private CancellationTokenSource? _currentLoadThumbnailsCts;
 
-
-        
+        public bool SavePipelineToMd
+        {
+            get => _manager.SavePipelineToMd;
+            set => _manager.SavePipelineToMd = value;
+        }
 
         //private string _lastOpenedFolder = string.Empty;
 
@@ -149,6 +154,9 @@ namespace ImgViewer.Views
             _cts = new CancellationTokenSource();
             _manager = new AppManager(this, _cts);
             _pipeline = new Pipeline(_manager);
+
+            _eraseOffset = _manager.EraseOperationOffset;
+            _liveDebounceDelay = _manager.ParametersChangedDebounceDelay;
 
             DataContext = _viewModel;
 
@@ -230,7 +238,7 @@ namespace ImgViewer.Views
             double width = PipelineListBox.ActualWidth;
 
             // "зона удаления" — когда ушли дальше, чем EraseOffset за левый/правый край списка
-            return pos.X < -EraseOffset || pos.X > width + EraseOffset;
+            return pos.X < -_eraseOffset || pos.X > width + _eraseOffset;
         }
 
 
@@ -586,15 +594,15 @@ namespace ImgViewer.Views
 
             // включаем режим удаления, как и раньше
             bool erase =
-                rawPos.X < EraseOffset ||
-                rawPos.X > width - EraseOffset;
+                rawPos.X < _eraseOffset ||
+                rawPos.X > width - _eraseOffset;
 
             _eraseModeActive = erase;
             _draggedItemAdorner?.SetEraseMode(erase);
 
             // КЛЭМПИМ X для визуального призрака:
             // не даём ему уйти дальше EraseOffset от краёв
-            double clampedX = Math.Max(EraseOffset, Math.Min(rawPos.X, width - EraseOffset));
+            double clampedX = Math.Max(_eraseOffset, Math.Min(rawPos.X, width - _eraseOffset));
             var clampedPos = new Point(clampedX, rawPos.Y);
 
             // двигаем drag-ghost по зажатой позиции

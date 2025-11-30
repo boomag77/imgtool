@@ -7,6 +7,13 @@ namespace ImgViewer.Interfaces
     {
         public TiffCompression CurrentTiffCompression { get; set;  }
         public string LastOpenedFolder { get; set; }
+
+        public double EraseOperationOffset { get; set; }
+
+        public TimeSpan ParametersChangedDebounceDelay { get; set; }
+
+        public bool SavePipelineToMd { get; set; }
+
         public Task SetImageOnPreview(string imagePath);
         public Task SetBmpImageOnPreview(ImageSource bmp);
 

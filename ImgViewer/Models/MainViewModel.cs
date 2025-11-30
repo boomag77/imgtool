@@ -9,7 +9,7 @@ namespace ImgViewer.Models
 {
     internal class MainViewModel : IViewModel, INotifyPropertyChanged
     {
-        private readonly AppSettings _appSettings;
+        private readonly IAppManager _manager;
         private ImageSource? _originalImage;
         private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
@@ -24,6 +24,18 @@ namespace ImgViewer.Models
         private string _status = "Ready";
 
         private CancellationTokenSource? _cts;
+
+        public bool SavePipelineToMd
+        {
+            get
+            {
+                return _manager.SavePipelineToMd;
+            }
+            set
+            {
+                _manager.SavePipelineToMd = value;
+            }
+        }
 
         public bool IsSelectionAvaliable
         {
@@ -52,7 +64,7 @@ namespace ImgViewer.Models
 
         public string TiffCompressionLabel
         {
-            get => _appSettings.TiffCompression.ToString();
+            get => _manager.CurrentTiffCompression.ToString();
             set
             {
                 _tiffCompressionLabel = value;
@@ -121,9 +133,9 @@ namespace ImgViewer.Models
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public MainViewModel(AppSettings appSettings)
+        public MainViewModel(IAppManager manager)
         {
-            _appSettings = appSettings;
+            _manager = manager;
 
 
         }

@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -11,8 +10,10 @@ namespace ImgViewer.Models
         private TiffCompression _tiffCompression;
         private string _lastOpenedFolder;
 
-        private static readonly TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
-        private static readonly double _eraseOperationModeOffset = 100;
+        private TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
+        private double _eraseOperationModeOffset = 100;
+
+        private bool _savePipelineToMd;
 
         // cancellation for scheduled save
         private CancellationTokenSource? _saveCts;
@@ -25,11 +26,15 @@ namespace ImgViewer.Models
         //   "MyApp",             // <-- поменяй на своё
         //   "settings.json");
 
-        public static double EraseOperationOffset
+        public double EraseOperationOffset
         {
             get
             {
                 return _eraseOperationModeOffset;
+            }
+            set
+            {
+                _eraseOperationModeOffset = value;
             }
         }
 
@@ -44,18 +49,21 @@ namespace ImgViewer.Models
             }
         }
 
-        public static TimeSpan ParametersChangedDebounceDelay
+        public TimeSpan ParametersChangedDebounceDelay
         {
             get
             {
                 return _debounceDelay;
+            }
+            set
+            {
+                _debounceDelay = value;
             }
         }
 
         public AppSettings()
         {
             _tiffCompression = TiffCompression.CCITTG4;
-
             try
             {
                 LoadFromFile();
@@ -83,6 +91,21 @@ namespace ImgViewer.Models
             set
             {
                 _lastOpenedFolder = value;
+                ScheduleSave();
+            }
+        }
+
+        public bool SavePipeLineToMd
+        {
+            get
+            {
+                Debug.WriteLine($"App Settings: SavePipeLineToMd get: {_savePipelineToMd}");
+                return _savePipelineToMd;
+            }
+            set
+            {
+                _savePipelineToMd = value;
+                Debug.WriteLine($"App Settings: SavePipeLineToMd set: {_savePipelineToMd}");
                 ScheduleSave();
             }
         }
@@ -139,7 +162,10 @@ namespace ImgViewer.Models
                 var dto = new AppSettingsDto
                 {
                     TiffCompression = this.TiffCompression,
-                    LastOpenedFolder = this.LastOpenedFolder
+                    LastOpenedFolder = this.LastOpenedFolder,
+                    SavePipeLineToMd = this._savePipelineToMd,
+                    ParametersChangedDebounceDelay = this._debounceDelay,
+                    EraseOperationOffset = this._eraseOperationModeOffset
                 };
 
                 var options = new JsonSerializerOptions
@@ -181,6 +207,10 @@ namespace ImgViewer.Models
                 {
                     _tiffCompression = dto.TiffCompression;
                     _lastOpenedFolder = dto.LastOpenedFolder ?? string.Empty;
+                    _savePipelineToMd = dto.SavePipeLineToMd;
+                    _debounceDelay = dto.ParametersChangedDebounceDelay;
+                    _eraseOperationModeOffset = dto.EraseOperationOffset;   
+
                 }
             }
             catch (Exception ex)
@@ -210,6 +240,12 @@ namespace ImgViewer.Models
         {
             public TiffCompression TiffCompression { get; set; }
             public string? LastOpenedFolder { get; set; }
+
+            public bool SavePipeLineToMd { get; set; }
+
+            public TimeSpan ParametersChangedDebounceDelay { get; set; }
+
+            public double EraseOperationOffset { get; set; }
         }
     }
 }

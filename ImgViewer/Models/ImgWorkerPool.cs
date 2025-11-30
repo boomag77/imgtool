@@ -26,7 +26,7 @@ namespace ImgViewer.Models
         private int _processedCount;
         private readonly int _totalCount;
         private (ProcessorCommand Command, Dictionary<string, object> Params)[] _plOperations;
-        private readonly string _plJson;
+        private readonly string? _plJson;
 
         public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
@@ -35,7 +35,8 @@ namespace ImgViewer.Models
                              Pipeline pipeline,
                              int maxWorkersCount,
                              SourceImageFolder sourceFolder,
-                             int maxFilesQueue = 0)
+                             int maxFilesQueue,
+                             bool savePipelineToMd)
         {
             _cts = cts;
             _token = _cts.Token;
@@ -49,8 +50,7 @@ namespace ImgViewer.Models
                 .Select(op => (op.Command, Params: op.CreateParameterDictionary()))
                 .ToArray();
             _plOperations = opsSnapshot;
-            _plJson = pipeline.BuildPipelineForSave();
-            //_pipline = pipeline;
+            _plJson = savePipelineToMd ? pipeline.BuildPipelineForSave() : null;
 
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
