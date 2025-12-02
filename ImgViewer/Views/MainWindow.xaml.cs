@@ -78,7 +78,6 @@ namespace ImgViewer.Views
         private readonly object _liveLock = new();
         private readonly HashSet<PipelineOperation> _liveRunning = new();
 
-        private bool _savePipelineToMd;
 
 
         // Rect selection
@@ -124,6 +123,7 @@ namespace ImgViewer.Views
             }
         }
 
+        // for xaml binding
         public Pipeline Pipeline => _pipeline;
 
         //public ObservableCollection<PipeLineOperation> PipeLineOperations => _pipeLineOperations;
@@ -139,8 +139,8 @@ namespace ImgViewer.Views
 
         public bool SavePipelineToMd
         {
-            get => _manager.SavePipelineToMd;
-            set => _manager.SavePipelineToMd = value;
+            get => _manager.IsSavePipelineToMd;
+            set => _manager.IsSavePipelineToMd = value;
         }
 
         //private string _lastOpenedFolder = string.Empty;
@@ -166,7 +166,7 @@ namespace ImgViewer.Views
             {
                 Dispatcher.InvokeAsync(() =>
                 {
-                    System.Windows.MessageBox.Show(this, msg, " Explorer Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Windows.MessageBox.Show(this, msg, "Explorer Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
             };
 
@@ -350,8 +350,12 @@ namespace ImgViewer.Views
                     if (e.OldItems != null)
                     {
                         foreach (PipelineOperation removed in e.OldItems)
+                        {
                             removed.ParameterChanged -= OnOperationParameterChanged;
+                            
+                        }  
                     }
+                    
                 };
             }
         }
@@ -371,7 +375,7 @@ namespace ImgViewer.Views
         private void StopProcessing_Click(object sender, RoutedEventArgs e)
         {
             _manager.CancelBatchProcessing();
-            Debug.WriteLine("Stopping");
+            //Debug.WriteLine("Stopping");
         }
 
         private void GetFromSelection_Click(object sender, RoutedEventArgs e)
@@ -779,6 +783,7 @@ namespace ImgViewer.Views
                     MessageBoxImage.Warning);
 
                 eraseOnCancel = (res == MessageBoxResult.OK);
+                
             }
 
             if (_draggedOperation != null && !_operationErased && !eraseOnCancel)
@@ -789,6 +794,11 @@ namespace ImgViewer.Views
                     index = Math.Max(0, Math.Min(_pipeline.Count, index));
                     _pipeline.Insert(index, _draggedOperation);
                 }
+            }
+            if (_draggedOperation != null && (_operationErased || eraseOnCancel))
+            {
+                _manager.CancelImageProcessing();
+                ScheduleLivePipelineRun();
             }
 
             _draggedOperation = null;

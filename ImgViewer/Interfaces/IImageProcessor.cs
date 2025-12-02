@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using OpenCvSharp;
+using System.IO;
 using System.Windows.Media;
 
 namespace ImgViewer.Interfaces
@@ -18,6 +19,9 @@ namespace ImgViewer.Interfaces
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
+
+        Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token);
+
         void ApplyCommand(ProcessorCommand commandName, Dictionary<string, object> parameters);
 
         event Action<Stream> ImageUpdated;

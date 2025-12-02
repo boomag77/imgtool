@@ -29,11 +29,11 @@ namespace ImgViewer.Models
         {
             get
             {
-                return _manager.SavePipelineToMd;
+                return _manager.IsSavePipelineToMd;
             }
             set
             {
-                _manager.SavePipelineToMd = value;
+                _manager.IsSavePipelineToMd = value;
             }
         }
 

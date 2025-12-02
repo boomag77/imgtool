@@ -726,11 +726,13 @@ namespace ImgViewer.Models
             Debug.WriteLine(sb.ToString());
         }
 
-        public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)
+        public Mat ProcessSingle(Mat src,
+                          ProcessorCommand command,
+                          Dictionary<string, object> parameters, CancellationToken token)
         {
             lock (_commandLock)
             {
-                using var src = WorkingImage;
+                //using var src = WorkingImage;
                 if (src != null)
                 {
 
@@ -753,16 +755,16 @@ namespace ImgViewer.Models
                             {
                                 case BinarizeMethod.Threshold:
                                     //DumpStruct(binParams);
-                                    WorkingImage = BinarizeThreshold(src, binParams.Threshold);
+                                    return BinarizeThreshold(src, binParams.Threshold);
                                     break;
                                 case BinarizeMethod.Adaptive:
-                                    WorkingImage = BinarizeAdaptive(src, binParams, invert: false);
+                                    return BinarizeAdaptive(src, binParams, invert: false);
                                     break;
                                 case BinarizeMethod.Sauvola:
-                                    WorkingImage = SauvolaBinarize(src, binParams);
+                                    return SauvolaBinarize(src, binParams);
                                     break;
                                 case BinarizeMethod.Majority:
-                                    WorkingImage = MajorityBinarize(src, binParams);
+                                    return MajorityBinarize(src, binParams);
                                     break;
                             }
                             break;
@@ -774,7 +776,7 @@ namespace ImgViewer.Models
                                 Debug.WriteLine(kv.Value.ToString());
 
                             }
-                            WorkingImage = NewDeskew(src, parameters);
+                            return NewDeskew(src, parameters);
                             //Deskew();
                             break;
                         case ProcessorCommand.BordersRemove:
@@ -895,7 +897,7 @@ namespace ImgViewer.Models
                                                 {
                                                     darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
                                                 }
-                                                WorkingImage = RemoveBorders_Auto(src,
+                                                return RemoveBorders_Auto(src,
                                                     darkThresh,
                                                     bgColor,
                                                     minAreaPx,
@@ -906,7 +908,7 @@ namespace ImgViewer.Models
                                                 );
                                                 break;
                                             case "By Contrast":
-                                                WorkingImage = RemoveBordersByRowColWhite(src,
+                                                return RemoveBordersByRowColWhite(src,
                                                         threshFrac: treshFrac,
                                                         contrastThr: contrastThr,
                                                         centralSample: centralSample,
@@ -914,8 +916,8 @@ namespace ImgViewer.Models
                                                     );
                                                 break;
                                             case "Manual":
-                                                
-                                                WorkingImage = RemoveBorders_Manual(src, top, bottom, left, right, manualCutDebug);
+
+                                                return RemoveBorders_Manual(src, top, bottom, left, right, manualCutDebug);
                                                 break;
 
                                         }
@@ -986,7 +988,7 @@ namespace ImgViewer.Models
                             }
 
                             //_currentImage = DespeckleApplyToSource(_currentImage, settings, true, false, true);
-                            WorkingImage = Despeckle(src, settings);
+                            return Despeckle(src, settings);
                             //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
 
                             break;
@@ -1029,7 +1031,7 @@ namespace ImgViewer.Models
                                 }
                             }
 
-                            WorkingImage = SmartCrop(src);
+                            return SmartCrop(src);
                             //applyAutoCropRectangleCurrent();
                             break;
                         case ProcessorCommand.LinesRemove:
@@ -1090,16 +1092,16 @@ namespace ImgViewer.Models
                             Mat mask;
                             if (orientation == LineOrientation.Vertical)
                             {
-                                WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+                                return LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
                             }
                             if (orientation == LineOrientation.Horizontal)
                             {
-                                WorkingImage = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
+                                return LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
                             }
                             if (orientation == LineOrientation.Both)
                             {
-                                WorkingImage = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
-                                WorkingImage = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
+                                Mat firstResult = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+                                return LinesRemover.RemoveScannerHorizontalStripes(firstResult, 3, 20, 0, out mask, false, null);
                             }
 
 
@@ -1253,7 +1255,7 @@ namespace ImgViewer.Models
                             };
 
 
-                            WorkingImage = PunchHolesRemove(src, specs, roundness, fillRatio, offsets);
+                            return PunchHolesRemove(src, specs, roundness, fillRatio, offsets);
 
 
 
@@ -1262,7 +1264,14 @@ namespace ImgViewer.Models
                     }
                 }
             }
+            return null;
+        }
 
+
+        public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)
+        {
+            
+            WorkingImage = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token);
 
         }
 

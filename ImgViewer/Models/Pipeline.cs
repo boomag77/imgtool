@@ -229,7 +229,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Roundness", "roundness", 0.9, 0.01, 1.00, 0.01),
                                 // Rect
                                 new PipeLineParameter("Height", "height", 80, 1, 500, 1),
-                                new PipeLineParameter("Width", "width", 50, 1, 100, 1),
+                                new PipeLineParameter("Width", "width", 50, 1, 500, 1),
                                 new PipeLineParameter("Fill ratio", "fillRatio", 0.9, 0.01, 1.0, 0.01),
                    
                                 // common

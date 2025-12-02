@@ -12,7 +12,7 @@ namespace ImgViewer.Interfaces
 
         public TimeSpan ParametersChangedDebounceDelay { get; set; }
 
-        public bool SavePipelineToMd { get; set; }
+        public bool IsSavePipelineToMd { get; set; }
 
         public Task SetImageOnPreview(string imagePath);
         public Task SetBmpImageOnPreview(ImageSource bmp);

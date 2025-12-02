@@ -1,9 +1,13 @@
-﻿namespace ImgViewer.Interfaces
+﻿using ImgViewer.Models;
+
+namespace ImgViewer.Interfaces
 {
     public interface IMainView
     {
         public IViewModel ViewModel { get; set; }
 
+
+        
 
     }
 }

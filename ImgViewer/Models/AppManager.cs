@@ -13,6 +13,7 @@ namespace ImgViewer.Models
         private readonly IFileProcessor _fileProcessor;
         private readonly IImageProcessor _imageProcessor;
         private readonly AppSettings _appSettings;
+        private readonly Pipeline _pipeline;
 
 
         private readonly CancellationTokenSource _cts;
@@ -33,7 +34,7 @@ namespace ImgViewer.Models
 
         }
 
-        public bool SavePipelineToMd
+        public bool IsSavePipelineToMd
         {
             get { return _appSettings.SavePipeLineToMd; }
             set { _appSettings.SavePipeLineToMd = value; }
@@ -130,9 +131,13 @@ namespace ImgViewer.Models
             var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
             await SetBmpImageAsOriginal(bmpImage);
             await SetBmpImageOnPreview(bmpImage);
-
             await SetImageForProcessing(bmpImage);
+
+
+
         }
+
+
 
 
         public async Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
@@ -292,7 +297,7 @@ namespace ImgViewer.Models
 
             try
             {
-                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0, SavePipelineToMd))
+                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0, IsSavePipelineToMd))
                 {
                     try
                     {
