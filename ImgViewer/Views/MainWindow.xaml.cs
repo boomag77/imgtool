@@ -3,6 +3,7 @@ using ImgViewer.Models;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -134,8 +135,6 @@ namespace ImgViewer.Views
 
 
         private CancellationTokenSource _cts;
-        private CancellationTokenSource? _currentLoadPreviewCts;
-        private CancellationTokenSource? _currentLoadThumbnailsCts;
 
         public bool SavePipelineToMd
         {
@@ -152,6 +151,7 @@ namespace ImgViewer.Views
             _originalImageColumnWidth = RootGrid.ColumnDefinitions[0].Width;
 
             _cts = new CancellationTokenSource();
+
             _manager = new AppManager(this, _cts);
             //_pipeline = new Pipeline(_manager);
 
@@ -268,8 +268,8 @@ namespace ImgViewer.Views
                      .ToList()
                 );
 
-                _manager.CancelImageProcessing();
-                await ResetPreview();
+                //_manager.CancelImageProcessing();
+                await _manager.ResetWorkingImagePreview();
 
                 foreach (var pipelineOp in opsSnapshot)
                 {
@@ -501,13 +501,13 @@ namespace ImgViewer.Views
         }
 
 
-        private void PipelineRunButton_Click(object sender, RoutedEventArgs e)
+        private async void PipelineRunButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
             {
                 //var commmand = operation.Command;
                 //var p = operation.CreateParameterDictionary();
-                _ = ResetPreview();
+                await _manager.ResetWorkingImagePreview();
                 operation.Execute();
                 e.Handled = true;
             }
@@ -902,7 +902,7 @@ namespace ImgViewer.Views
 
             try
             {
-                await Task.Run(() => _manager.ApplyCommandToProcessingImage(command, parameters));
+                await _manager.ApplyCommandToProcessingImage(command, parameters);
             }
             catch (OperationCanceledException)
             {
@@ -935,8 +935,6 @@ namespace ImgViewer.Views
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             _cts?.Cancel();
-            _currentLoadPreviewCts?.Cancel();
-            _currentLoadThumbnailsCts?.Cancel();
             base.OnClosing(e);
         }
 
@@ -996,14 +994,21 @@ namespace ImgViewer.Views
             }
         }
 
-        private void LoadPipelinePreset_Click(object sender, RoutedEventArgs e)
+        private async void LoadPipelinePreset_Click(object sender, RoutedEventArgs e)
         {
             var res = System.Windows.MessageBox.Show($"WARNING! All unsaved parameters will be lost! Are you sure?",
                                                          "Confirm",
                                                          MessageBoxButton.OKCancel,
                                                          MessageBoxImage.Warning);
             if (res == MessageBoxResult.Cancel) return;
-            LoadPipelineFromFile();
+            var dlg = new Microsoft.Win32.OpenFileDialog();
+            dlg.Filter = "IGpreset files|*.igpreset";
+            if (dlg.ShowDialog() == true)
+            {
+                var fileNamePath = dlg.FileName;
+                await _manager.LoadPipelineFromFile(fileNamePath);
+            }
+                
         }
 
         private void AddPipelineOperation_Click(object sender, RoutedEventArgs e)
@@ -1033,47 +1038,47 @@ namespace ImgViewer.Views
             ScheduleLivePipelineRun();
         }
 
-        private void LoadPipelineFromFile()
-        {
+//        private async Task LoadPipelineFromFile()
+//        {
 
-            var dlg = new Microsoft.Win32.OpenFileDialog();
-            dlg.Filter = "IGpreset files|*.igpreset";
-            List<Operation> pipeline = new List<Operation>();
-            if (dlg.ShowDialog() == true)
-            {
-                try
-                {
-                    var fileName = dlg.FileName;
-                    string json = File.ReadAllText(fileName);
-                    Pipeline.LoadPipelineFromJson(json);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Load was cancelled, do nothing
-                }
-                catch (Exception ex)
-                {
-                    System.Windows.MessageBox.Show
-                    (
-                        $"Error loading preset: {ex.Message}",
-                        "Error",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error
-                    );
-                }
-            }
+//            var dlg = new Microsoft.Win32.OpenFileDialog();
+//            dlg.Filter = "IGpreset files|*.igpreset";
+//            List<Operation> pipeline = new List<Operation>();
+//            if (dlg.ShowDialog() == true)
+//            {
+//                try
+//                {
+//                    var fileName = dlg.FileName;
+//                    string json = await Task.Run(() => File.ReadAllText(fileName));
+//                    Pipeline.LoadPipelineFromJson(json);
+//                }
+//                catch (OperationCanceledException)
+//                {
+//                    // Load was cancelled, do nothing
+//                }
+//                catch (Exception ex)
+//                {
+//                    System.Windows.MessageBox.Show
+//                    (
+//                        $"Error loading preset: {ex.Message}",
+//                        "Error",
+//                        MessageBoxButton.OK,
+//                        MessageBoxImage.Error
+//                    );
+//                }
+//            }
 
-#if DEBUG
-            foreach (var op in pipeline)
-            {
-                Debug.WriteLine($"Command: {op.Command}");
-                foreach (var p in op.Parameters)
-                {
-                    Debug.WriteLine($"  {p.Name} = {p.Value} (type: {p.Value?.GetType().Name ?? "null"})");
-                }
-            }
-#endif
-        }
+//#if DEBUG
+//            foreach (var op in pipeline)
+//            {
+//                Debug.WriteLine($"Command: {op.Command}");
+//                foreach (var p in op.Parameters)
+//                {
+//                    Debug.WriteLine($"  {p.Name} = {p.Value} (type: {p.Value?.GetType().Name ?? "null"})");
+//                }
+//            }
+//#endif
+//        }
 
         private void SavePipelinePreset_Click(object sender, RoutedEventArgs e)
         {
@@ -1177,15 +1182,15 @@ namespace ImgViewer.Views
 
         
 
-        private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
-        {
-            var pl = Pipeline.Operations
-                    .Where(op => op.InPipeline)
-                    .Select(op => (op.Command, op.CreateParameterDictionary()))
-                    .ToArray();
+        //private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
+        //{
+        //    var pl = Pipeline.Operations
+        //            .Where(op => op.InPipeline)
+        //            .Select(op => (op.Command, op.CreateParameterDictionary()))
+        //            .ToArray();
 
-            return pl;
-        }
+        //    return pl;
+        //}
 
         private void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -1236,9 +1241,9 @@ namespace ImgViewer.Views
                 //string? folder = _viewModel?.LastOpenedFolder;
 
 
-                var pipeline = GetPipelineParameters();
+                //var pipeline = GetPipelineParameters();
 
-                if (pipeline.Length == 0)
+                if (Pipeline.Operations.Count == 0)
                 {
                     System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
@@ -1288,20 +1293,15 @@ namespace ImgViewer.Views
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
         {
-            //if (_viewModel.OriginalImage == null) return;
-            //var originalImage = _viewModel.OriginalImage;
-
-            //_viewModel.ImageOnPreview = originalImage;
-            //_manager.SetImageForProcessing(originalImage);
-            Dispatcher.Invoke(() => ResetPreview());
+            _manager.ResetWorkingImagePreview();
         }
 
-        private async Task ResetPreview()
-        {
-            _manager.CancelImageProcessing();
-            if (_viewModel.OriginalImage == null) return;
-            await _manager.SetImageForProcessing(_viewModel.OriginalImage);
-        }
+        //private async Task ResetPreview()
+        //{
+        //    _manager.CancelImageProcessing();
+        //    if (_viewModel.OriginalImage == null) return;
+        //    await _manager.SetImageForProcessing(_viewModel.OriginalImage);
+        //}
 
         private void SaveAs_Click(object sender, RoutedEventArgs e)
         {

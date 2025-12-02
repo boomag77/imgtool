@@ -21,6 +21,8 @@ namespace ImgViewer.Interfaces
 
         public void CancelImageProcessing();
 
+        public Task ResetWorkingImagePreview();
+
         public void UpdateStatus(string status);
 
         public void SavePipelineToJSON(string path, string json);
@@ -32,6 +34,7 @@ namespace ImgViewer.Interfaces
 
         public Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree);
 
+        public Task LoadPipelineFromFile(string fileNamePath);
 
         public void CancelBatchProcessing();
 

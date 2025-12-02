@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using System.IO;
 
 namespace ImgViewer.Models
 {
@@ -26,6 +27,7 @@ namespace ImgViewer.Models
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
             _cts = cts;
+
             _appSettings = new AppSettings();
             _pipeline = new Pipeline(this);
             _mainViewModel = new MainViewModel(this);
@@ -84,7 +86,16 @@ namespace ImgViewer.Models
 
         public void UpdateStatus(string status)
         {
-            _mainViewModel.Status = status;
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+                _mainViewModel.Status = status;
+            else
+                dispatcher.InvokeAsync(() =>
+                {
+                    _mainViewModel.Status = status;
+                }, System.Windows.Threading.DispatcherPriority.Background);
+
+            //_mainViewModel.Status = status;
         }
 
         public void CancelImageProcessing()
@@ -120,12 +131,14 @@ namespace ImgViewer.Models
 
         private async Task SetBmpImageAsOriginal(ImageSource bmp)
         {
-            _mainViewModel.Status = "Loading image...";
+
+            UpdateStatus("Setting original image on preview...");
+
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 _mainViewModel.OriginalImage = bmp;
             }, System.Windows.Threading.DispatcherPriority.Render);
-            _mainViewModel.Status = "Standby";
+            UpdateStatus("Standby");
         }
 
         public async Task SetImageOnPreview(string imagePath)
@@ -140,33 +153,41 @@ namespace ImgViewer.Models
 
         }
 
-
-
+        public async Task ResetWorkingImagePreview()
+        {
+            CancelImageProcessing();
+            if (_mainViewModel.OriginalImage == null) return;
+            await SetImageForProcessing(_mainViewModel.OriginalImage);
+        }
 
         public async Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters)
         {
             if (_mainViewModel.OriginalImage == null) return;
 
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                _mainViewModel.Status = $"Processing image ({command})...";
-            });
+            UpdateStatus($"Applying command: {command}...");
+
+            //System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            //{
+            //    _mainViewModel.Status = $"Processing image ({command})...";
+            //});
 
             await Task.Run(() => _imageProcessor.ApplyCommand(command, parameters));
 
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                _mainViewModel.Status = "Standby";
-            });
+            UpdateStatus("Standby");
+
+            //System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            //{
+            //    _mainViewModel.Status = "Standby";
+            //});
         }
 
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
         {
             var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
-            Debug.WriteLine($"Stream length: {stream.Length}");
+            //Debug.WriteLine($"Stream length: {stream.Length}");
 
-            // test JSON
-            string json = "{\"pipeline\":\"Deskew+Binarize\",\"version\":1}";
+            
+            string json = _pipeline.BuildPipelineForSave();
 
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
         }
@@ -196,7 +217,9 @@ namespace ImgViewer.Models
         {
             var debug = false;
             if (pipeline == null) return;
-            _mainViewModel.Status = $"Processing folders in " + rootFolder;
+
+            UpdateStatus($"Processing folders in " + rootFolder);
+            //_mainViewModel.Status = $"Processing folders in " + rootFolder;
 
             SourceImageFolder[] sourceFolders = [];
 
@@ -262,7 +285,7 @@ namespace ImgViewer.Models
             }
             finally
             {
-                _mainViewModel.Status = "Standby";
+                UpdateStatus("Standby");
                 try { _rootFolderCts?.Dispose(); } catch { }
                 _rootFolderCts = null;
             }
@@ -273,7 +296,14 @@ namespace ImgViewer.Models
             bool debug = false;
             if (pipeline == null) return;
 
-            _mainViewModel.Status = $"Processing folder " + srcFolder;
+            UpdateStatus($"Processing folder " + srcFolder);
+
+            //await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            //{
+            //    _mainViewModel.Status = $"Processing folder " + srcFolder;
+            //}, System.Windows.Threading.DispatcherPriority.Background);
+
+            
             var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
             //if (debug)
             //{
@@ -316,7 +346,13 @@ namespace ImgViewer.Models
             }
             finally
             {
-                _mainViewModel.Status = $"Standby";
+                UpdateStatus("Standby");
+                //await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                //{
+                //    _mainViewModel.Status = $"Standby";
+                //}, System.Windows.Threading.DispatcherPriority.Background);
+
+                
                 try
                 {
                     _poolCts?.Dispose();
@@ -324,6 +360,41 @@ namespace ImgViewer.Models
                 catch { }
                 _poolCts = null;
             }
+        }
+
+        public async Task LoadPipelineFromFile(string fileNamePath)
+        {
+
+            try
+            {
+                string json = await Task.Run(() => File.ReadAllText(fileNamePath));
+                CurrentPipeline.LoadPipelineFromJson(json);
+            }
+            catch (OperationCanceledException)
+            {
+                // Load was cancelled, do nothing
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show
+                (
+                    $"Error loading preset: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
+
+#if DEBUG
+            //foreach (var op in pipeline)
+            //{
+            //    Debug.WriteLine($"Command: {op.Command}");
+            //    foreach (var p in op.Parameters)
+            //    {
+            //        Debug.WriteLine($"  {p.Name} = {p.Value} (type: {p.Value?.GetType().Name ?? "null"})");
+            //    }
+            //}
+#endif
         }
 
         public void CancelBatchProcessing()
