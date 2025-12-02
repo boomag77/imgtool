@@ -25,7 +25,7 @@ namespace ImgViewer.Interfaces
 
         public void UpdateStatus(string status);
 
-        public void SavePipelineToJSON(string path, string json);
+        public Task SavePipelineToJSON(string path, string json);
 
         public Task SetImageForProcessing(ImageSource bmp);
         public Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters);

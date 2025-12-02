@@ -183,23 +183,26 @@ namespace ImgViewer.Models
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
         }
 
-        public void SavePipelineToJSON(string path, string json)
+        public async Task SavePipelineToJSON(string path, string json)
         {
-            // TODO async
-
-            var folder = System.IO.Path.GetDirectoryName(path);
+            var folder = Path.GetDirectoryName(path);
             string pipeLineForSave = json;
-            string fileName = System.IO.Path.GetFileName(path);
+            string fileName = Path.GetFileName(path);
             try
             {
-                System.IO.File.WriteAllText(System.IO.Path.Combine(folder, fileName), pipeLineForSave);
+                await Task.Run(() => File.WriteAllText(Path.Combine(folder, fileName), pipeLineForSave));
+
 #if DEBUG
                 Debug.WriteLine("Pipeline saved to " + fileName);
 #endif
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show(ex.Message, "Error!", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Error while saving Pipeline to JSON {ex.Message}",
+                                                "Error!",
+                                                MessageBoxButton.OK,
+                                                MessageBoxImage.Error
+                );
             }
 
         }
