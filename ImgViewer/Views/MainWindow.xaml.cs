@@ -124,12 +124,12 @@ namespace ImgViewer.Views
         }
 
         // for xaml binding
-        public Pipeline Pipeline => _pipeline;
+        public Pipeline Pipeline => _manager.CurrentPipeline;
 
         //public ObservableCollection<PipeLineOperation> PipeLineOperations => _pipeLineOperations;
 
         private readonly IAppManager _manager;
-        private readonly Pipeline _pipeline;
+        //private readonly Pipeline _pipeline;
         private IViewModel _viewModel;
 
 
@@ -153,7 +153,7 @@ namespace ImgViewer.Views
 
             _cts = new CancellationTokenSource();
             _manager = new AppManager(this, _cts);
-            _pipeline = new Pipeline(_manager);
+            //_pipeline = new Pipeline(_manager);
 
             _eraseOffset = _manager.EraseOperationOffset;
             _liveDebounceDelay = _manager.ParametersChangedDebounceDelay;
@@ -263,7 +263,7 @@ namespace ImgViewer.Views
             try
             {
                 opsSnapshot = await Dispatcher.InvokeAsync(() =>
-                     _pipeline.Operations
+                     Pipeline.Operations
                      .Where(op => op.InPipeline && op.Live)
                      .ToList()
                 );
@@ -297,11 +297,11 @@ namespace ImgViewer.Views
         private void HookLiveHandlers()
         {
             // attach to existing operations
-            foreach (var op in _pipeline.Operations)
+            foreach (var op in Pipeline.Operations)
                 op.LiveChanged += OnOperationLiveChanged;
 
             // attach to future additions/removals if collection changes
-            if (_pipeline.Operations is INotifyCollectionChanged coll)
+            if (Pipeline.Operations is INotifyCollectionChanged coll)
             {
                 coll.CollectionChanged += (s, e) =>
                 {
@@ -332,13 +332,13 @@ namespace ImgViewer.Views
 
         private void SubscribeParameterChangedHandlers()
         {
-            foreach (var op in _pipeline.Operations)
+            foreach (var op in Pipeline.Operations)
             {
                 op.ParameterChanged += OnOperationParameterChanged;
             }
 
             // If PipeLineOperations can change at runtime, hook new items as well:
-            if (_pipeline.Operations is INotifyCollectionChanged coll)
+            if (Pipeline.Operations is INotifyCollectionChanged coll)
             {
                 coll.CollectionChanged += (s, e) =>
                 {
@@ -388,7 +388,7 @@ namespace ImgViewer.Views
                 return;
             }
 
-            foreach (var op in _pipeline.Operations)
+            foreach (var op in Pipeline.Operations)
             {
                     if (op.Type == PipelineOperationType.BordersRemove)
                     {   
@@ -685,8 +685,8 @@ namespace ImgViewer.Views
                 return;
             }
 
-            int insertionIndex = Math.Max(0, Math.Min(_pipeline.Count, _currentInsertionIndex));
-            _pipeline.Insert(insertionIndex, _draggedOperation);
+            int insertionIndex = Math.Max(0, Math.Min(Pipeline.Count, _currentInsertionIndex));
+            Pipeline.Insert(insertionIndex, _draggedOperation);
             _dropHandled = true;
 
             e.Effects = DragDropEffects.Move;
@@ -742,7 +742,7 @@ namespace ImgViewer.Views
             _draggedOperation = _activeOperation;
             _eraseModeActive = false;
             _operationErased = false;
-            _originalPipelineIndex = _pipeline.IndexOf(_activeOperation);
+            _originalPipelineIndex = Pipeline.IndexOf(_activeOperation);
             _currentInsertionIndex = _originalPipelineIndex;
 
             PipelineListBox.UpdateLayout();
@@ -756,7 +756,7 @@ namespace ImgViewer.Views
                 _draggedItemAdorner.Update(Mouse.GetPosition(PipelineListBox));
             }
 
-            _pipeline.Remove(_activeOperation);
+            Pipeline.Remove(_activeOperation);
 
             var dragData = new DataObject(typeof(PipelineOperation), _activeOperation);
             var effect = DragDrop.DoDragDrop(PipelineListBox, dragData, DragDropEffects.Move);
@@ -791,8 +791,8 @@ namespace ImgViewer.Views
                 if (!_dropHandled || cancelled)
                 {
                     int index = cancelled ? _originalPipelineIndex : _currentInsertionIndex;
-                    index = Math.Max(0, Math.Min(_pipeline.Count, index));
-                    _pipeline.Insert(index, _draggedOperation);
+                    index = Math.Max(0, Math.Min(Pipeline.Count, index));
+                    Pipeline.Insert(index, _draggedOperation);
                 }
             }
             if (_draggedOperation != null && (_operationErased || eraseOnCancel))
@@ -1024,10 +1024,10 @@ namespace ImgViewer.Views
                 return;
 
             // создаём новую операцию нужного типа
-            var op = _pipeline.CreatePipelineOperation(type);  // см. шаг 4
+            var op = Pipeline.CreatePipelineOperation(type);  // см. шаг 4
 
             // вставляем в начало pipeline (индекс 0)
-            _pipeline.Insert(0, op);
+            Pipeline.Insert(0, op);
 
             // опционально: сразу пересчитать live-pipeline
             ScheduleLivePipelineRun();
@@ -1045,7 +1045,7 @@ namespace ImgViewer.Views
                 {
                     var fileName = dlg.FileName;
                     string json = File.ReadAllText(fileName);
-                    _pipeline.LoadPipelineFromJson(json);
+                    Pipeline.LoadPipelineFromJson(json);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1090,7 +1090,7 @@ namespace ImgViewer.Views
                 if (!Path.HasExtension(fileName))
                     fileName += ".igpreset";
 
-                var json = _pipeline.BuildPipelineForSave();
+                var json = Pipeline.BuildPipelineForSave();
                 Debug.WriteLine(json);
 
                 _manager.SavePipelineToJSON(fileName, json);
@@ -1111,7 +1111,7 @@ namespace ImgViewer.Views
                                                          MessageBoxImage.Warning);
             if (res == MessageBoxResult.Cancel) return;
 
-            _pipeline.ResetToDefault();
+            Pipeline.ResetToDefault();
         }
 
 
@@ -1179,7 +1179,7 @@ namespace ImgViewer.Views
 
         private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
         {
-            var pl = _pipeline.Operations
+            var pl = Pipeline.Operations
                     .Where(op => op.InPipeline)
                     .Select(op => (op.Command, op.CreateParameterDictionary()))
                     .ToArray();
@@ -1189,8 +1189,8 @@ namespace ImgViewer.Views
 
         private void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
         {
-            if (_pipeline == null) return;
-            if (_pipeline.Operations.Count == 0)
+            if (Pipeline == null) return;
+            if (Pipeline.Operations.Count == 0)
             {
                 System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -1216,7 +1216,7 @@ namespace ImgViewer.Views
 
             try
             {
-                _manager.ProcessRootFolder(rootFolder, _pipeline, true);
+                _manager.ProcessRootFolder(rootFolder, Pipeline, true);
             }
             catch (Exception ex)
             {
@@ -1272,7 +1272,7 @@ namespace ImgViewer.Views
 
 
                 // вызываем менеджер, передавая команды
-                _manager.ProcessFolder(folder, _pipeline);
+                _manager.ProcessFolder(folder, Pipeline);
 
 
                 //_manager.ProcessFolder(folder);

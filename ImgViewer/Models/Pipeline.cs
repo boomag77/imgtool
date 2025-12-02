@@ -1,11 +1,8 @@
 ﻿using ImgViewer.Interfaces;
-using ImgViewer.Views;
-using OpenCvSharp.XImgProc;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using System.Windows;
 
 namespace ImgViewer.Models
 {
@@ -14,7 +11,7 @@ namespace ImgViewer.Models
     public class Pipeline
     {
 
-        
+
 
         private sealed class PipelineSaveItem
         {
@@ -23,7 +20,7 @@ namespace ImgViewer.Models
             public Dictionary<string, object?>? Parameters { get; set; }
         }
 
-        
+
         private readonly IAppManager _manager;
 
 
@@ -72,7 +69,7 @@ namespace ImgViewer.Models
                 _operations.Add(CreatePipelineOperation(operationType));
 
             }
-                
+
         }
 
         public void Insert(int index, PipelineOperation operation)
@@ -81,7 +78,7 @@ namespace ImgViewer.Models
             {
                 _operations.Insert(index, operation);
             }
-               
+
         }
 
         public void Remove(PipelineOperation operation)
@@ -137,7 +134,7 @@ namespace ImgViewer.Models
                                 op.CreateParameterDictionary())
                         );
                     }
-                    
+
                     break;
                 case PipelineOperationType.BordersRemove:
                     {
@@ -323,7 +320,7 @@ namespace ImgViewer.Models
                                      "Unsupported pipeline operation type in CreateDeskewOperation");
             }
 
-            
+
 
             //op.Command = ProcessorCommand.Deskew;
             return operation;

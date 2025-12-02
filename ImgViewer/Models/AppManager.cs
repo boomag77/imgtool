@@ -21,10 +21,13 @@ namespace ImgViewer.Models
         private CancellationTokenSource? _rootFolderCts;
         private CancellationTokenSource _imgProcCts;
 
+        public Pipeline CurrentPipeline => _pipeline;
+
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
             _cts = cts;
             _appSettings = new AppSettings();
+            _pipeline = new Pipeline(this);
             _mainViewModel = new MainViewModel(this);
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
