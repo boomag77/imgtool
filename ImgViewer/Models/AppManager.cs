@@ -166,19 +166,10 @@ namespace ImgViewer.Models
 
             UpdateStatus($"Applying command: {command}...");
 
-            //System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            //{
-            //    _mainViewModel.Status = $"Processing image ({command})...";
-            //});
-
             await Task.Run(() => _imageProcessor.ApplyCommand(command, parameters));
 
             UpdateStatus("Standby");
 
-            //System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            //{
-            //    _mainViewModel.Status = "Standby";
-            //});
         }
 
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)

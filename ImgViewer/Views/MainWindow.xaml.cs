@@ -892,43 +892,43 @@ namespace ImgViewer.Views
         }
 
 
-        private async void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
-        {
-            if (_manager == null)
-                return;
+        //private async void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
+        //{
+        //    if (_manager == null)
+        //        return;
 
-            // Опционально: если хочешь, чтобы новый запуск отменял предыдущий Despeckle:
-            _manager.CancelImageProcessing();
+        //    // Опционально: если хочешь, чтобы новый запуск отменял предыдущий Despeckle:
+        //    _manager.CancelImageProcessing();
 
-            try
-            {
-                await _manager.ApplyCommandToProcessingImage(command, parameters);
-            }
-            catch (OperationCanceledException)
-            {
-                // тихо игнорируем
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"ExecuteManagerCommand error: {ex}");
-            }
-        }
+        //    try
+        //    {
+        //        await _manager.ApplyCommandToProcessingImage(command, parameters);
+        //    }
+        //    catch (OperationCanceledException)
+        //    {
+        //        // тихо игнорируем
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Debug.WriteLine($"ExecuteManagerCommand error: {ex}");
+        //    }
+        //}
 
-        private Dictionary<string, object> GetParametersFromSender(object sender)
-        {
-            if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
-            {
-                return operation.CreateParameterDictionary();
-            }
+        //private Dictionary<string, object> GetParametersFromSender(object sender)
+        //{
+        //    if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
+        //    {
+        //        return operation.CreateParameterDictionary();
+        //    }
 
-            return new Dictionary<string, object>();
-        }
+        //    return new Dictionary<string, object>();
+        //}
 
-        public void UpdatePreview(Stream stream)
-        {
-            var bitmap = streamToBitmapSource(stream);
-            Dispatcher.InvokeAsync(() => PreviewImgBox.Source = bitmap);
-        }
+        //public void UpdatePreview(Stream stream)
+        //{
+        //    var bitmap = streamToBitmapSource(stream);
+        //    Dispatcher.InvokeAsync(() => PreviewImgBox.Source = bitmap);
+        //}
 
 
 
@@ -1037,48 +1037,6 @@ namespace ImgViewer.Views
             // опционально: сразу пересчитать live-pipeline
             ScheduleLivePipelineRun();
         }
-
-//        private async Task LoadPipelineFromFile()
-//        {
-
-//            var dlg = new Microsoft.Win32.OpenFileDialog();
-//            dlg.Filter = "IGpreset files|*.igpreset";
-//            List<Operation> pipeline = new List<Operation>();
-//            if (dlg.ShowDialog() == true)
-//            {
-//                try
-//                {
-//                    var fileName = dlg.FileName;
-//                    string json = await Task.Run(() => File.ReadAllText(fileName));
-//                    Pipeline.LoadPipelineFromJson(json);
-//                }
-//                catch (OperationCanceledException)
-//                {
-//                    // Load was cancelled, do nothing
-//                }
-//                catch (Exception ex)
-//                {
-//                    System.Windows.MessageBox.Show
-//                    (
-//                        $"Error loading preset: {ex.Message}",
-//                        "Error",
-//                        MessageBoxButton.OK,
-//                        MessageBoxImage.Error
-//                    );
-//                }
-//            }
-
-//#if DEBUG
-//            foreach (var op in pipeline)
-//            {
-//                Debug.WriteLine($"Command: {op.Command}");
-//                foreach (var p in op.Parameters)
-//                {
-//                    Debug.WriteLine($"  {p.Name} = {p.Value} (type: {p.Value?.GetType().Name ?? "null"})");
-//                }
-//            }
-//#endif
-//        }
 
         private void SavePipelinePreset_Click(object sender, RoutedEventArgs e)
         {
