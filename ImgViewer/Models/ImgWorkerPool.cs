@@ -27,6 +27,7 @@ namespace ImgViewer.Models
         private readonly int _totalCount;
         private (ProcessorCommand Command, Dictionary<string, object> Params)[] _plOperations;
         private readonly string? _plJson;
+        private List<string> _opsLog = new List<string>();
 
         public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
@@ -42,7 +43,9 @@ namespace ImgViewer.Models
             _token = _cts.Token;
             _sourceFolder = sourceFolder;
 
-            _outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
+            //_outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
+            string sourceFolderName = Path.GetFileName(_sourceFolder.Path);
+            _outputFolder = Path.Combine(_sourceFolder.ParentPath, sourceFolderName + "_processed");
             Directory.CreateDirectory(_outputFolder);
             //_pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
             var opsSnapshot = pipeline.Operations
@@ -64,6 +67,10 @@ namespace ImgViewer.Models
             });
             _processedCount = 0;
             _totalCount = sourceFolder.Files.Length;
+            foreach (var op in opsSnapshot)
+            {
+                _opsLog.Add(op.Command.ToString());
+            }
         }
 
         public void Dispose()
@@ -101,7 +108,7 @@ namespace ImgViewer.Models
         private void Worker()
         {
             var token = _token;
-
+            var startTime = DateTime.Now;   
             using var imgProc = new OpenCVImageProcessor(null, token);
             using var fileProc = new FileProcessor(token);
             try
@@ -133,7 +140,6 @@ namespace ImgViewer.Models
                         {
                             if (op.Command == null)
                             {
-                                
                                 continue;
                             }
                             //var parameters = op.CreateParameterDictionary();
@@ -185,6 +191,20 @@ namespace ImgViewer.Models
             catch (Exception ex)
             {
                 ErrorOccured?.Invoke($"Error in worker: {ex.Message}");
+            }
+            finally
+            {
+                var duration = DateTime.Now - startTime;
+                var durationHours = (int)duration.TotalHours;
+                var durationMinutes = duration.Minutes;
+                var durationSeconds = duration.Seconds;
+                var logMsg = $"Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
+                var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
+                var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
+                File.WriteAllLines(
+                    Path.Combine(_outputFolder, "processing_log.txt"),
+                    new string[] { logMsg, timeMsg, "Operations performed:", plOps }
+                );
             }
 
         }

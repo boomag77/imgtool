@@ -1223,7 +1223,7 @@ namespace ImgViewer.Views
                 }
 
                 // опционально: спросить подтверждение у пользователя
-                var res = System.Windows.MessageBox.Show($"Apply current pipeline to all images in:\n{folder} ?",
+                var res = System.Windows.MessageBox.Show($"Apply current pipeline to all images in:\n\n{folder} ?",
                                                          "Confirm",
                                                          MessageBoxButton.OKCancel,
                                                          MessageBoxImage.Question);

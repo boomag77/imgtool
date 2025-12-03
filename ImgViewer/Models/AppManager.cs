@@ -322,6 +322,8 @@ namespace ImgViewer.Models
             }
             _poolCts = new CancellationTokenSource();
 
+            var startTime = DateTime.Now;
+
             try
             {
                 using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0, IsSavePipelineToMd))
@@ -330,7 +332,9 @@ namespace ImgViewer.Models
                     {
                         await workerPool.RunAsync().ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException) { }
+                    catch (OperationCanceledException)
+                    {
+                    }
                     catch (Exception)
                     {
                         // TODO Error handling
@@ -340,6 +344,7 @@ namespace ImgViewer.Models
             }
             finally
             {
+                
                 UpdateStatus("Standby");
                 //await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 //{
