@@ -71,13 +71,13 @@ namespace ImgViewer.Models
             _plJson = savePipelineToMd ? pipeline.BuildPipelineForSave() : null;
 
             int cpuCount = Environment.ProcessorCount;
-            _workersCount = maxWorkersCount == 0 ? cpuCount : maxWorkersCount;
+            _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount-1) : maxWorkersCount;
 
             _filesQueue = new BlockingCollection<string>(
                 maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
             );
             _saveQueue = new BlockingCollection<SaveTaskInfo>( _workersCount );
-            _maxSavingWorkers = _workersCount;
+            _maxSavingWorkers = Math.Max(1, cpuCount/2);
 
             _tokenRegistration = _token.Register(() =>
             {
