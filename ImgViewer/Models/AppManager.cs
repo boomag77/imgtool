@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.IO;
+using OpenCvSharp;
 
 namespace ImgViewer.Models
 {
@@ -212,6 +213,8 @@ namespace ImgViewer.Models
             var debug = false;
             if (pipeline == null) return;
 
+            var startTime = DateTime.Now;   
+
             UpdateStatus($"Processing folders in " + rootFolder);
             //_mainViewModel.Status = $"Processing folders in " + rootFolder;
 
@@ -250,6 +253,9 @@ namespace ImgViewer.Models
 
             if (sourceFolders == null || sourceFolders.Length == 0) return;
 
+            var processedCount = 0;
+
+
             if (_rootFolderCts != null)
             {
                 try { _rootFolderCts.Cancel(); } catch { }
@@ -265,6 +271,7 @@ namespace ImgViewer.Models
                     try
                     {
                         await ProcessFolder(sourceFolder.Path, pipeline);
+                        processedCount++;
                     }
                     catch (OperationCanceledException)
                     {
@@ -279,6 +286,22 @@ namespace ImgViewer.Models
             }
             finally
             {
+                var duration = DateTime.Now - startTime;
+                var durationHours = (int)duration.TotalHours;
+                var durationMinutes = duration.Minutes;
+                var durationSeconds = duration.Seconds;
+                var logMsg = $"Processed {processedCount} of {sourceFolders.Length} folders from ** {rootFolder} **.";
+                var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
+                var opsLog = new List<string>();
+                foreach (var op in pipeline.Operations)
+                {
+                    opsLog.Add($"- {op.Command}");
+                }
+                var plOps = pipeline.Operations.Count > 0 ? string.Join(Environment.NewLine, opsLog) : "No operations were performed.";
+                File.WriteAllLines(
+                    Path.Combine(rootFolder, "processing_log.txt"),
+                    new string[] { logMsg, timeMsg, "Operations performed:", plOps }
+                );
                 UpdateStatus("Standby");
                 try { _rootFolderCts?.Dispose(); } catch { }
                 _rootFolderCts = null;

@@ -69,7 +69,7 @@ namespace ImgViewer.Models
             _totalCount = sourceFolder.Files.Length;
             foreach (var op in opsSnapshot)
             {
-                _opsLog.Add(op.Command.ToString());
+                _opsLog.Add($"- {op.Command}");
             }
         }
 
@@ -102,6 +102,14 @@ namespace ImgViewer.Models
             {
                 try { _filesQueue.CompleteAdding(); } catch { }
             }
+
+        }
+
+        private void ImageSaverWorker()
+        {
+            var token = _token;
+            using var fileProc = new FileProcessor(token);
+
 
         }
 
