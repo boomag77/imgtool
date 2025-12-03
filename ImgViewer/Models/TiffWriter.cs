@@ -1,5 +1,6 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -63,6 +64,52 @@ namespace ImgViewer.Models
                 {
                     // decode stream to System.Drawing.Bitmap
                     using var bmp = (Bitmap)Image.FromStream(ms);
+
+                    // check bmp is bin 1bpp already?
+                    //if (bmp.PixelFormat == PixelFormat.Format1bppIndexed)
+                    //{
+                    //    Debug.WriteLine($"1 bpp already!");
+                    //    // already binary - just save via LibTiff.NET
+                    //    // extract binary bytes
+                    //    int w = bmp.Width;
+                    //    int h = bmp.Height;
+                    //    byte[] binPxls = new byte[w * h];
+                    //    // read pixels
+                    //    var rect = new Rectangle(0, 0, w, h);
+                    //    var data = bmp.LockBits(rect, ImageLockMode.ReadOnly, bmp.PixelFormat);
+                    //    try
+                    //    {
+                    //        int srcStride = data.Stride;
+                    //        byte[] row = new byte[srcStride];
+                    //        IntPtr scan0 = data.Scan0;
+                    //        for (int y = 0; y < h; y++)
+                    //        {
+                    //            Marshal.Copy(scan0 + y * srcStride, row, 0, srcStride);
+                    //            // unpack row to 0/255
+                    //            for (int x = 0; x < w; x++)
+                    //            {
+                    //                int byteIndex = x >> 3;
+                    //                int bitIndex = 7 - (x & 7);
+                    //                bool isBlack = (row[byteIndex] & (1 << bitIndex)) != 0;
+                    //                binPxls[y * w + x] = isBlack ? (byte)255 : (byte)0;
+                    //            }
+                    //        }
+                    //    }
+                    //    finally
+                    //    {
+                    //        bmp.UnlockBits(data);
+                    //    }
+                    //    // write via LibTiff.NET
+                    //    SaveBinaryBytesAsCcitt(
+                    //        binPxls,
+                    //        w, h,
+                    //        path,
+                    //        dpi,
+                    //        compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
+                    //        photometricMinIsWhite: false,
+                    //        metadataJson: metadataJson);
+                    //    return;
+                    //}
 
                     // convert to binary 0/255 bytes (grayscale + Otsu)
                     var binPixels = ConvertBitmapToBinary(bmp, out int width, out int height);
