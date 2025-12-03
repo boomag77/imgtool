@@ -270,7 +270,7 @@ namespace ImgViewer.Models
                     _rootFolderCts.Token.ThrowIfCancellationRequested();
                     try
                     {
-                        await ProcessFolder(sourceFolder.Path, pipeline);
+                        await Task.Run(() => ProcessFolder(sourceFolder.Path, pipeline));
                         processedCount++;
                     }
                     catch (OperationCanceledException)
@@ -283,9 +283,8 @@ namespace ImgViewer.Models
                         Debug.WriteLine($"Error while processing sub-Folder in root Folder {rootFolder}: {ex.Message}");
                     }
                 }
-            }
-            finally
-            {
+
+
                 var duration = DateTime.Now - startTime;
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
@@ -302,6 +301,10 @@ namespace ImgViewer.Models
                     Path.Combine(rootFolder, "processing_log.txt"),
                     new string[] { logMsg, timeMsg, "Operations performed:", plOps }
                 );
+
+            }
+            finally
+            {
                 UpdateStatus("Standby");
                 try { _rootFolderCts?.Dispose(); } catch { }
                 _rootFolderCts = null;

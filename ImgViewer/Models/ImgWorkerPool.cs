@@ -8,15 +8,30 @@ namespace ImgViewer.Models
 {
     internal class ImgWorkerPool : IDisposable
     {
+
+        private sealed class SaveTaskInfo
+        {
+            public MemoryStream ImageStream { get; set; }
+            public string OutputFilePath;
+        }
+
         private bool _disposed;
 
         private readonly BlockingCollection<string> _filesQueue;
+        private readonly BlockingCollection<SaveTaskInfo> _saveQueue;
         private readonly CancellationTokenSource _cts;
         private readonly CancellationToken _token;
         private CancellationTokenRegistration _tokenRegistration;
         private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
         private readonly int _workersCount;
+
+        private readonly int _maxSavingWorkers;
+        private int _currentSavingWorkers = 0;
+
+        private readonly object _savingLock = new();
+        private readonly List<Task> _savingTasks = new();
+
 
         //private readonly (ProcessorCommand command, Dictionary<string, object> parameters)[] _pipelineTemplate;
         //private Pipeline _pipline;
@@ -61,9 +76,13 @@ namespace ImgViewer.Models
             _filesQueue = new BlockingCollection<string>(
                 maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
             );
+            _saveQueue = new BlockingCollection<SaveTaskInfo>( _workersCount );
+            _maxSavingWorkers = _workersCount;
+
             _tokenRegistration = _token.Register(() =>
             {
                 try { _filesQueue.CompleteAdding(); } catch { }
+                try { _saveQueue.CompleteAdding(); } catch { }
             });
             _processedCount = 0;
             _totalCount = sourceFolder.Files.Length;
@@ -80,6 +99,7 @@ namespace ImgViewer.Models
 
             try { _tokenRegistration.Dispose(); } catch { }
             try { _filesQueue?.Dispose(); } catch { }
+            try { _saveQueue?.Dispose(); } catch { }
         }
 
         private async Task EnqueueFiles()
@@ -105,18 +125,63 @@ namespace ImgViewer.Models
 
         }
 
-        private void ImageSaverWorker()
+        private void StartSavingWorkerIfNeeded()
+        {
+            lock (_savingLock)
+            {
+                if (_currentSavingWorkers >= _maxSavingWorkers)
+                    return;
+
+                _currentSavingWorkers++;
+
+                var task = Task.Run(() =>
+                {
+                    try
+                    {
+                        ImageSavingWorker(); 
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref _currentSavingWorkers);
+                    }
+                }, _token);
+
+                _savingTasks.Add(task);
+            }
+        }
+
+        private void ImageSavingWorker()
         {
             var token = _token;
             using var fileProc = new FileProcessor(token);
-
+            try
+            {
+                foreach (var saveTask in _saveQueue.GetConsumingEnumerable(token))
+                {
+                    token.ThrowIfCancellationRequested();
+                    using (var ms = saveTask.ImageStream)
+                    {
+                        ms.Position = 0;
+                        fileProc.SaveTiff(ms, saveTask.OutputFilePath, TiffCompression.CCITTG4, 300, true, _plJson);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("ImageSaverWorker cancelled!");
+                return;
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Error in ImageSaverWorker: {ex.Message}");
+            }
 
         }
 
-        private void Worker()
+        private void ImageProcessingWorker()
         {
             var token = _token;
-            var startTime = DateTime.Now;   
+               
             using var imgProc = new OpenCVImageProcessor(null, token);
             using var fileProc = new FileProcessor(token);
             try
@@ -173,13 +238,26 @@ namespace ImgViewer.Models
                     //proc.SaveCurrentImage(outputFilePath);
                     using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
                     {
-                        using (var ms = new MemoryStream())
+                        var saveTask = new SaveTaskInfo
                         {
-                            if (outStream.CanSeek) outStream.Position = 0;
-                            outStream.CopyTo(ms);
-                            ms.Position = 0;
-                            fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true, _plJson);
+                            ImageStream = new MemoryStream(),
+                            OutputFilePath = outputFilePath
+                        };
+                        if (outStream.CanSeek) outStream.Position = 0;
+                        outStream.CopyTo(saveTask.ImageStream);
+                        _saveQueue.Add(saveTask, token);
+                        if (_saveQueue.Count >= 2)
+                        {
+                            StartSavingWorkerIfNeeded();
                         }
+
+                        //using (var ms = new MemoryStream())
+                        //{
+                        //    if (outStream.CanSeek) outStream.Position = 0;
+                        //    outStream.CopyTo(ms);
+                        //    ms.Position = 0;
+                        //    fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true, _plJson);
+                        //}
                     }
 
 
@@ -200,8 +278,29 @@ namespace ImgViewer.Models
             {
                 ErrorOccured?.Invoke($"Error in worker: {ex.Message}");
             }
-            finally
+
+        }
+
+        public async Task RunAsync()
+        {
+            var startTime = DateTime.Now;
+            var processingTasks = new List<Task>();
+            try
             {
+                for (int i = 0; i < _workersCount; i++)
+                {
+                    if (_cts.IsCancellationRequested) throw new OperationCanceledException();
+                    processingTasks.Add(Task.Run(() => ImageProcessingWorker(), _token));
+                }
+
+                // in parallel enqueing que
+                var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
+                processingTasks.Add(enqueueTask);
+                StartSavingWorkerIfNeeded();
+                await Task.WhenAll(processingTasks);
+                _saveQueue.CompleteAdding();
+                await Task.WhenAll(_savingTasks);
+
                 var duration = DateTime.Now - startTime;
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
@@ -213,25 +312,7 @@ namespace ImgViewer.Models
                     Path.Combine(_outputFolder, "processing_log.txt"),
                     new string[] { logMsg, timeMsg, "Operations performed:", plOps }
                 );
-            }
 
-        }
-
-        public async Task RunAsync()
-        {
-            var tasks = new List<Task>();
-            try
-            {
-                for (int i = 0; i < _workersCount; i++)
-                {
-                    if (_cts.IsCancellationRequested) throw new OperationCanceledException();
-                    tasks.Add(Task.Run(() => Worker(), _token));
-                }
-
-                // in parallel enqueing que
-                var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
-                tasks.Add(enqueueTask);
-                await Task.WhenAll(tasks);
             }
             catch (OperationCanceledException)
             {
