@@ -178,7 +178,7 @@ namespace ImgViewer.Models
             //Debug.WriteLine($"Stream length: {stream.Length}");
 
             
-            string json = _pipeline.BuildPipelineForSave();
+            string json = IsSavePipelineToMd ? _pipeline.BuildPipelineForSave() : null;
 
             _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
         }
