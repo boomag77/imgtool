@@ -324,10 +324,11 @@ namespace ImgViewer.Views
 
             // при ЛЮБОМ изменении Live (ON/OFF) пересобираем весь pipeline
             _manager.CancelImageProcessing();
-            if (op.Live)
-            {
-                ScheduleLivePipelineRun();
-            }
+            ScheduleLivePipelineRun();
+            //if (op.Live)
+            //{
+            //    ScheduleLivePipelineRun();
+            //}
         }
 
         private void SubscribeParameterChangedHandlers()

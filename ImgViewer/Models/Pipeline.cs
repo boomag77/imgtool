@@ -160,7 +160,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 0, 2_000_000, 1),
                                 new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
+                                new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.20, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 200, 1),
                                 // Manual
                                 new PipeLineParameter("Left", "manualLeft", 0, 0, 10000, 1),

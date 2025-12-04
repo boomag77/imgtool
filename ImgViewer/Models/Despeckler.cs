@@ -23,6 +23,7 @@ namespace ImgViewer.Models
             try
             {
                 token.ThrowIfCancellationRequested();
+
                 if (src == null) throw new ArgumentNullException(nameof(src));
                 if (src.Empty()) return src.Clone();
 

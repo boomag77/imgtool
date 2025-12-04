@@ -29,8 +29,8 @@ namespace ImgViewer.Models
             double minSpanFraction = 0.6,   // если bbox покрывает >= этой доли по ширине/высоте -> кандидат
             double solidityThreshold = 0.6, // если solidity >= -> кандидат
             double minDepthFraction = 0.05, // проникновение вглубь, в долях min(rows,cols)
-            int featherPx = 12,             // радиус растушёвки для мягкого перехода
-            BordersRemovalMode mode = BordersRemovalMode.Fill
+            int featherPx = 12,
+            bool useTeleaHybrid = true
         )
 
 
@@ -213,54 +213,11 @@ namespace ImgViewer.Models
                     }
                 }
 
-                // INPAINT
-                //var filled = working.Clone();
-
-                //int margin = featherPx; // положительное = расширить маску чуть глубже внутрь
-
-                //Mat modMask = new Mat();
-                //if (selectedMask.Type() != MatType.CV_8U)
-                //    selectedMask.ConvertTo(modMask, MatType.CV_8U);
-                //else
-                //    modMask = selectedMask.Clone();
-
-                //// лёгкое расширение/сужение маски вокруг бордюра
-                //if (margin > 0)
-                //{
-                //    var k = Cv2.GetStructuringElement(
-                //        MorphShapes.Rect,
-                //        new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
-                //    Cv2.Dilate(modMask, modMask, k, iterations: 1);
-                //}
-                //else if (margin < 0)
-                //{
-                //    int m = -margin;
-                //    var k = Cv2.GetStructuringElement(
-                //        MorphShapes.Rect,
-                //        new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
-                //    Cv2.Erode(modMask, modMask, k, iterations: 1);
-                //}
-
-                //// ---- ВМЕСТО SetTo(chosenBg) + GaussianBlur + цикл blend ----
-                //// делаем Telea inpaint по модифицированной маске
-
-                //// inpaintMask: всё, что != 0 — будет восстановлено по соседям
-                //Mat inpaintMask = modMask; // можно modMask.Clone(), если хочется сохранить исходный
-
-                //// радиус inpaint'а: возьмём что-то около featherPx, но не слишком большое
-                //double inpaintRadius = Math.Max(3, featherPx);
-
-                //// сам inpaint: working -> filled
-                //Cv2.Inpaint(working, inpaintMask, filled, inpaintRadius, InpaintMethod.NS);
-
-                //// твой зелёный debug поверх (НЕ трогаем)
-                ////filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
-
-                //return filled;
-
                 var filled = working.Clone();
 
                 int margin = featherPx; // <-- ваш n: положительное = расширить, отрицательное = врезать внутрь
+
+
 
                 // ensure mask is CV_8U with values 0/255
                 Mat modMask = new Mat();
@@ -282,10 +239,82 @@ namespace ImgViewer.Models
                     Cv2.Erode(modMask, modMask, k, iterations: 1);
                 }
 
+                int guardBandPx = Math.Max(8, minDepthPx / 2); // половина глубины бордюра
+                guardBandPx = Math.Min(guardBandPx, Math.Min(rows, cols) / 4); // safety cap
+
+                // если картинка совсем маленькая, guardBand не имеет смысла
+                if (rows > 2 * guardBandPx && cols > 2 * guardBandPx)
+                {
+                    using var innerDark = new Mat(modMask.Size(), MatType.CV_8U, Scalar.All(0));
+
+                    // прямоугольник "внутри страницы", отступленный от границ
+                    var innerRoi = new Rect(
+                        guardBandPx,
+                        guardBandPx,
+                        cols - 2 * guardBandPx,
+                        rows - 2 * guardBandPx);
+
+                    // скопируем тёмные пиксели из darkMask в innerDark только в этом внутреннем прямоугольнике
+                    using (var innerDarkRoi = new Mat(innerDark, innerRoi))
+                    using (var darkMaskRoi = new Mat(darkMask, innerRoi))
+                    {
+                        darkMaskRoi.CopyTo(innerDarkRoi);
+                    }
+
+                    // Теперь innerDark=255 там, где тёмный контент внутри страницы.
+                    // Вырежем его из маски заливки: modMask &= ~innerDark
+                    using var innerDarkInv = new Mat();
+                    Cv2.BitwiseNot(innerDark, innerDarkInv);
+                    Cv2.BitwiseAnd(modMask, innerDarkInv, modMask);
+                }
+
+                // Если в маске ничего нет — просто вернуть исходник
+                if (Cv2.CountNonZero(modMask) == 0)
+                    return working.Clone();
+
+
+                if (useTeleaHybrid)
+                {
+                    // === CASE 3: Telea + защитный пояс ===
+
+                    // 1) Outer mask — вся зона бордюра после guard
+                    using var outerMask = modMask.Clone();
+
+                    // 2) Inner mask — защищённая внутренняя часть в зоне бордюра
+                    using var innerMask = modMask.Clone();
+                    int innerRadius = Math.Max(1, margin / 2);
+                    if (innerRadius > 0)
+                    {
+                        using var kInner = Cv2.GetStructuringElement(
+                            MorphShapes.Rect,
+                            new OpenCvSharp.Size(2 * innerRadius + 1, 2 * innerRadius + 1));
+                        Cv2.Erode(innerMask, innerMask, kInner, iterations: 1);
+                    }
+
+                    // 3) Inpaint по всей зоне outerMask
+                    using var inpainted = new Mat();
+                    double inpaintRadius = Math.Max(3.0, margin);
+                    Cv2.Inpaint(working, outerMask, inpainted, inpaintRadius, InpaintMethod.Telea);
+
+                    // 4) Собираем финальный результат
+                    filled = working.Clone();
+
+                    // 4.1. Внешняя часть бордюра — заливаем цветом бумаги (удаляем рамку)
+                    filled.SetTo(chosenBg, outerMask);
+
+                    // 4.2. Внутренняя часть (innerMask) — копируем Telea-результат,
+                    // чтобы восстановить/смягчить текст и контент, прилегающий к бордюру
+                    inpainted.CopyTo(filled, innerMask);
+
+                    // 4.3. Твой зелёный debug по исходной selectedMask (оставляем!)
+                    //filled.SetTo(new Scalar(0, 255, 0), selectedMask);
+
+                    return filled;
+                }
+
                 filled.SetTo(chosenBg, modMask);
 
-
-                filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
+                //filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
 
                 //4) smooth the seam: create blurred(soft) mask and do local per-pixel blend in ROI
                 //create blurred mask(CV_8U -> blurred uchar)
@@ -361,8 +390,7 @@ namespace ImgViewer.Models
                                                     double threshFrac = 0.60,
                                                     int contrastThr = 30,
                                                     double centralSample = 0.30,
-                                                    double maxRemoveFrac = 0.25,
-                                                    BordersRemovalMode mode = BordersRemovalMode.Fill)
+                                                    double maxRemoveFrac = 0.25)
         {
             //Debug.WriteLine("RemoveBordersByRowColWhite started. Before checking _currentImage");
             if (src == null || src.Empty())
@@ -469,42 +497,39 @@ namespace ImgViewer.Models
 
             // Применяем заливку белым (in-place в новом Mat)
             Mat result = srcBgr.Clone();
-            if (mode == BordersRemovalMode.Fill)
-            {
-                Scalar white = new Scalar(255, 255, 255);
-                if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
-                if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
-                if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
-                if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
+            Scalar white = new Scalar(255, 255, 255);
+            if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
+            if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
+            if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
+            if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
 
-                central.Dispose();
-                gray.Dispose();
-                if (converted) srcBgr.Dispose();
-
-                return result;
-            }
-
-            // trying to crop instead of fill
-            int row0 = top;
-            int row1 = h - bottom;
-            int col0 = left;
-            int col1 = w - right;
-            if (row1 <= row0 || col1 <= col0) return new Mat();
-            result = srcBgr.RowRange(row0, row1).ColRange(col0, col1).Clone();
-
-
-            // Заменяем поле _currentImage на result (освобождая прежний Mat)
-            //WorkingImage = result;
-
-            // Освобождаем временные объекты
             central.Dispose();
             gray.Dispose();
-            if (converted) srcBgr.Dispose(); // если создали новый Mat при конвертации
-            //old?.Dispose();
+            if (converted) srcBgr.Dispose();
 
-            // (опционально) логирование — можно убрать
-            Debug.WriteLine($"RemoveBordersByRowColWhite applied: cuts(top,bottom,left,right) = ({top},{bottom},{left},{right}), centralMedian={centralMedian}");
             return result;
+
+            // trying to crop instead of fill
+            //int row0 = top;
+            //int row1 = h - bottom;
+            //int col0 = left;
+            //int col1 = w - right;
+            //if (row1 <= row0 || col1 <= col0) return new Mat();
+            //result = srcBgr.RowRange(row0, row1).ColRange(col0, col1).Clone();
+
+
+            //// Заменяем поле _currentImage на result (освобождая прежний Mat)
+            ////WorkingImage = result;
+
+            //// Освобождаем временные объекты
+            //central.Dispose();
+            //gray.Dispose();
+            //if (converted) srcBgr.Dispose(); // если создали новый Mat при конвертации
+            ////old?.Dispose();
+
+            //// (опционально) логирование — можно убрать
+            //Debug.WriteLine($"RemoveBordersByRowColWhite applied: cuts(top,bottom,left,right) = ({top},{bottom},{left},{right}), centralMedian={centralMedian}");
+            //return result;
         }
 
         /// <summary>
