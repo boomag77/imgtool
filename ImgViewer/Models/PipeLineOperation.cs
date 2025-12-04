@@ -243,14 +243,14 @@ namespace ImgViewer.Models
                 };
             }
 
-            ApplyDespeckleVisibility();
             var despeckleRelativeFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "smallAreaRelative");
             if (despeckleRelativeFlagImmediate != null)
             {
+                // ??? Despeckle-????????, ????? ????????? ????????? ???? ???????
+                ApplyDespeckleVisibility();
+
                 despeckleRelativeFlagImmediate.PropertyChanged -= DespeckleRelativeFlag_PropertyChanged;
                 despeckleRelativeFlagImmediate.PropertyChanged += DespeckleRelativeFlag_PropertyChanged;
-
-
             }
 
 
@@ -288,6 +288,8 @@ namespace ImgViewer.Models
         private void ApplyDespeckleVisibility()
         {
             var smallAreaRelativeFlag = _parameters.FirstOrDefault(x => x.Key == "smallAreaRelative");
+            if (smallAreaRelativeFlag == null)
+                return;
             bool useRelative = smallAreaRelativeFlag != null && smallAreaRelativeFlag.IsBool && smallAreaRelativeFlag.BoolValue;
             foreach (var p in _parameters)
             {
@@ -301,9 +303,6 @@ namespace ImgViewer.Models
                         break;
                     case "smallAreaAbsolutePx":
                         p.IsVisible = !useRelative;
-                        break;
-                    default:
-                        p.IsVisible = true;
                         break;
                 }
             }
@@ -550,20 +549,7 @@ namespace ImgViewer.Models
         private void DespeckleRelativeFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
-            if (sender is not PipeLineParameter smallAreaRelativeParam) return;
-            bool useRelative = smallAreaRelativeParam.BoolValue;
-            foreach (var q in _parameters)
-            {
-                switch (q.Key)
-                {
-                    case "smallAreaMultiplier":
-                        q.IsVisible = useRelative;
-                        break;
-                    case "smallAreaAbsolutePx":
-                        q.IsVisible = !useRelative;
-                        break;
-                }
-            }
+            ApplyDespeckleVisibility();
         }
 
         private void ClaheFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
