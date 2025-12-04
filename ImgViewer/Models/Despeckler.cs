@@ -42,7 +42,6 @@ namespace ImgViewer.Models
                 {
                     if (inputIsBinary)
                     {
-                        token.ThrowIfCancellationRequested();
                         // src может быть бинарной в gray или BGR/BGRA (после BinarizeAdaptive)
                         Mat grayBin = new Mat();
                         if (src.Channels() == 1)
@@ -133,9 +132,8 @@ namespace ImgViewer.Models
                         }
                         else
                         {
-                            token.ThrowIfCancellationRequested();
                             int blockSize = ClampInt(grayCols / 40, 11, 101) | 1;
-                            int C = 8;
+                            int C = 14;
                             Cv2.AdaptiveThreshold(denoised, binLocal, 255,
                                 AdaptiveThresholdTypes.GaussianC,
                                 ThresholdTypes.Binary,
@@ -313,15 +311,44 @@ namespace ImgViewer.Models
                     );
 
                     // remove: build mask from labels and intersect with original black mask
+
+
                     using var removeMask = new Mat(bin.Size(), MatType.CV_8UC1, Scalar.All(0)); // will accumulate removed pixels
-                    foreach (int lbl in toRemoveLabels)
+
+                    if (toRemoveLabels.Count > 0)
                     {
-                        token.ThrowIfCancellationRequested();
-                        using var m = new Mat();
-                        Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), m); // 255 where label==lbl
-                        Cv2.BitwiseOr(removeMask, m, removeMask);
+                        // быстрая проверка принадлежности метки к списку удаляемых
+                        var toRemoveSet = new HashSet<int>(toRemoveLabels);
+
+                        // безопасный доступ к данным labels и removeMask
+                        var labelsIdx = labels.GetGenericIndexer<int>();   // labels: CV_32SC1
+                        var maskIdx = removeMask.GetGenericIndexer<byte>(); // removeMask: CV_8UC1
+
+                        for (int y = 0; y < labels.Rows; y++)
+                        {
+                            // периодически даём возможность отмены
+                            if ((y & 31) == 0)
+                                token.ThrowIfCancellationRequested();
+
+                            for (int x = 0; x < labels.Cols; x++)
+                            {
+                                int lbl = labelsIdx[y, x];
+                                if (toRemoveSet.Contains(lbl))
+                                {
+                                    maskIdx[y, x] = 255; // помечаем пиксель на удаление
+                                }
+                            }
+                        }
                     }
-                    token.ThrowIfCancellationRequested();
+                    //foreach (int lbl in toRemoveLabels)
+                    //{
+                    //    token.ThrowIfCancellationRequested();
+                    //    using var m = new Mat();
+                    //    Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), m); // 255 where label==lbl
+                    //    Cv2.BitwiseOr(removeMask, m, removeMask);
+                    //}
+
+
                     using var intersect = new Mat();
                     Cv2.BitwiseAnd(removeMask, textMask, intersect); // ensure only original black pixels removed
 
