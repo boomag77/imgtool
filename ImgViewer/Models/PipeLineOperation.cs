@@ -470,6 +470,7 @@ namespace ImgViewer.Models
                         p.IsVisible = true;
                         break;
                     case "autoThresh":
+                    case "useTeleaHybrid":
                         p.IsVisible = isAuto;
                         break;
                     case "marginPercent":
