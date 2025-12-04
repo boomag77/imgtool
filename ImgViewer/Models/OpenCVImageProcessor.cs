@@ -805,6 +805,7 @@ namespace ImgViewer.Models
                                 int featherPx = 12;
                                 int top = 0, bottom = 0, left = 0, right = 0;
                                 bool manualCutDebug = false;
+                                bool useTeleaHybrid = true;
 
                                 foreach (var kv in parameters)
                                 {
@@ -855,6 +856,9 @@ namespace ImgViewer.Models
                                         case "featherPx":
                                             featherPx = SafeInt(kv.Value, featherPx);
                                             break;
+                                        case "useTeleaHybrid":
+                                            useTeleaHybrid = SafeBool(kv.Value, useTeleaHybrid);
+                                            break;
 
                                         case "centralSample":
                                             centralSample = SafeDouble(kv.Value, centralSample);
@@ -904,7 +908,8 @@ namespace ImgViewer.Models
                                                     minSpanFraction,
                                                     solidityThreshold,
                                                     minDepthFraction,
-                                                    featherPx
+                                                    featherPx,
+                                                    useTeleaHybrid
                                                 );
                                                 break;
                                             case "By Contrast":
@@ -2356,7 +2361,7 @@ namespace ImgViewer.Models
         }
 
         private Mat? RemoveBorders_Auto(Mat src, byte darkThresh, Scalar? bgColor, int minAreaPx, double minSpanFraction, double solidityThreshold,
-                                    double minDepthFraction, int featherPx)
+                                    double minDepthFraction, int featherPx, bool useTeleaHybrid)
         {
             try
             {
@@ -2367,7 +2372,8 @@ namespace ImgViewer.Models
                                                     minSpanFraction,
                                                     solidityThreshold,
                                                     minDepthFraction,
-                                                    featherPx
+                                                    featherPx,
+                                                    useTeleaHybrid
                                                 );
                 return result;
             }

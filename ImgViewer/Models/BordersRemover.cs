@@ -275,6 +275,7 @@ namespace ImgViewer.Models
 
                 if (useTeleaHybrid)
                 {
+                    Debug.WriteLine("Using Telea hybrid border removal");
                     // === CASE 3: Telea + защитный пояс ===
 
                     // 1) Outer mask — вся зона бордюра после guard

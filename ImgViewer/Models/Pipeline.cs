@@ -162,6 +162,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.20, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 200, 1),
+                                new PipeLineParameter("Use TeleaHybrid", "useTeleaHybrid", true),
                                 // Manual
                                 new PipeLineParameter("Left", "manualLeft", 0, 0, 10000, 1),
                                 new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),
