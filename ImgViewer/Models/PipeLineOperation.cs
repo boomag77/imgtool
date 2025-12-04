@@ -243,6 +243,16 @@ namespace ImgViewer.Models
                 };
             }
 
+            ApplyDespeckleVisibility();
+            var despeckleRelativeFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "smallAreaRelative");
+            if (despeckleRelativeFlagImmediate != null)
+            {
+                despeckleRelativeFlagImmediate.PropertyChanged -= DespeckleRelativeFlag_PropertyChanged;
+                despeckleRelativeFlagImmediate.PropertyChanged += DespeckleRelativeFlag_PropertyChanged;
+
+
+            }
+
 
         }
 
@@ -272,6 +282,30 @@ namespace ImgViewer.Models
             {
                 if (p.Key == "marginPercent" || p.Key == "shiftFactor")
                     p.IsVisible = enabled;
+            }
+        }
+
+        private void ApplyDespeckleVisibility()
+        {
+            var smallAreaRelativeFlag = _parameters.FirstOrDefault(x => x.Key == "smallAreaRelative");
+            bool useRelative = smallAreaRelativeFlag != null && smallAreaRelativeFlag.IsBool && smallAreaRelativeFlag.BoolValue;
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "smallAreaRelative":
+                        p.IsVisible = true;
+                        break;
+                    case "smallAreaMultiplier":
+                        p.IsVisible = useRelative;
+                        break;
+                    case "smallAreaAbsolutePx":
+                        p.IsVisible = !useRelative;
+                        break;
+                    default:
+                        p.IsVisible = true;
+                        break;
+                }
             }
         }
 
@@ -508,6 +542,25 @@ namespace ImgViewer.Models
                         break;
                     default:
                         p.IsVisible = true;
+                        break;
+                }
+            }
+        }
+
+        private void DespeckleRelativeFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            if (sender is not PipeLineParameter smallAreaRelativeParam) return;
+            bool useRelative = smallAreaRelativeParam.BoolValue;
+            foreach (var q in _parameters)
+            {
+                switch (q.Key)
+                {
+                    case "smallAreaMultiplier":
+                        q.IsVisible = useRelative;
+                        break;
+                    case "smallAreaAbsolutePx":
+                        q.IsVisible = !useRelative;
                         break;
                 }
             }

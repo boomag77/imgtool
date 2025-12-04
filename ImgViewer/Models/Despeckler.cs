@@ -20,6 +20,9 @@ namespace ImgViewer.Models
                                             bool inputIsBinary = false,
                                             bool applyMaskToSource = true)    // <-- new parameter
         {
+            Debug.WriteLine($"Small Area mult: {settings.SmallAreaMultiplier}");
+            Debug.WriteLine($"Radius fraction: {settings.ProximityRadiusFraction}");
+
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -233,7 +236,9 @@ namespace ImgViewer.Models
                         horProj[y] = Cv2.CountNonZero(bin.Row(y)); // text px per row
                     }
 
-                    int projThr = Math.Max(1, binCols / 100);
+                    //int projThr = Math.Max(1, binCols / 100);
+                    int projThr = Math.Max(10, binCols / 40); // ~2.5% заполняемости строки
+
                     var textRows = new HashSet<int>(
                         Enumerable.Range(0, binRows).Where(y => horProj[y] > projThr)
                     );
@@ -264,6 +269,72 @@ namespace ImgViewer.Models
                     foreach (var c in smallComps)
                     {
                         token.ThrowIfCancellationRequested();
+                        var rect = c.bbox;
+                        var center = Center(rect);
+
+                        // --- 1. минимальная дистанция до крупных компонент (bigBoxes) ---
+                        double minDistToBig = double.MaxValue;
+                        foreach (var br in bigBoxes)
+                        {
+                            double d = DistPointToRect(center, br);
+                            if (d < minDistToBig) minDistToBig = d;
+                        }
+                        bool nearBig = minDistToBig < proximityRadius;
+
+                        // --- 2. попадает ли компонент в текстовую полосу по horProj/textRows ---
+                        bool onTextLine = false;
+                        if (textRows.Count > 0)
+                        {
+                            for (int ry = Math.Max(0, center.Y - rowCheckRange);
+                                 ry <= Math.Min(binRows - 1, center.Y + rowCheckRange);
+                                 ry++)
+                            {
+                                if (textRows.Contains(ry)) { onTextLine = true; break; }
+                            }
+                        }
+
+                        // ---------- ГЛАВНОЕ: разделение фон / текст ----------
+
+                        bool inTextRegion = nearBig || onTextLine;
+
+                        // 3А. Если НЕ текстовая зона → чистим агрессивно
+                        if (!inTextRegion)
+                        {
+                            toRemoveLabels.Add(c.label);
+                            continue;
+                        }
+
+                        // 3Б. Если текстовая зона → включаем аккуратные эвристики
+
+                        bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
+
+                        bool partOfCluster = false;
+                        if (settings.KeepClusters)
+                        {
+                            foreach (var c2 in smallComps)
+                            {
+                                if (c2.label == c.label) continue;
+
+                                var c2Center = Center(c2.bbox);
+                                if (Math.Abs(c2Center.Y - center.Y) <= rowCheckRange &&
+                                    Math.Abs(c2Center.X - center.X) <= clusterHoriz)
+                                {
+                                    partOfCluster = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Более строгая защита: только в текстовой зоне
+                        if (nearBig || (onTextLine && squareLike) || (onTextLine && partOfCluster))
+                        {
+                            toKeepLabels.Add(c.label);
+                        }
+                        else
+                        {
+                            toRemoveLabels.Add(c.label);
+                        }
+                        //token.ThrowIfCancellationRequested();
                         //var rect = c.bbox;
                         //var center = Center(rect);
 
@@ -304,7 +375,7 @@ namespace ImgViewer.Models
                         //    continue;
                         //}
 
-                        toRemoveLabels.Add(c.label);
+                        //toRemoveLabels.Add(c.label);
                     }
                     Debug.WriteLine(
                        $"Despeckle: comps={comps.Count}, small={smallComps.Length}, toRemove={toRemoveLabels.Count}"

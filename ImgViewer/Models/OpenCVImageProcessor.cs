@@ -969,7 +969,7 @@ namespace ImgViewer.Models
                                     case "proximityRadiusFraction":
                                         settings.ProximityRadiusFraction = SafeDouble(kv.Value, proximityRadiusFraction);
                                         break;
-                                    case "SquarenessTolerance":
+                                    case "squarenessTolerance":
                                         settings.SquarenessTolerance = SafeDouble(kv.Value, squarenessTolerance);
                                         break;
                                     case "keepClusters":
