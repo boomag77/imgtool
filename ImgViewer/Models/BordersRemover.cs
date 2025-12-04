@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Runtime.Remoting.Messaging;
+using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -12,6 +13,12 @@ namespace ImgViewer.Models
 {
     public class BordersRemover
     {
+
+        public enum BordersRemovalMode
+        {
+            Cut,
+            Fill
+        }
 
         public static Mat RemoveBorderArtifactsGeneric_Safe(
             CancellationToken token,
@@ -22,7 +29,8 @@ namespace ImgViewer.Models
             double minSpanFraction = 0.6,   // если bbox покрывает >= этой доли по ширине/высоте -> кандидат
             double solidityThreshold = 0.6, // если solidity >= -> кандидат
             double minDepthFraction = 0.05, // проникновение вглубь, в долях min(rows,cols)
-            int featherPx = 12              // радиус растушёвки для мягкого перехода
+            int featherPx = 12,             // радиус растушёвки для мягкого перехода
+            BordersRemovalMode mode = BordersRemovalMode.Fill
         )
 
 
@@ -84,15 +92,6 @@ namespace ImgViewer.Models
 
 
 
-
-                //+++
-                //int kernelWidth = Math.Max(7, working.Cols / 60);
-                //using var longKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(kernelWidth, 1));
-                //Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Close, longKernel);
-                //using var smallK = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(1, 1));
-                //Cv2.Dilate(darkMask, darkMask, smallK, iterations: 1);
-                //+++
-
                 // small open to reduce noise
                 token.ThrowIfCancellationRequested();
                 using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3)))
@@ -137,12 +136,20 @@ namespace ImgViewer.Models
                     double spanFractionH = (double)h / rows;
 
                     // compute maxDepth by scanning the component mask area (safe, no ToArray)
-                    int maxDepth = 0;
+                    //int maxDepth = 0;
                     using (var compMask = new Mat())
                     {
-                        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // compMask: 255 where label==i
+                        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // 255 где label==i
 
-                        // scan bounding box only for speed
+                        int maxDepth = 0;
+
+                        // НОВОЕ: маска "пограничной части" этого компонента
+                        using var compBorderMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
+
+                        // ширина пограничного пояса в пикселях (то, что раньше minDepthPx / maxBorderDepthPx)
+                        int borderBandPx = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
+
+                        // скан bbox компонента
                         int x0 = Math.Max(0, x);
                         int y0 = Math.Max(0, y);
                         int x1 = Math.Min(cols - 1, x + w - 1);
@@ -155,266 +162,190 @@ namespace ImgViewer.Models
                             {
                                 byte v = compMask.At<byte>(yy, xx);
                                 if (v == 0) continue;
-                                int d = Math.Min(Math.Min(xx, cols - 1 - xx), Math.Min(yy, rows - 1 - yy));
-                                if (d > maxDepth) maxDepth = d;
+
+                                int d = Math.Min(
+                                            Math.Min(xx, cols - 1 - xx),
+                                            Math.Min(yy, rows - 1 - yy));
+
+                                if (d > maxDepth)
+                                    maxDepth = d;
+
+                                // ⬅ если пиксель этого компонента находится близко к краю — пишем его в compBorderMask
+                                if (d <= borderBandPx)
+                                    compBorderMask.Set<byte>(yy, xx, 255);
                             }
                         }
 
+                        bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
+
+                        bool isInBorderBand = maxDepth <= borderBandPx;
+
+                        bool spansHoriz =
+                            (touchesTop || touchesBottom) &&
+                            spanFractionW >= minSpanFraction;
+
+                        bool spansVert =
+                            (touchesLeft || touchesRight) &&
+                            spanFractionH >= minSpanFraction;
+
+                        bool isBigFrame =
+                            (touchesLeft && touchesRight) ||
+                            (touchesTop && touchesBottom);
+
                         bool select = false;
-                        if (area >= minAreaPx) select = true;
-                        if (solidity >= solidityThreshold) select = true;
-                        if (spanFractionW >= minSpanFraction && (touchesTop || touchesBottom)) select = true;
-                        if (spanFractionH >= minSpanFraction && (touchesLeft || touchesRight)) select = true;
-                        if (maxDepth >= minDepthPx) select = true;
-                        if ((touchesLeft && touchesRight) || (touchesTop && touchesBottom)) select = true;
+
+                        if (touchesAny)
+                        {
+                            // реальный бордюр — полосы вдоль краёв или рамка
+                            if (spansHoriz || spansVert || isBigFrame)
+                                select = true;
+
+                            // опционально: неровные/тонкие штуки в узком поясе
+                            if (isInBorderBand && solidity < solidityThreshold)
+                                select = true;
+                        }
 
                         if (select)
                         {
-                            // add compMask -> selectedMask (BitwiseOr). Use Cv2.BitwiseOr with real Mats.
-                            Cv2.BitwiseOr(selectedMask, compMask, selectedMask);
+                            // ⬇ ВАЖНО: добавляем только погран-пояс компонента, а не весь компонент
+                            Cv2.BitwiseOr(selectedMask, compBorderMask, selectedMask);
                         }
                     }
                 }
 
-                //System.Diagnostics.Debug.WriteLine($"selectedMask nonzero: {Cv2.CountNonZero(selectedMask)}, type={selectedMask.Type()}");
-
-                // if nothing selected -> return clone
-                if (Cv2.CountNonZero(selectedMask) == 0)
-                    return working.Clone();
-
-                token.ThrowIfCancellationRequested();
-
-                // 3) fill selected areas with background color (hard fill)
+                // INPAINT
                 //var filled = working.Clone();
 
-                //// cut ++++++
+                //int margin = featherPx; // положительное = расширить маску чуть глубже внутрь
 
-                //int margin = featherPx; // adjust if you want expansion/shrink of mask
-
-                //// Ensure mask is 0/255 CV_8U and clone
-                //Mat modMask;
-                //if (selectedMask.Type() != MatType.CV_8U)
-                //{
-                //    modMask = new Mat();
-                //    selectedMask.ConvertTo(modMask, MatType.CV_8U);
-                //}
-                //else
-                //{
-                //    modMask = selectedMask.Clone();
-                //}
-
-                //// apply symmetric margin if requested
-                //if (margin != 0)
-                //{
-                //    int m = Math.Abs(margin);
-                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
-                //    if (margin > 0)
-                //        Cv2.Dilate(modMask, modMask, k, iterations: 1);
-                //    else
-                //        Cv2.Erode(modMask, modMask, k, iterations: 1);
-                //}
-
-                //// Safely convert chosenBg components to 0..255 integers WITHOUT Math.Clamp
-                //int bVal = (int)Math.Round(chosenBg.Val0);
-                //if (bVal < 0) bVal = 0; else if (bVal > 255) bVal = 255;
-                //int gVal = (int)Math.Round(chosenBg.Val1);
-                //if (gVal < 0) gVal = 0; else if (gVal > 255) gVal = 255;
-                //int rVal = (int)Math.Round(chosenBg.Val2);
-                //if (rVal < 0) rVal = 0; else if (rVal > 255) rVal = 255;
-
-                //// Build result initialized with chosen background color (B,G,R)
-                //Mat result = new Mat(working.Size(), MatType.CV_8UC3, new Scalar(bVal, gVal, rVal));
-
-                //// Copy original pixels where mask == 0 (outside selection)
-                //Mat invMask = new Mat();
-                //Cv2.BitwiseNot(modMask, invMask);
-                //working.CopyTo(result, invMask);
-
-                //// return result immediately (no further blending)
-                //return result;
-                // 3) fill selected areas with background color (hard fill + crop)
-                int margin = featherPx; // adjust if you want expansion/shrink of mask
-
-                // Ensure mask is 0/255 CV_8U and clone
-                Mat modMask;
-                if (selectedMask.Type() != MatType.CV_8U)
-                {
-                    modMask = new Mat();
-                    selectedMask.ConvertTo(modMask, MatType.CV_8U);
-                }
-                else
-                {
-                    modMask = selectedMask.Clone();
-                }
-
-                // apply symmetric margin if requested
-                if (margin != 0)
-                {
-                    int m = Math.Abs(margin);
-                    using var k = Cv2.GetStructuringElement(
-                        MorphShapes.Rect,
-                        new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
-
-                    if (margin > 0)
-                        Cv2.Dilate(modMask, modMask, k, iterations: 1);
-                    else
-                        Cv2.Erode(modMask, modMask, k, iterations: 1);
-                }
-
-                // Safely convert chosenBg components to 0..255 integers
-                int bVal = (int)Math.Round(chosenBg.Val0);
-                if (bVal < 0) bVal = 0; else if (bVal > 255) bVal = 255;
-                int gVal = (int)Math.Round(chosenBg.Val1);
-                if (gVal < 0) gVal = 0; else if (gVal > 255) gVal = 255;
-                int rVal = (int)Math.Round(chosenBg.Val2);
-                if (rVal < 0) rVal = 0; else if (rVal > 255) rVal = 255;
-
-                // Build result initialized with chosen background color (B,G,R)
-                Mat result = new Mat(working.Size(), MatType.CV_8UC3, new Scalar(bVal, gVal, rVal));
-
-                using (var invMask = new Mat())
-                {
-                    // invMask = содержимое (0 на бордюрах, 255 внутри страницы)
-                    Cv2.BitwiseNot(modMask, invMask);
-
-                    // копируем оригинал ТОЛЬКО там, где нет бордюров
-                    working.CopyTo(result, invMask);
-
-                    // ---- CROP по invMask ----
-                    int rows2 = result.Rows;
-                    int cols2 = result.Cols;
-
-                    int cropTop = 0, cropBottom = rows2 - 1;
-                    int cropLeft = 0, cropRight = cols2 - 1;
-
-                    // сверху
-                    while (cropTop <= cropBottom && Cv2.CountNonZero(invMask.Row(cropTop)) == 0)
-                        cropTop++;
-
-                    // снизу
-                    while (cropBottom >= cropTop && Cv2.CountNonZero(invMask.Row(cropBottom)) == 0)
-                        cropBottom--;
-
-                    // слева
-                    while (cropLeft <= cropRight && Cv2.CountNonZero(invMask.Col(cropLeft)) == 0)
-                        cropLeft++;
-
-                    // справа
-                    while (cropRight >= cropLeft && Cv2.CountNonZero(invMask.Col(cropRight)) == 0)
-                        cropRight--;
-
-                    // если вдруг не нашли адекватную область — вернём просто fill-результат
-                    if (cropTop >= cropBottom || cropLeft >= cropRight)
-                        return result;
-
-                    var roi = new Rect(
-                        cropLeft,
-                        cropTop,
-                        cropRight - cropLeft + 1,
-                        cropBottom - cropTop + 1);
-
-                    Mat cropped = new Mat(result, roi).Clone();
-                    result.Dispose();
-                    return cropped;
-                }
-
-
-
-
-
-                // cut ++++++
-
-
-                //int margin = 100; // <-- ваш n: положительное = расширить, отрицательное = врезать внутрь
-
-                //// ensure mask is CV_8U with values 0/255
                 //Mat modMask = new Mat();
                 //if (selectedMask.Type() != MatType.CV_8U)
                 //    selectedMask.ConvertTo(modMask, MatType.CV_8U);
                 //else
                 //    modMask = selectedMask.Clone();
 
+                //// лёгкое расширение/сужение маски вокруг бордюра
                 //if (margin > 0)
                 //{
-                //    // use a square kernel of size (2*margin+1)
-                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
+                //    var k = Cv2.GetStructuringElement(
+                //        MorphShapes.Rect,
+                //        new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
                 //    Cv2.Dilate(modMask, modMask, k, iterations: 1);
                 //}
                 //else if (margin < 0)
                 //{
                 //    int m = -margin;
-                //    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
+                //    var k = Cv2.GetStructuringElement(
+                //        MorphShapes.Rect,
+                //        new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
                 //    Cv2.Erode(modMask, modMask, k, iterations: 1);
                 //}
 
-                //filled.SetTo(chosenBg, selectedMask);
+                //// ---- ВМЕСТО SetTo(chosenBg) + GaussianBlur + цикл blend ----
+                //// делаем Telea inpaint по модифицированной маске
 
+                //// inpaintMask: всё, что != 0 — будет восстановлено по соседям
+                //Mat inpaintMask = modMask; // можно modMask.Clone(), если хочется сохранить исходный
 
-                //filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
+                //// радиус inpaint'а: возьмём что-то около featherPx, но не слишком большое
+                //double inpaintRadius = Math.Max(3, featherPx);
 
-                //Cv2.ImWrite("dbg_working.png", working);
-                //Cv2.ImWrite("dbg_selectedMask.png", selectedMask);
-                //Cv2.ImWrite("dbg_filled_after_setto.png", filled);
+                //// сам inpaint: working -> filled
+                //Cv2.Inpaint(working, inpaintMask, filled, inpaintRadius, InpaintMethod.NS);
 
-                // 4) smooth the seam: create blurred (soft) mask and do local per-pixel blend in ROI
-                // create blurred mask (CV_8U -> blurred uchar)
-                //using var blurred = new Mat();
-                //int ksize = Math.Max(3, (featherPx / 2) * 2 + 1);
-                //Cv2.GaussianBlur(selectedMask, blurred, new OpenCvSharp.Size(ksize, ksize), 0);
-
-                //// compute bounding box of blurred mask (scan for nonzero)
-                //int top = -1, bottom = -1, left = -1, right = -1;
-                //for (int r = 0; r < rows; r++)
-                //{
-                //    for (int c = 0; c < cols; c++)
-                //    {
-                //        if (blurred.At<byte>(r, c) != 0)
-                //        {
-                //            if (top == -1 || r < top) top = r;
-                //            if (bottom == -1 || r > bottom) bottom = r;
-                //            if (left == -1 || c < left) left = c;
-                //            if (right == -1 || c > right) right = c;
-                //        }
-                //    }
-                //}
-
-                //// if no nonzero found (should not), return filled
-                //if (top == -1) return filled.Clone();
-
-                //// expand ROI a bit
-                //top = Math.Max(0, top - featherPx);
-                //bottom = Math.Min(rows - 1, bottom + featherPx);
-                //left = Math.Max(0, left - featherPx);
-                //right = Math.Min(cols - 1, right + featherPx);
-
-                //// per-pixel blend inside ROI using blurred mask as alpha (0..255)
-                //for (int r = top; r <= bottom; r++)
-                //{
-                //    for (int c = left; c <= right; c++)
-                //    {
-                //        byte a = blurred.At<byte>(r, c); // 0..255
-                //        if (a == 0) continue; // no change
-                //        if (a == 255)
-                //        {
-                //            // fully filled already
-                //            // ensure pixel in result is bg (it is because filled.SetTo done)
-                //            continue;
-                //        }
-                //        // alpha normalized
-                //        double alpha = a / 255.0;
-                //        var origB = working.At<Vec3b>(r, c);
-                //        var fillB = filled.At<Vec3b>(r, c);
-                //        byte nb = (byte)Math.Round(fillB.Item0 * alpha + origB.Item0 * (1 - alpha));
-                //        byte ng = (byte)Math.Round(fillB.Item1 * alpha + origB.Item1 * (1 - alpha));
-                //        byte nr = (byte)Math.Round(fillB.Item2 * alpha + origB.Item2 * (1 - alpha));
-                //        // write to filled result
-                //        filled.Set<Vec3b>(r, c, new Vec3b(nb, ng, nr));
-                //        //filled.Set<Vec3b>(r, c, new Vec3b(0, 0, 255));
-                //    }
-                //}
-
+                //// твой зелёный debug поверх (НЕ трогаем)
+                ////filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
 
                 //return filled;
+
+                var filled = working.Clone();
+
+                int margin = featherPx; // <-- ваш n: положительное = расширить, отрицательное = врезать внутрь
+
+                // ensure mask is CV_8U with values 0/255
+                Mat modMask = new Mat();
+                if (selectedMask.Type() != MatType.CV_8U)
+                    selectedMask.ConvertTo(modMask, MatType.CV_8U);
+                else
+                    modMask = selectedMask.Clone();
+
+                if (margin > 0)
+                {
+                    // use a square kernel of size (2*margin+1)
+                    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
+                    Cv2.Dilate(modMask, modMask, k, iterations: 1);
+                }
+                else if (margin < 0)
+                {
+                    int m = -margin;
+                    var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
+                    Cv2.Erode(modMask, modMask, k, iterations: 1);
+                }
+
+                filled.SetTo(chosenBg, modMask);
+
+
+                filled.SetTo(new Scalar(0, 255, 0), selectedMask); // bright green
+
+                //4) smooth the seam: create blurred(soft) mask and do local per-pixel blend in ROI
+                //create blurred mask(CV_8U -> blurred uchar)
+                using var blurred = new Mat();
+                int ksize = Math.Max(3, (featherPx / 2) * 2 + 1);
+                Cv2.GaussianBlur(modMask, blurred, new OpenCvSharp.Size(ksize, ksize), 0);
+
+                // compute bounding box of blurred mask (scan for nonzero)
+                int top = -1, bottom = -1, left = -1, right = -1;
+                for (int r = 0; r < rows; r++)
+                {
+                    for (int c = 0; c < cols; c++)
+                    {
+                        if (blurred.At<byte>(r, c) != 0)
+                        {
+                            if (top == -1 || r < top) top = r;
+                            if (bottom == -1 || r > bottom) bottom = r;
+                            if (left == -1 || c < left) left = c;
+                            if (right == -1 || c > right) right = c;
+                        }
+                    }
+                }
+
+                // if no nonzero found (should not), return filled
+                if (top == -1) return filled.Clone();
+
+                // expand ROI a bit
+                top = Math.Max(0, top - featherPx);
+                bottom = Math.Min(rows - 1, bottom + featherPx);
+                left = Math.Max(0, left - featherPx);
+                right = Math.Min(cols - 1, right + featherPx);
+
+                // per-pixel blend inside ROI using blurred mask as alpha (0..255)
+                for (int r = top; r <= bottom; r++)
+                {
+                    for (int c = left; c <= right; c++)
+                    {
+                        byte a = blurred.At<byte>(r, c); // 0..255
+                        if (a == 0) continue; // no change
+                        if (a == 255)
+                        {
+                            // fully filled already
+                            // ensure pixel in result is bg (it is because filled.SetTo done)
+                            continue;
+                        }
+                        // alpha normalized
+                        double alpha = a / 255.0;
+                        var origB = working.At<Vec3b>(r, c);
+                        var fillB = filled.At<Vec3b>(r, c);
+                        byte nb = (byte)Math.Round(fillB.Item0 * alpha + origB.Item0 * (1 - alpha));
+                        byte ng = (byte)Math.Round(fillB.Item1 * alpha + origB.Item1 * (1 - alpha));
+                        byte nr = (byte)Math.Round(fillB.Item2 * alpha + origB.Item2 * (1 - alpha));
+                        // write to filled result
+                        filled.Set<Vec3b>(r, c, new Vec3b(nb, ng, nr));
+                        //filled.Set<Vec3b>(r, c, new Vec3b(0, 0, 255));
+                    }
+                }
+
+
+                return filled;
             }
             catch (OperationCanceledException)
             {
@@ -430,7 +361,8 @@ namespace ImgViewer.Models
                                                     double threshFrac = 0.60,
                                                     int contrastThr = 30,
                                                     double centralSample = 0.30,
-                                                    double maxRemoveFrac = 0.25)
+                                                    double maxRemoveFrac = 0.25,
+                                                    BordersRemovalMode mode = BordersRemovalMode.Fill)
         {
             //Debug.WriteLine("RemoveBordersByRowColWhite started. Before checking _currentImage");
             if (src == null || src.Empty())
@@ -537,11 +469,20 @@ namespace ImgViewer.Models
 
             // Применяем заливку белым (in-place в новом Mat)
             Mat result = srcBgr.Clone();
-            //Scalar white = new Scalar(255, 255, 255);
-            //if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
-            //if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
-            //if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
-            //if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
+            if (mode == BordersRemovalMode.Fill)
+            {
+                Scalar white = new Scalar(255, 255, 255);
+                if (top > 0) result[new Rect(0, 0, w, top)].SetTo(white);
+                if (bottom > 0) result[new Rect(0, h - bottom, w, bottom)].SetTo(white);
+                if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
+                if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
+
+                central.Dispose();
+                gray.Dispose();
+                if (converted) srcBgr.Dispose();
+
+                return result;
+            }
 
             // trying to crop instead of fill
             int row0 = top;
@@ -596,7 +537,11 @@ namespace ImgViewer.Models
         }
 
 
-        public static Mat? ManualCut(CancellationToken token, Mat src, int x,  int y, int w, int h, bool debug = true)
+        public static Mat? ManualCut(CancellationToken token,
+                                    Mat src,
+                                    int x,  int y, int w, int h,
+                                    BordersRemovalMode mode = BordersRemovalMode.Fill,
+                                    bool debug = true)
         {
             Debug.WriteLine("Manual cut");
 

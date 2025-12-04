@@ -157,11 +157,11 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 5, 250, 1),
                                 new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
-                                new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 100, 2_000_000, 1),
+                                new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 0, 2_000_000, 1),
                                 new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.05, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 20, 1),
+                                new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 200, 1),
                                 // Manual
                                 new PipeLineParameter("Left", "manualLeft", 0, 0, 10000, 1),
                                 new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),

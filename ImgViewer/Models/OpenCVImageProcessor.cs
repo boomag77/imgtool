@@ -1284,7 +1284,7 @@ namespace ImgViewer.Models
             if (width <= 0 || height <= 0) return src.Clone();
             try
             {
-                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height, debug);
+                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height, BordersRemover.BordersRemovalMode.Fill, debug);
                 return result;
             }
             catch (OperationCanceledException)
