@@ -90,7 +90,7 @@ namespace ImgViewer.Models
                 using var gray = new Mat();
                 Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
                 using var darkMask = new Mat();
-                Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
+                Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.Triangle); // dark->255
 
 
 
@@ -119,8 +119,8 @@ namespace ImgViewer.Models
                 var selectedMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
 
                 // будем накапливать максимальную "глубину" бордюра для каждой стороны
-                int maxTopDepth = 0, maxBottomDepth = 0, maxLeftDepth = 0, maxRightDepth = 0;
-                bool hasTop = false, hasBottom = false, hasLeft = false, hasRight = false;
+                //int maxTopDepth = 0, maxBottomDepth = 0, maxLeftDepth = 0, maxRightDepth = 0;
+                //bool hasTop = false, hasBottom = false, hasLeft = false, hasRight = false;
 
 
                 // iterate components
