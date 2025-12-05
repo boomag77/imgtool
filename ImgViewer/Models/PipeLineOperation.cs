@@ -217,7 +217,22 @@ namespace ImgViewer.Models
                 };
             }
 
-            
+            var autoCropMethod = _parameters.FirstOrDefault(p => p.Key == "autoCropMethod");
+            if (autoCropMethod != null)
+            {
+                // initial apply
+                ApplyAutoCropVisibility(autoCropMethod.SelectedOption);
+                // Also listen for changes of the algorithm selection and re-evaluate
+                autoCropMethod.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex))
+                    {
+                        // re-evaluate which controls are visible based on chosen algorithm
+                        ApplyAutoCropVisibility(autoCropMethod.SelectedOption);
+                    }
+                };
+            }
+
 
             // Border removal algorithm rules
             var bordersAlgo = _parameters.FirstOrDefault(p => p.Key == "borderRemovalAlgorithm");
@@ -303,6 +318,41 @@ namespace ImgViewer.Models
                         break;
                     case "smallAreaAbsolutePx":
                         p.IsVisible = !useRelative;
+                        break;
+                }
+            }
+        }
+
+        // auto crop visibility rules
+        private void ApplyAutoCropVisibility(string? selectedOption)
+        {
+            var selected = (selectedOption ?? "U-net").Trim();
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "autoCropMethod":
+                        p.IsVisible = true; // mode selector always visible
+                        break;
+                    // show these only for Content mode
+                    case "cropLevel":
+                        p.IsVisible = selected.Equals("U-net", StringComparison.OrdinalIgnoreCase);
+                        break;
+                    // show these only for Fixed mode
+                    case "preset":
+                    case "eastInputWidth":
+                    case "eastInputHeight":
+                    case "eastScoreThreshold":
+                    case "eastNmsThreshold":
+                    case "tesseractMinConfidence":
+                    case "paddingPx":
+                    case "downscaleMaxWidth":
+                    case "eastDebug":
+                        p.IsVisible = selected.Equals("EAST", StringComparison.OrdinalIgnoreCase);
+                        break;
+                    default:
+                        // keep other parameters visible by default
+                        p.IsVisible = true;
                         break;
                 }
             }
@@ -535,7 +585,8 @@ namespace ImgViewer.Models
                     case "manualLeft":
                     case "manualTop":
                     case "manualRight":
-                    case "manualBottom":  
+                    case "manualBottom":
+                    case "cutMethod":
                     case "manualCutDebug":
                         p.IsVisible = isManual;
                         break;

@@ -14,9 +14,11 @@ namespace ImgViewer.Models.Onnx
         private readonly int _channels;
         private readonly int _height;
         private readonly int _width;
+        private readonly CancellationToken _token;
 
-        public DocBoundaryModel(string modelPath)
+        public DocBoundaryModel(CancellationToken token, string modelPath)
         {
+            _token = token;
             _session = new InferenceSession(modelPath);
 
             var inMeta = _session.InputMetadata.First();
@@ -36,7 +38,7 @@ namespace ImgViewer.Models.Onnx
         /// <summary>
         /// BGR Mat -> маска документа (0/255, CV_8UC1), растянутая до размера src.
         /// </summary>
-        public Mat PredictMask(Mat srcBgr)
+        public Mat PredictMask(Mat srcBgr, int cropLevel = 62)
         {
             if (srcBgr.Empty())
                 throw new ArgumentException("srcBgr is empty", nameof(srcBgr));
@@ -87,7 +89,13 @@ namespace ImgViewer.Models.Onnx
 
             // Насколько агрессивно отрезаем бордюры:
             // 0.5f – мягко, 0.7f – обычно хорошо, 0.8–0.9f – агрессивно.
-            float docProbThreshold = 0.7f;
+            // map detection level 0..100% to threshold 0.3..0.95
+            if (cropLevel < 0) cropLevel = 0;
+            if (cropLevel > 100) cropLevel = 100;
+            float t = cropLevel / 100f;
+            float level = 0.3f + t * (0.95f - 0.3f);
+
+            float docProbThreshold = level;
 
             for (int y = 0; y < outH; y++)
             {

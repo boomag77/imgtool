@@ -27,6 +27,8 @@ namespace ImgViewer.Models
         private readonly object _imageLock = new();
         private readonly object _commandLock = new();
 
+        private readonly DocBoundaryModel _docBoundaryModel;
+
         private Mat WorkingImage
         {
             get
@@ -75,7 +77,8 @@ namespace ImgViewer.Models
         {
             _appManager = appManager;
             _token = token;
-
+            var onnxToken = CancellationTokenSource.CreateLinkedTokenSource(token).Token;
+            _docBoundaryModel = new DocBoundaryModel(onnxToken, "Models/ML/model.onnx");
         }
 
         private Mat BitmapSourceToMat(BitmapSource src)
@@ -185,6 +188,7 @@ namespace ImgViewer.Models
 
         public void Dispose()
         {
+            _docBoundaryModel.Dispose();
             //throw new NotImplementedException();
 
         }
@@ -807,6 +811,7 @@ namespace ImgViewer.Models
                                 int top = 0, bottom = 0, left = 0, right = 0;
                                 bool manualCutDebug = false;
                                 bool useTeleaHybrid = true;
+                                bool applyManualCut = false;
 
                                 foreach (var kv in parameters)
                                 {
@@ -883,6 +888,9 @@ namespace ImgViewer.Models
                                         case "manualCutDebug":
                                             manualCutDebug = SafeBool(kv.Value, manualCutDebug);
                                             break;
+                                        case "cutMethod":
+                                            applyManualCut = SafeBool(kv.Value, applyManualCut);
+                                            break;
 
                                         default:
                                             // ignore unknown key
@@ -923,7 +931,7 @@ namespace ImgViewer.Models
                                                 break;
                                             case "Manual":
 
-                                                return RemoveBorders_Manual(src, top, bottom, left, right, manualCutDebug);
+                                                return RemoveBorders_Manual(src, top, bottom, left, right, applyManualCut, manualCutDebug);
                                                 break;
 
                                         }
@@ -1000,6 +1008,8 @@ namespace ImgViewer.Models
                             break;
                         case ProcessorCommand.SmartCrop:
 
+
+                            int cropLevel = 62;
                             int eastInputWidth = 1280;
                             int eastInputHeight = 1280;
                             float eastScoreThreshold = 0.45f;
@@ -1007,12 +1017,16 @@ namespace ImgViewer.Models
                             int tesseractMinConfidence = 50;
                             int paddingPx = 20;
                             int downscaleMaxWidth = 1600;
+                            bool eastDebug = true;
 
                             foreach (var kv in parameters)
                             {
                                 if (kv.Key == null) continue;
                                 switch (kv.Key)
                                 {
+                                    case "cropLevel":
+                                        cropLevel = SafeInt(kv.Value, cropLevel);
+                                        break;
                                     case "eastInputWidth":
                                         eastInputWidth = SafeInt(kv.Value, eastInputWidth);
                                         break;
@@ -1034,12 +1048,38 @@ namespace ImgViewer.Models
                                     case "downscaleMaxWidth":
                                         downscaleMaxWidth = SafeInt(kv.Value, downscaleMaxWidth);
                                         break;
+                                    case "eastDebug":
+                                        eastDebug = SafeBool(kv.Value, eastDebug);
+                                        break;
+
                                 }
                             }
 
-                            //return SmartCrop(src);
-
-                            return DetectDocumentAndCrop(src, false, out Mat debugMask, out Mat debugOverlay);
+                            foreach (var kv in parameters)
+                            {
+                                if (kv.Key == "autoCropMethod")
+                                {
+                                    switch (kv.Value.ToString())
+                                    {
+                                        case "U-net":
+                                            return DetectDocumentAndCrop(src, cropLevel, false, out Mat debugMask, out Mat debugOverlay); ;
+                                            break;
+                                        case "EAST":
+                                            //return SmartCrop(src);
+                                            return SmartCrop(
+                                                src,
+                                                eastInputWidth,
+                                                eastInputHeight,
+                                                eastScoreThreshold,
+                                                eastNmsThreshold,
+                                                tesseractMinConfidence,
+                                                paddingPx,
+                                                downscaleMaxWidth, eastDebug
+                                            );
+                                            break;
+                                    }
+                                }
+                            }
                             //applyAutoCropRectangleCurrent();
                             break;
                         case ProcessorCommand.LinesRemove:
@@ -1275,10 +1315,45 @@ namespace ImgViewer.Models
             return null;
         }
 
-        private Mat DetectDocumentAndCrop(Mat src, bool debug, out Mat debugMask, out Mat debugOverlay)
+        private Scalar GetBgColor(Mat src)
+        {
+            var bgScalar = Scalar.All(0);
+            
+            int rws = src.Rows;
+            int cls = src.Cols;
+            var thr = EstimateBlackThreshold(src);
+            int cornerSize = Math.Max(1, Math.Min(32, Math.Min(rws, cls) / 30));
+            double sb = 0, sg = 0, sr = 0; int cnt = 0;
+            var rects = new[]
+            {
+                        new Rect(0,0,cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cls-cornerSize),0,cornerSize,cornerSize),
+                        new Rect(0,Math.Max(0,rws-cornerSize),cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cls-cornerSize), Math.Max(0,rws-cornerSize), cornerSize, cornerSize)
+                    };
+            foreach (var r in rects)
+            {
+                _token.ThrowIfCancellationRequested();
+                if (r.Width <= 0 || r.Height <= 0) continue;
+                using var patch = new Mat(src, r);
+                var mean = Cv2.Mean(patch);
+                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
+                if (brightness > thr * 1.0) { sb += mean.Val0; sg += mean.Val1; sr += mean.Val2; cnt++; }
+            }
+            if (cnt > 0) bgScalar = new Scalar(sb / cnt, sg / cnt, sr / cnt);
+            return bgScalar;
+        }
+
+        private Mat DetectDocumentAndCrop(Mat src, int cropLevel, bool debug, out Mat debugMask, out Mat debugOverlay)
         {
             // 1) Предикт маски
-            Mat mask = _appManager.DocBoundaryModel.PredictMask(src);
+            Mat mask = new Mat();
+            Scalar bgColor = GetBgColor(src);
+            // create new Mat with bgColor and add 20px on each side
+            Mat bigMat = new Mat(src.Rows + 40, src.Cols + 40, src.Type(), bgColor);
+            src.CopyTo(new Mat(bigMat, new Rect(20, 20, src.Cols, src.Rows)));
+            mask = _docBoundaryModel.PredictMask(bigMat, cropLevel);
+                                                                
             debugMask = mask.Clone();
 
             // 2) Обрезка
@@ -1296,7 +1371,7 @@ namespace ImgViewer.Models
 
         }
 
-        private Mat? RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool debug)
+        private Mat? RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool applyCut, bool debug)
         {
             int x = left;
             int y = top;
@@ -1305,7 +1380,10 @@ namespace ImgViewer.Models
             if (width <= 0 || height <= 0) return src.Clone();
             try
             {
-                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height, BordersRemover.BordersRemovalMode.Fill, debug);
+                
+                Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height,
+                                                        applyCut ? BordersRemover.BordersRemovalMode.Cut : BordersRemover.BordersRemovalMode.Fill,
+                                                        debug);
                 return result;
             }
             catch (OperationCanceledException)
@@ -1663,7 +1741,12 @@ namespace ImgViewer.Models
         //    return work;
         //}
 
-        private Mat? SmartCrop(Mat src)
+        private Mat? SmartCrop(Mat src, int eastInputWidth = 1280, int eastInputHeight = 1280,
+                                float eastScoreThreshold = 0.45f,
+                                float eastNmsThreshold = 0.45f,
+                                int tesseractMinConfidence = 50,
+                                int paddingPx = 20,
+                                int downscaleMaxWidth = 1600, bool debug = true)
         {
 
             string eastPath = Path.Combine(AppContext.BaseDirectory, "Models", "frozen_east_text_detection.pb");
@@ -1671,18 +1754,33 @@ namespace ImgViewer.Models
             string tessLang = "eng"; // или "eng"
             var cropper = new TextAwareCropper(_token, eastPath, tessData, tessLang);
             //var cropped = cropper.CropKeepingText(src);
-            Mat cropped;
+            Mat cropped = new Mat();
             try
             {
-                cropped = cropper.ShowDetectedAreas(src);
-                return cropped;
+                if (debug)
+                {
+                    cropped = cropper.ShowDetectedAreas(src, eastInputWidth, eastInputHeight,
+                                                   eastScoreThreshold, eastNmsThreshold,
+                                                   tesseractMinConfidence,
+                                                   paddingPx,
+                                                   downscaleMaxWidth);
+                }
+                else
+                {
+                    cropped = cropper.CropKeepingText(src, eastInputWidth, eastInputHeight,
+                                                   eastScoreThreshold, eastNmsThreshold,
+                                                   tesseractMinConfidence,
+                                                   paddingPx,
+                                                   downscaleMaxWidth);
+                }
+               
             }
             catch (OperationCanceledException)
             {
 
             }
 
-            return null;
+            return cropped;
         }
 
 

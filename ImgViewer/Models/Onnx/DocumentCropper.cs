@@ -94,44 +94,171 @@ namespace ImgViewer.Models.Onnx
                 2);
 
             // 7) Кроп без поворота
-            //Mat cropped = new Mat(src, tightBox);
-            //return cropped.Clone();
+            Mat cropped = new Mat(src, tightBox);
+            return cropped.Clone();
 
-            int rows = src.Rows, cols = src.Cols;
-            int thr = 10;
-            var chosenBg = new Scalar(255, 255, 255); // default white background
-            int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
-            double sb = 0, sg = 0, sr = 0; int cnt = 0;
-            var rects = new[]
-            {
-                        new Rect(0,0,cornerSize,cornerSize),
-                        new Rect(Math.Max(0,cols-cornerSize),0,cornerSize,cornerSize),
-                        new Rect(0,Math.Max(0,rows-cornerSize),cornerSize,cornerSize),
-                        new Rect(Math.Max(0,cols-cornerSize), Math.Max(0,rows-cornerSize), cornerSize, cornerSize)
-                    };
-            foreach (var r in rects)
-            {
-                
-                if (r.Width <= 0 || r.Height <= 0) continue;
-                using var patch = new Mat(src, r);
-                var mean = Cv2.Mean(patch);
-                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
-                if (brightness > thr * 1.0) { sb += mean.Val0; sg += mean.Val1; sr += mean.Val2; cnt++; }
-            }
-            if (cnt > 0) chosenBg = new Scalar(sb / cnt, sg / cnt, sr / cnt);
+            //var chosenBg = EstimatePageFillColor(src, mask);
 
             // fill instead of crop
-            Mat filled = new Mat(src.Rows, src.Cols, src.Type(), chosenBg);
-            Mat roi = new Mat(filled, tightBox);
-            src[tightBox].CopyTo(roi);
-            return filled.Clone();
+            //Mat filled = new Mat(src.Rows, src.Cols, src.Type(), chosenBg);
+            //Mat roi = new Mat(filled, tightBox);
+            //src[tightBox].CopyTo(roi);
+            //return filled.Clone();
 
             // Telea inpaint instead of filled
             //Mat inpainted = new Mat();
             //Cv2.BitwiseNot(maskClean, maskClean); // invert mask for inpainting
-            //Cv2.Inpaint(src, maskClean, inpainted, 5, InpaintMethod.Telea);
+            //Cv2.Inpaint(filled, maskClean, inpainted, 5, InpaintMethod.Telea);
             //return inpainted.Clone();
 
+        }
+
+        private static Scalar EstimatePageFillColor(
+                                        Mat src,
+                                        Mat pageMask,                  // 8U, 0/255: 255 = страница без бордюров
+                                        int gridSize = 5,              // количество точек по одной стороне сетки
+                                        double innerMarginFraction = 0.10, // какую долю от краёв откусить (0.1 = 10%)
+                                        int patchRadius = 20,          // радиус патча (окно (2R+1)x(2R+1))
+                                        double maxPatchStdDev = 12.0,  // максимум σ по патчу (гомогенность)
+                                        double minBrightness = 0.70,   // минимальная яркость (0..1) для фона
+                                        double minMaskCoverage = 0.30  // минимальная доля покрытых маской пикселей в патче
+        )
+        {
+            if (src == null || src.Empty())
+                throw new ArgumentException("src is null or empty", nameof(src));
+
+            if (pageMask == null || pageMask.Empty())
+                throw new ArgumentException("pageMask is null or empty", nameof(pageMask));
+
+            if (pageMask.Type() != MatType.CV_8UC1)
+                throw new ArgumentException("pageMask must be CV_8UC1", nameof(pageMask));
+
+            if (pageMask.Rows != src.Rows || pageMask.Cols != src.Cols)
+                throw new ArgumentException("pageMask size must match src size", nameof(pageMask));
+
+            // --- привести к BGR (3 канала) ---
+            Mat color;
+            if (src.Channels() == 3)
+            {
+                color = src;
+            }
+            else if (src.Channels() == 4)
+            {
+                color = new Mat();
+                Cv2.CvtColor(src, color, ColorConversionCodes.BGRA2BGR);
+            }
+            else
+            {
+                color = new Mat();
+                Cv2.CvtColor(src, color, ColorConversionCodes.GRAY2BGR);
+            }
+
+            int rows = color.Rows;
+            int cols = color.Cols;
+            if (rows < 2 || cols < 2)
+                return new Scalar(255, 255, 255);
+
+            // --- центральный ROI (без внешних процентов полей) ---
+            int marginX = (int)Math.Round(cols * innerMarginFraction);
+            int marginY = (int)Math.Round(rows * innerMarginFraction);
+
+            int x0 = marginX;
+            int y0 = marginY;
+            int x1 = cols - marginX - 1;
+            int y1 = rows - marginY - 1;
+
+            // если откусили слишком много — берём весь кадр
+            if (x1 <= x0 || y1 <= y0)
+            {
+                x0 = 0;
+                y0 = 0;
+                x1 = cols - 1;
+                y1 = rows - 1;
+            }
+
+            int roiW = x1 - x0 + 1;
+            int roiH = y1 - y0 + 1;
+
+            var goodSamples = new List<Vec3d>();
+
+            // --- сетка патчей по центральному ROI ---
+            for (int gy = 0; gy < gridSize; gy++)
+            {
+                for (int gx = 0; gx < gridSize; gx++)
+                {
+                    double cxF = x0 + (gx + 0.5) * roiW / gridSize;
+                    double cyF = y0 + (gy + 0.5) * roiH / gridSize;
+
+                    int cx = (int)Math.Round(cxF);
+                    int cy = (int)Math.Round(cyF);
+
+                    cx = Math.Max(x0, Math.Min(cx, x1));
+                    cy = Math.Max(y0, Math.Min(cy, y1));
+
+                    int xStart = Math.Max(cx - patchRadius, x0);
+                    int yStart = Math.Max(cy - patchRadius, y0);
+                    int xEnd = Math.Min(cx + patchRadius, x1);
+                    int yEnd = Math.Min(cy + patchRadius, y1);
+
+                    int pw = xEnd - xStart + 1;
+                    int ph = yEnd - yStart + 1;
+                    if (pw <= 1 || ph <= 1)
+                        continue;
+
+                    var patchRect = new Rect(xStart, yStart, pw, ph);
+
+                    using var patch = new Mat(color, patchRect);
+                    using var patchMask = new Mat(pageMask, patchRect);
+
+                    // сколько вообще валидных пикселей страницы в этом патче
+                    int nonZero = Cv2.CountNonZero(patchMask);
+                    int total = pw * ph;
+
+                    if (nonZero < total * minMaskCoverage)
+                        continue; // в патче слишком много бордюров/фона вне страницы
+
+                    // статистика только по пикселям, где mask=255
+                    Cv2.MeanStdDev(patch, out Scalar mean, out Scalar stddev, patchMask);
+
+                    double b = mean.Val0;
+                    double g = mean.Val1;
+                    double r = mean.Val2;
+
+                    double brightness = 0.114 * b + 0.587 * g + 0.299 * r; // 0..255
+                    double sigma = (stddev.Val0 + stddev.Val1 + stddev.Val2) / 3.0;
+
+                    if (brightness < minBrightness * 255.0)
+                        continue; // слишком темно → текст/шум
+
+                    if (sigma > maxPatchStdDev)
+                        continue; // слишком неоднородно → текст/линии
+
+                    goodSamples.Add(new Vec3d(b, g, r));
+                }
+            }
+
+            if (goodSamples.Count > 0)
+            {
+                double sumB = 0, sumG = 0, sumR = 0;
+                foreach (var v in goodSamples)
+                {
+                    sumB += v.Item0;
+                    sumG += v.Item1;
+                    sumR += v.Item2;
+                }
+
+                int n = goodSamples.Count;
+                return new Scalar(sumB / n, sumG / n, sumR / n); // BGR
+            }
+            else
+            {
+                // fallback: средний цвет центрального ROI по маске страницы
+                using var innerColor = new Mat(color, new Rect(x0, y0, roiW, roiH));
+                using var innerMask = new Mat(pageMask, new Rect(x0, y0, roiW, roiH));
+
+                Cv2.MeanStdDev(innerColor, out Scalar meanAll, out _, innerMask);
+                return new Scalar(meanAll.Val0, meanAll.Val1, meanAll.Val2);
+            }
         }
 
     }

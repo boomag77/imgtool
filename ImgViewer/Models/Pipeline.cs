@@ -148,14 +148,14 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast", "Manual"}, 0),
                                 // By contrast
                                 new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
-                                new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 250, 1),
+                                new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 255, 1),
                                 new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
                                 new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
                                 // Auto
                                 new PipeLineParameter("Auto Threshold", "autoThresh", true),
                                 new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
                                 new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 5, 250, 1),
+                                new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 0, 255, 1),
                                 new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
                                 new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 0, 2_000_000, 1),
                                 new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
@@ -168,6 +168,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),
                                 new PipeLineParameter("Top", "manualTop", 0, 0, 10000, 1),
                                 new PipeLineParameter("Bottom", "manualBottom", 0, 0, 10000, 1),
+                                new PipeLineParameter("Cut", "cutMethod", false),
                                 new PipeLineParameter("Preview cut", "manualCutDebug", false)
 
                             },
@@ -302,6 +303,8 @@ namespace ImgViewer.Models
                         buttonText,
                         new[]
                         {
+                            new PipeLineParameter("Method", "autoCropMethod", new [] { "U-net", "EAST" }, 0),
+                            new PipeLineParameter("Crop level [0..100]", "cropLevel", 62, 0, 100, 1),
                             new PipeLineParameter("Preset", "preset", new [] { "Fast", "Balance", "Quality" }),
                             new PipeLineParameter("EAST input width", "eastInputWidth", 704, 1, 1600, 64),
                             new PipeLineParameter("EAST input height", "eastInputHeight", 704, 1, 1600, 64),
@@ -310,6 +313,7 @@ namespace ImgViewer.Models
                             new PipeLineParameter("TESSERACT min confidence", "tesseractMinConfidence", 50, 30, 60, 1),
                             new PipeLineParameter("Padding Px", "paddingPx", 20, 20, 160, 5),
                             new PipeLineParameter("Downscale max width", "downscaleMaxWidth", 1600, -1, 2400, 100),
+                            new PipeLineParameter("East debug", "eastDebug", true)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.SmartCrop, operation.CreateParameterDictionary()));
                     }

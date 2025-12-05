@@ -204,7 +204,31 @@ namespace ImgViewer.Models
             byte gb = (byte)((borderRgb >> 8) & 0xFF);
             byte bb = (byte)(borderRgb & 0xFF);
             var bgScalar = new Scalar(bb, gb, rb); // OpenCV uses BGR order
+
             bgScalar = Scalar.All(0);
+
+            int rws = src.Rows;
+            int cls = src.Cols;
+            var thr = EstimateBlackThreshold(src);
+            int cornerSize = Math.Max(2, Math.Min(32, Math.Min(rws, cls) / 30));
+            double sb = 0, sg = 0, sr = 0; int cnt = 0;
+            var rects = new[]
+            {
+                        new Rect(0,0,cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cls-cornerSize),0,cornerSize,cornerSize),
+                        new Rect(0,Math.Max(0,rws-cornerSize),cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cls-cornerSize), Math.Max(0,rws-cornerSize), cornerSize, cornerSize)
+                    };
+            foreach (var r in rects)
+            {
+                token.ThrowIfCancellationRequested();
+                if (r.Width <= 0 || r.Height <= 0) continue;
+                using var patch = new Mat(src, r);
+                var mean = Cv2.Mean(patch);
+                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
+                if (brightness > thr * 1.0) { sb += mean.Val0; sg += mean.Val1; sr += mean.Val2; cnt++; }
+            }
+            if (cnt > 0) bgScalar = new Scalar(sb / cnt, sg / cnt, sr / cnt);
 
             using var big = new Mat(new OpenCvSharp.Size(bigW, bigH), MatType.CV_8UC3, bgScalar);
             int offX = (bigW - src.Width) / 2;
@@ -257,6 +281,78 @@ namespace ImgViewer.Models
             //return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, contentCenter);
             var result = rotatedBig.Clone();
             return result;
+        }
+
+        private static byte EstimateBlackThreshold(Mat img, int marginPercent = 10, double shiftFactor = 0.25)
+        {
+            if (img == null) throw new ArgumentNullException(nameof(img));
+            if (img.Empty()) return 16; // fallback
+
+            // 1) работаем с копией по яркости
+            using var tmp = new Mat();
+            if (img.Channels() == 3)
+            {
+                // BGR -> YCrCb, берем Y (яркость)
+                using var ycrcb = new Mat();
+                Cv2.CvtColor(img, ycrcb, ColorConversionCodes.BGR2YCrCb);
+                Cv2.ExtractChannel(ycrcb, tmp, 0);
+            }
+            else
+            {
+                Cv2.CvtColor(img, tmp, ColorConversionCodes.GRAY2BGR);
+                Cv2.CvtColor(tmp, tmp, ColorConversionCodes.BGR2GRAY);
+            }
+
+            // 2) вырежем центральную область (чтобы не учитывать чёрную рамку)
+            int w = tmp.Width, h = tmp.Height;
+            int mx = (int)(w * (marginPercent / 100.0));
+            int my = (int)(h * (marginPercent / 100.0));
+            int cw = Math.Max(8, w - mx * 2);
+            int ch = Math.Max(8, h - my * 2);
+            var cropRect = new Rect(mx, my, cw, ch);
+
+            using var crop = new Mat(tmp, cropRect);
+
+            // 3) сгладим немного, чтобы уменьшить шум
+            Cv2.GaussianBlur(crop, crop, new OpenCvSharp.Size(3, 3), 0);
+
+            // 4) Otsu на центральной области — возвращает порог (double)
+            using var bin = new Mat();
+            double otsuThr = Cv2.Threshold(crop, bin, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+            // Otsu выбирает порог разделения на тёмные/светлые. Мы хотим узнать средние по группам.
+
+            // 5) посчитаем среднюю яркость для двух групп: <=otsuThr (textCandidate) и >otsuThr (bgCandidate)
+            // Притерпимся к случаям, когда одна из групп пуста
+            double sumText = 0, sumBg = 0;
+            int cntText = 0, cntBg = 0;
+
+            for (int y = 0; y < crop.Rows; y++)
+            {
+                for (int x = 0; x < crop.Cols; x++)
+                {
+                    byte v = crop.At<byte>(y, x);
+                    if (v <= otsuThr) { sumText += v; cntText++; }
+                    else { sumBg += v; cntBg++; }
+                }
+            }
+
+            // если одна из групп пустая — fallback к простому подходу
+            if (cntText == 0 || cntBg == 0)
+            {
+                // если всё слишком светлое или тёмное, используем умеренный порог
+                int fallback = 40;
+                return (byte)fallback;
+            }
+
+            double meanText = sumText / cntText;
+            double meanBg = sumBg / cntBg;
+
+            // 6) выберем порог между meanText и meanBg, смещая его к тексту методом shiftFactor
+            // shiftFactor 0 = середина, 0.5 = ближе к фону,  - но мы берем 0..1: 0 => midpoint, >0 смещает в сторону текста (консервативнее)
+            double thr = meanText + (meanBg - meanText) * (0.5 - shiftFactor);
+            // ограничим в диапазоне
+            thr = Math.Min(250, Math.Max(1, thr));
+            return (byte)Math.Round(thr);
         }
 
         // --- вспомогательные методы ---

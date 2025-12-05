@@ -24,7 +24,7 @@ namespace ImgViewer.Models
         private CancellationTokenRegistration _tokenRegistration;
         private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
-        private readonly int _workersCount;
+        private int _workersCount;
 
         private readonly int _maxSavingWorkers;
         private int _currentSavingWorkers = 0;
@@ -94,6 +94,7 @@ namespace ImgViewer.Models
 
         public void Dispose()
         {
+            
             if (_disposed) return;
             _disposed = true;
 
@@ -287,6 +288,11 @@ namespace ImgViewer.Models
             var processingTasks = new List<Task>();
             try
             {
+                // if _plOperations contains SmartCrop _workersCount--
+                //if (_plOperations.Any(op => op.Command == ProcessorCommand.SmartCrop))
+                //{
+                //    _workersCount = Math.Max(1, _workersCount - 1);
+                //}
                 for (int i = 0; i < _workersCount; i++)
                 {
                     if (_cts.IsCancellationRequested) throw new OperationCanceledException();

@@ -44,6 +44,8 @@ namespace ImgViewer.Models
             if (src.Empty()) return src.Clone();
 
             using var srcClone = src.Clone();
+
+
             Mat working = srcClone;
             bool disposeWorking = false;
             token.ThrowIfCancellationRequested();
@@ -56,7 +58,8 @@ namespace ImgViewer.Models
 
             try
             {
-                int rows = working.Rows, cols = working.Cols;
+                int rows = working.Rows;
+                int cols = working.Cols;
                 int minDepthPx = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
 
                 // determine bg color from corners if not provided
@@ -90,7 +93,7 @@ namespace ImgViewer.Models
                 using var gray = new Mat();
                 Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
                 using var darkMask = new Mat();
-                Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.Triangle); // dark->255
+                Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
 
 
 
@@ -124,9 +127,23 @@ namespace ImgViewer.Models
 
 
                 // iterate components
+
+                // ширина пограничного пояса (то же, что раньше borderBandPx)
+                int borderBandPx = minDepthPx;
+
+                // --- 1) Предрасчёт геометрии по stats для каждого label ---
+                bool[] touchesLeftArr = new bool[nLabels];
+                bool[] touchesTopArr = new bool[nLabels];
+                bool[] touchesRightArr = new bool[nLabels];
+                bool[] touchesBottomArr = new bool[nLabels];
+                double[] solidityArr = new double[nLabels];
+                double[] spanWArr = new double[nLabels];
+                double[] spanHArr = new double[nLabels];
+
                 for (int i = 1; i < nLabels; i++)
                 {
                     token.ThrowIfCancellationRequested();
+
                     int x = stats.At<int>(i, 0);
                     int y = stats.At<int>(i, 1);
                     int w = stats.At<int>(i, 2);
@@ -138,116 +155,235 @@ namespace ImgViewer.Models
                     bool touchesRight = (x + w) >= (cols - 1);
                     bool touchesBottom = (y + h) >= (rows - 1);
 
-                    if (!(touchesLeft || touchesTop || touchesRight || touchesBottom)) continue;
+                    // если не касается ни одной стороны — дальше этот label нам не интересен
+                    if (!(touchesLeft || touchesTop || touchesRight || touchesBottom))
+                        continue;
+
+                    touchesLeftArr[i] = touchesLeft;
+                    touchesTopArr[i] = touchesTop;
+                    touchesRightArr[i] = touchesRight;
+                    touchesBottomArr[i] = touchesBottom;
 
                     double solidity = (w > 0 && h > 0) ? (double)area / (w * h) : 0.0;
                     double spanFractionW = (double)w / cols;
                     double spanFractionH = (double)h / rows;
 
-                    // compute maxDepth by scanning the component mask area (safe, no ToArray)
-                    //int maxDepth = 0;
-                    using (var compMask = new Mat())
+                    solidityArr[i] = solidity;
+                    spanWArr[i] = spanFractionW;
+                    spanHArr[i] = spanFractionH;
+                }
+
+                // --- 2) Один проход по labels: считаем maxDepth для каждого label ---
+                int[] maxDepth = new int[nLabels];
+                int lastRow = rows - 1;
+                int lastCol = cols - 1;
+
+                for (int yy = 0; yy < rows; yy++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int dY = Math.Min(yy, lastRow - yy);
+
+                    for (int xx = 0; xx < cols; xx++)
                     {
-                        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // 255 где label==i
+                        int label = labels.At<int>(yy, xx);
+                        if (label <= 0) continue; // фон
 
-                        int maxDepth = 0;
-
-                        // НОВОЕ: маска "пограничной части" этого компонента
-                        using var compBorderMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
-
-                        // ширина пограничного пояса в пикселях (то, что раньше minDepthPx / maxBorderDepthPx)
-                        int borderBandPx = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
-
-                        // скан bbox компонента
-                        int x0 = Math.Max(0, x);
-                        int y0 = Math.Max(0, y);
-                        int x1 = Math.Min(cols - 1, x + w - 1);
-                        int y1 = Math.Min(rows - 1, y + h - 1);
-
-                        for (int yy = y0; yy <= y1; yy++)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            for (int xx = x0; xx <= x1; xx++)
-                            {
-                                byte v = compMask.At<byte>(yy, xx);
-                                if (v == 0) continue;
-
-                                int d = Math.Min(
-                                            Math.Min(xx, cols - 1 - xx),
-                                            Math.Min(yy, rows - 1 - yy));
-
-                                if (d > maxDepth)
-                                    maxDepth = d;
-
-                                // ⬅ если пиксель этого компонента находится близко к краю — пишем его в compBorderMask
-                                if (d <= borderBandPx)
-                                    compBorderMask.Set<byte>(yy, xx, 255);
-                            }
-                        }
-
-                        bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
-
-                        bool isInBorderBand = maxDepth <= borderBandPx;
-
-                        bool spansHoriz =
-                            (touchesTop || touchesBottom) &&
-                            spanFractionW >= minSpanFraction;
-
-                        bool spansVert =
-                            (touchesLeft || touchesRight) &&
-                            spanFractionH >= minSpanFraction;
-
-                        bool isBigFrame =
-                            (touchesLeft && touchesRight) ||
-                            (touchesTop && touchesBottom);
-
-                        bool select = false;
-
-                        if (touchesAny)
-                        {
-                            // реальный бордюр — полосы вдоль краёв или рамка
-                            if (spansHoriz || spansVert || isBigFrame)
-                                select = true;
-
-                            // опционально: неровные/тонкие штуки в узком поясе
-                            if (isInBorderBand && solidity < solidityThreshold)
-                                select = true;
-                        }
-
-                        if (select)
-                        {
-                            // ⬇ ВАЖНО: добавляем только погран-пояс компонента, а не весь компонент
-                            Cv2.BitwiseOr(selectedMask, compBorderMask, selectedMask);
-
-                            // НОВОЕ: обновляем максимальную глубину бордюра по сторонам
-                            //if (maxDepth > 0)
-                            //{
-                            //    if (touchesTop)
-                            //    {
-                            //        hasTop = true;
-                            //        if (maxDepth > maxTopDepth) maxTopDepth = maxDepth;
-                            //    }
-                            //    if (touchesBottom)
-                            //    {
-                            //        hasBottom = true;
-                            //        if (maxDepth > maxBottomDepth) maxBottomDepth = maxDepth;
-                            //    }
-                            //    if (touchesLeft)
-                            //    {
-                            //        hasLeft = true;
-                            //        if (maxDepth > maxLeftDepth) maxLeftDepth = maxDepth;
-                            //    }
-                            //    if (touchesRight)
-                            //    {
-                            //        hasRight = true;
-                            //        if (maxDepth > maxRightDepth) maxRightDepth = maxDepth;
-                            //    }
-                            //}
-                        }
-
-
+                        int d = Math.Min(Math.Min(xx, lastCol - xx), dY);
+                        if (d > maxDepth[label]) maxDepth[label] = d;
                     }
                 }
+
+                // --- 3) Решаем, какие labels считаем бордюром ---
+                bool[] select = new bool[nLabels];
+
+                for (int i = 1; i < nLabels; i++)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    bool touchesLeft = touchesLeftArr[i];
+                    bool touchesTop = touchesTopArr[i];
+                    bool touchesRight = touchesRightArr[i];
+                    bool touchesBottom = touchesBottomArr[i];
+
+                    if (!(touchesLeft || touchesTop || touchesRight || touchesBottom))
+                        continue; // мы их вообще не рассматривали
+
+                    bool touchesAny = true;
+
+                    double solidity = solidityArr[i];
+                    double spanFractionW = spanWArr[i];
+                    double spanFractionH = spanHArr[i];
+                    bool spansHoriz = (touchesTop || touchesBottom) && spanFractionW >= minSpanFraction;
+                    bool spansVert = (touchesLeft || touchesRight) && spanFractionH >= minSpanFraction;
+                    bool isBigFrame = (touchesLeft && touchesRight) || (touchesTop && touchesBottom);
+                    bool isInBorderBand = maxDepth[i] <= borderBandPx;
+
+                    bool s = false;
+
+                    if (touchesAny)
+                    {
+                        // реальные полосы/рамки вдоль краёв
+                        if (spansHoriz || spansVert || isBigFrame)
+                            s = true;
+
+                        // неровные/тонкие штуки в узком поясе + низкая solidity
+                        if (isInBorderBand && solidity < solidityThreshold)
+                            s = true;
+                    }
+
+                    select[i] = s;
+                }
+
+                // --- 4) Второй проход по labels: строим selectedMask только по пограничному поясу ---
+                selectedMask.SetTo(Scalar.All(0));
+
+                for (int yy = 0; yy < rows; yy++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int dY = Math.Min(yy, lastRow - yy);
+
+                    for (int xx = 0; xx < cols; xx++)
+                    {
+                        int label = labels.At<int>(yy, xx);
+                        if (label <= 0) continue;
+                        if (!select[label]) continue;
+
+                        int d = Math.Min(Math.Min(xx, lastCol - xx), dY);
+                        if (d <= borderBandPx)
+                        {
+                            selectedMask.Set<byte>(yy, xx, 255);
+                        }
+                    }
+                }
+
+                // дальше идёт твой STRIP MODE (если когда-нибудь разкомментируешь)
+                // // === STRIP MODE: ...
+
+
+                //for (int i = 1; i < nLabels; i++)
+                //{
+                //    token.ThrowIfCancellationRequested();
+                //    int x = stats.At<int>(i, 0);
+                //    int y = stats.At<int>(i, 1);
+                //    int w = stats.At<int>(i, 2);
+                //    int h = stats.At<int>(i, 3);
+                //    int area = stats.At<int>(i, 4);
+
+                //    bool touchesLeft = x <= 0;
+                //    bool touchesTop = y <= 0;
+                //    bool touchesRight = (x + w) >= (cols - 1);
+                //    bool touchesBottom = (y + h) >= (rows - 1);
+
+                //    if (!(touchesLeft || touchesTop || touchesRight || touchesBottom)) continue;
+
+                //    double solidity = (w > 0 && h > 0) ? (double)area / (w * h) : 0.0;
+                //    double spanFractionW = (double)w / cols;
+                //    double spanFractionH = (double)h / rows;
+
+                //    // compute maxDepth by scanning the component mask area (safe, no ToArray)
+                //    //int maxDepth = 0;
+                //    using (var compMask = new Mat())
+                //    {
+                //        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // 255 где label==i
+
+                //        int maxDepth = 0;
+
+                //        // НОВОЕ: маска "пограничной части" этого компонента
+                //        using var compBorderMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
+
+                //        // ширина пограничного пояса в пикселях (то, что раньше minDepthPx / maxBorderDepthPx)
+                //        int borderBandPx = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
+
+                //        // скан bbox компонента
+                //        int x0 = Math.Max(0, x);
+                //        int y0 = Math.Max(0, y);
+                //        int x1 = Math.Min(cols - 1, x + w - 1);
+                //        int y1 = Math.Min(rows - 1, y + h - 1);
+
+                //        for (int yy = y0; yy <= y1; yy++)
+                //        {
+                //            token.ThrowIfCancellationRequested();
+                //            for (int xx = x0; xx <= x1; xx++)
+                //            {
+                //                byte v = compMask.At<byte>(yy, xx);
+                //                if (v == 0) continue;
+
+                //                int d = Math.Min(
+                //                            Math.Min(xx, cols - 1 - xx),
+                //                            Math.Min(yy, rows - 1 - yy));
+
+                //                if (d > maxDepth)
+                //                    maxDepth = d;
+
+                //                // ⬅ если пиксель этого компонента находится близко к краю — пишем его в compBorderMask
+                //                if (d <= borderBandPx)
+                //                    compBorderMask.Set<byte>(yy, xx, 255);
+                //            }
+                //        }
+
+                //        bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
+
+                //        bool isInBorderBand = maxDepth <= borderBandPx;
+
+                //        bool spansHoriz =
+                //            (touchesTop || touchesBottom) &&
+                //            spanFractionW >= minSpanFraction;
+
+                //        bool spansVert =
+                //            (touchesLeft || touchesRight) &&
+                //            spanFractionH >= minSpanFraction;
+
+                //        bool isBigFrame =
+                //            (touchesLeft && touchesRight) ||
+                //            (touchesTop && touchesBottom);
+
+                //        bool select = false;
+
+                //        if (touchesAny)
+                //        {
+                //            // реальный бордюр — полосы вдоль краёв или рамка
+                //            if (spansHoriz || spansVert || isBigFrame)
+                //                select = true;
+
+                //            // опционально: неровные/тонкие штуки в узком поясе
+                //            if (isInBorderBand && solidity < solidityThreshold)
+                //                select = true;
+                //        }
+
+                //        if (select)
+                //        {
+                //            // ⬇ ВАЖНО: добавляем только погран-пояс компонента, а не весь компонент
+                //            Cv2.BitwiseOr(selectedMask, compBorderMask, selectedMask);
+
+                //            // НОВОЕ: обновляем максимальную глубину бордюра по сторонам
+                //            //if (maxDepth > 0)
+                //            //{
+                //            //    if (touchesTop)
+                //            //    {
+                //            //        hasTop = true;
+                //            //        if (maxDepth > maxTopDepth) maxTopDepth = maxDepth;
+                //            //    }
+                //            //    if (touchesBottom)
+                //            //    {
+                //            //        hasBottom = true;
+                //            //        if (maxDepth > maxBottomDepth) maxBottomDepth = maxDepth;
+                //            //    }
+                //            //    if (touchesLeft)
+                //            //    {
+                //            //        hasLeft = true;
+                //            //        if (maxDepth > maxLeftDepth) maxLeftDepth = maxDepth;
+                //            //    }
+                //            //    if (touchesRight)
+                //            //    {
+                //            //        hasRight = true;
+                //            //        if (maxDepth > maxRightDepth) maxRightDepth = maxDepth;
+                //            //    }
+                //            //}
+                //        }
+
+
+                //    }
+                //}
 
                 // === STRIP MODE: заменяем зубчатую маску бордюра на ровные полосы по сторонам ===
                 //if (hasTop || hasBottom || hasLeft || hasRight)
@@ -743,35 +879,203 @@ namespace ImgViewer.Models
             int rows = src.Rows;
             int cols = src.Cols;
 
+            x = Math.Max(0, Math.Min(cols - 1, x));
+            y = Math.Max(0, Math.Min(rows - 1, y));
+            w = Math.Max(1, Math.Min(cols - x, w));
+            h = Math.Max(1, Math.Min(rows - y, h));
+            var roi = new Rect(x, y, w, h);
+
             Mat result = srcBgr.Clone();
 
             if (debug)
             {
                 using var mask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(255));
-                var roi = new Rect(x, y, w, h);
+                // 0 inside ROI -> overlay will apply OUTSIDE ROI
                 Cv2.Rectangle(mask, roi, Scalar.All(0), thickness: -1);
 
                 using var overlay = result.Clone();
-                overlay.SetTo(new Scalar(0, 0, 255, 255), mask);
+                overlay.SetTo(new Scalar(0, 0, 255, 255), mask); // red outside ROI
 
-                double alpha = 0.3; // 0.0 = прозрачно, 1.0 = полностью красный
+                const double alpha = 0.3; // 0 = transparent, 1 = full red
                 Cv2.AddWeighted(overlay, alpha, result, 1.0 - alpha, 0, result);
 
-            }
-            else
-            {
-                // clamp
-                //x = Math.Max(0, Math.Min(cols - 1, x));
-                //y = Math.Max(0, Math.Min(rows - 1, y));
-                //w = Math.Max(1, Math.Min(cols - x, w));
-                //h = Math.Max(1, Math.Min(rows - y, h));
+                // In debug mode we ONLY show this preview, no actual cutting/filling
+                return result;
 
-                var roi = new Rect(x, y, w, h);
-                result = new Mat(src, roi).Clone();
+            }
+            if (mode == BordersRemovalMode.Fill)
+            {
+                // FILL: залить ВСЁ ВНЕ ROI указанным цветом
+                // сюда подставь свой способ получить цвет: GetBgColor(srcBgr) или параметр
+
+                using var pageMask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(0));
+                Cv2.Rectangle(pageMask, roi, Scalar.All(255), thickness: -1);
+
+                Scalar fillColor = EstimatePageFillColor(src, pageMask);
+
+                using var borderMask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(255));
+                // 0 внутри ROI → маска = бордюры
+                Cv2.Rectangle(borderMask, roi, Scalar.All(0), thickness: -1);
+
+
+                result.SetTo(fillColor, borderMask);
+                // результат: ROI как был, всё снаружи залито fillColor
+            }
+            else // BordersRemovalMode.Cut (или любой другой не-Fill)
+            {
+                // CUT: обрезать до ROI
+                result = new Mat(result, roi).Clone();
             }
 
             return result;
         }
 
+        private static Scalar EstimatePageFillColor(
+                                        Mat src,
+                                        Mat pageMask,                  // 8U, 0/255: 255 = страница без бордюров
+                                        int gridSize = 5,              // количество точек по одной стороне сетки
+                                        double innerMarginFraction = 0.10, // какую долю от краёв откусить (0.1 = 10%)
+                                        int patchRadius = 20,          // радиус патча (окно (2R+1)x(2R+1))
+                                        double maxPatchStdDev = 12.0,  // максимум σ по патчу (гомогенность)
+                                        double minBrightness = 0.70,   // минимальная яркость (0..1) для фона
+                                        double minMaskCoverage = 0.30  // минимальная доля покрытых маской пикселей в патче
+        )
+        {
+            if (src == null || src.Empty())
+                throw new ArgumentException("src is null or empty", nameof(src));
+
+            if (pageMask == null || pageMask.Empty())
+                throw new ArgumentException("pageMask is null or empty", nameof(pageMask));
+
+            if (pageMask.Type() != MatType.CV_8UC1)
+                throw new ArgumentException("pageMask must be CV_8UC1", nameof(pageMask));
+
+            if (pageMask.Rows != src.Rows || pageMask.Cols != src.Cols)
+                throw new ArgumentException("pageMask size must match src size", nameof(pageMask));
+
+            // --- привести к BGR (3 канала) ---
+            Mat color;
+            if (src.Channels() == 3)
+            {
+                color = src;
+            }
+            else if (src.Channels() == 4)
+            {
+                color = new Mat();
+                Cv2.CvtColor(src, color, ColorConversionCodes.BGRA2BGR);
+            }
+            else
+            {
+                color = new Mat();
+                Cv2.CvtColor(src, color, ColorConversionCodes.GRAY2BGR);
+            }
+
+            int rows = color.Rows;
+            int cols = color.Cols;
+            if (rows < 2 || cols < 2)
+                return new Scalar(255, 255, 255);
+
+            // --- центральный ROI (без внешних процентов полей) ---
+            int marginX = (int)Math.Round(cols * innerMarginFraction);
+            int marginY = (int)Math.Round(rows * innerMarginFraction);
+
+            int x0 = marginX;
+            int y0 = marginY;
+            int x1 = cols - marginX - 1;
+            int y1 = rows - marginY - 1;
+
+            // если откусили слишком много — берём весь кадр
+            if (x1 <= x0 || y1 <= y0)
+            {
+                x0 = 0;
+                y0 = 0;
+                x1 = cols - 1;
+                y1 = rows - 1;
+            }
+
+            int roiW = x1 - x0 + 1;
+            int roiH = y1 - y0 + 1;
+
+            var goodSamples = new List<Vec3d>();
+
+            // --- сетка патчей по центральному ROI ---
+            for (int gy = 0; gy < gridSize; gy++)
+            {
+                for (int gx = 0; gx < gridSize; gx++)
+                {
+                    double cxF = x0 + (gx + 0.5) * roiW / gridSize;
+                    double cyF = y0 + (gy + 0.5) * roiH / gridSize;
+
+                    int cx = (int)Math.Round(cxF);
+                    int cy = (int)Math.Round(cyF);
+
+                    cx = Math.Max(x0, Math.Min(cx, x1));
+                    cy = Math.Max(y0, Math.Min(cy, y1));
+
+                    int xStart = Math.Max(cx - patchRadius, x0);
+                    int yStart = Math.Max(cy - patchRadius, y0);
+                    int xEnd = Math.Min(cx + patchRadius, x1);
+                    int yEnd = Math.Min(cy + patchRadius, y1);
+
+                    int pw = xEnd - xStart + 1;
+                    int ph = yEnd - yStart + 1;
+                    if (pw <= 1 || ph <= 1)
+                        continue;
+
+                    var patchRect = new Rect(xStart, yStart, pw, ph);
+
+                    using var patch = new Mat(color, patchRect);
+                    using var patchMask = new Mat(pageMask, patchRect);
+
+                    // сколько вообще валидных пикселей страницы в этом патче
+                    int nonZero = Cv2.CountNonZero(patchMask);
+                    int total = pw * ph;
+
+                    if (nonZero < total * minMaskCoverage)
+                        continue; // в патче слишком много бордюров/фона вне страницы
+
+                    // статистика только по пикселям, где mask=255
+                    Cv2.MeanStdDev(patch, out Scalar mean, out Scalar stddev, patchMask);
+
+                    double b = mean.Val0;
+                    double g = mean.Val1;
+                    double r = mean.Val2;
+
+                    double brightness = 0.114 * b + 0.587 * g + 0.299 * r; // 0..255
+                    double sigma = (stddev.Val0 + stddev.Val1 + stddev.Val2) / 3.0;
+
+                    if (brightness < minBrightness * 255.0)
+                        continue; // слишком темно → текст/шум
+
+                    if (sigma > maxPatchStdDev)
+                        continue; // слишком неоднородно → текст/линии
+
+                    goodSamples.Add(new Vec3d(b, g, r));
+                }
+            }
+
+            if (goodSamples.Count > 0)
+            {
+                double sumB = 0, sumG = 0, sumR = 0;
+                foreach (var v in goodSamples)
+                {
+                    sumB += v.Item0;
+                    sumG += v.Item1;
+                    sumR += v.Item2;
+                }
+
+                int n = goodSamples.Count;
+                return new Scalar(sumB / n, sumG / n, sumR / n); // BGR
+            }
+            else
+            {
+                // fallback: средний цвет центрального ROI по маске страницы
+                using var innerColor = new Mat(color, new Rect(x0, y0, roiW, roiH));
+                using var innerMask = new Mat(pageMask, new Rect(x0, y0, roiW, roiH));
+
+                Cv2.MeanStdDev(innerColor, out Scalar meanAll, out _, innerMask);
+                return new Scalar(meanAll.Val0, meanAll.Val1, meanAll.Val2);
+            }
+        }
     }
 }
