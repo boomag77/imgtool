@@ -45,3 +45,6 @@ Desktop.ini
 
 # Secrets
 secret.json
+
+#data
+ImgViewer/Models/ML/model.data
