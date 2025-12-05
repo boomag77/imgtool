@@ -1,5 +1,6 @@
 ﻿using System.Windows.Media;
 using ImgViewer.Models;
+using ImgViewer.Models.Onnx;
 
 namespace ImgViewer.Interfaces
 {
@@ -15,6 +16,8 @@ namespace ImgViewer.Interfaces
         public TimeSpan ParametersChangedDebounceDelay { get; set; }
 
         public bool IsSavePipelineToMd { get; set; }
+
+        public DocBoundaryModel? DocBoundaryModel { get; }
 
         public Task SetImageOnPreview(string imagePath);
         public Task SetBmpImageOnPreview(ImageSource bmp);

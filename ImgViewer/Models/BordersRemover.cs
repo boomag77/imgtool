@@ -20,6 +20,7 @@ namespace ImgViewer.Models
             Fill
         }
 
+
         public static Mat RemoveBorderArtifactsGeneric_Safe(
             CancellationToken token,
             Mat src,
@@ -35,6 +36,8 @@ namespace ImgViewer.Models
 
 
         {
+
+            
 
 
             if (src == null) throw new ArgumentNullException(nameof(src));
@@ -62,7 +65,7 @@ namespace ImgViewer.Models
                 {
 
 
-                    int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
+                    int cornerSize = Math.Max(2, Math.Min(32, Math.Min(rows, cols) / 30));
                     double sb = 0, sg = 0, sr = 0; int cnt = 0;
                     var rects = new[]
                     {
@@ -115,6 +118,11 @@ namespace ImgViewer.Models
                 //  var selectedMask = Mat.Zeros(darkMask.Size(), MatType.CV_8U);
                 var selectedMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
 
+                // будем накапливать максимальную "глубину" бордюра для каждой стороны
+                int maxTopDepth = 0, maxBottomDepth = 0, maxLeftDepth = 0, maxRightDepth = 0;
+                bool hasTop = false, hasBottom = false, hasLeft = false, hasRight = false;
+
+
                 // iterate components
                 for (int i = 1; i < nLabels; i++)
                 {
@@ -129,6 +137,7 @@ namespace ImgViewer.Models
                     bool touchesTop = y <= 0;
                     bool touchesRight = (x + w) >= (cols - 1);
                     bool touchesBottom = (y + h) >= (rows - 1);
+
                     if (!(touchesLeft || touchesTop || touchesRight || touchesBottom)) continue;
 
                     double solidity = (w > 0 && h > 0) ? (double)area / (w * h) : 0.0;
@@ -209,9 +218,100 @@ namespace ImgViewer.Models
                         {
                             // ⬇ ВАЖНО: добавляем только погран-пояс компонента, а не весь компонент
                             Cv2.BitwiseOr(selectedMask, compBorderMask, selectedMask);
+
+                            // НОВОЕ: обновляем максимальную глубину бордюра по сторонам
+                            //if (maxDepth > 0)
+                            //{
+                            //    if (touchesTop)
+                            //    {
+                            //        hasTop = true;
+                            //        if (maxDepth > maxTopDepth) maxTopDepth = maxDepth;
+                            //    }
+                            //    if (touchesBottom)
+                            //    {
+                            //        hasBottom = true;
+                            //        if (maxDepth > maxBottomDepth) maxBottomDepth = maxDepth;
+                            //    }
+                            //    if (touchesLeft)
+                            //    {
+                            //        hasLeft = true;
+                            //        if (maxDepth > maxLeftDepth) maxLeftDepth = maxDepth;
+                            //    }
+                            //    if (touchesRight)
+                            //    {
+                            //        hasRight = true;
+                            //        if (maxDepth > maxRightDepth) maxRightDepth = maxDepth;
+                            //    }
+                            //}
                         }
+
+
                     }
                 }
+
+                // === STRIP MODE: заменяем зубчатую маску бордюра на ровные полосы по сторонам ===
+                //if (hasTop || hasBottom || hasLeft || hasRight)
+                //{
+                //    // ограничим максимальную глубину разумным потолком
+                //    int maxDepthCap = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
+                //    maxDepthCap = Math.Max(1, maxDepthCap);
+
+                //    // очистим старую зубчатую маску
+                //    selectedMask.SetTo(Scalar.All(0));
+
+                //    // TOP
+                //    if (hasTop && maxTopDepth > 0)
+                //    {
+                //        int depth = Math.Min(maxTopDepth, maxDepthCap);
+                //        depth = Math.Min(depth, rows); // safety
+                //        if (depth > 0)
+                //        {
+                //            var topRect = new Rect(0, 0, cols, depth);
+                //            using (var roi = new Mat(selectedMask, topRect))
+                //                roi.SetTo(255);
+                //        }
+                //    }
+
+                //    // BOTTOM
+                //    if (hasBottom && maxBottomDepth > 0)
+                //    {
+                //        int depth = Math.Min(maxBottomDepth, maxDepthCap);
+                //        depth = Math.Min(depth, rows);
+                //        if (depth > 0)
+                //        {
+                //            var bottomRect = new Rect(0, rows - depth, cols, depth);
+                //            using (var roi = new Mat(selectedMask, bottomRect))
+                //                roi.SetTo(255);
+                //        }
+                //    }
+
+                //    // LEFT
+                //    if (hasLeft && maxLeftDepth > 0)
+                //    {
+                //        int depth = Math.Min(maxLeftDepth, maxDepthCap);
+                //        depth = Math.Min(depth, cols);
+                //        if (depth > 0)
+                //        {
+                //            var leftRect = new Rect(0, 0, depth, rows);
+                //            using (var roi = new Mat(selectedMask, leftRect))
+                //                roi.SetTo(255);
+                //        }
+                //    }
+
+                //    // RIGHT
+                //    if (hasRight && maxRightDepth > 0)
+                //    {
+                //        int depth = Math.Min(maxRightDepth, maxDepthCap);
+                //        depth = Math.Min(depth, cols);
+                //        if (depth > 0)
+                //        {
+                //            var rightRect = new Rect(cols - depth, 0, depth, rows);
+                //            using (var roi = new Mat(selectedMask, rightRect))
+                //                roi.SetTo(255);
+                //        }
+                //    }
+                //}
+                //// === END STRIP MODE ===
 
                 var filled = working.Clone();
 
@@ -267,6 +367,64 @@ namespace ImgViewer.Models
                     Cv2.BitwiseNot(innerDark, innerDarkInv);
                     Cv2.BitwiseAnd(modMask, innerDarkInv, modMask);
                 }
+
+
+                //// === NEW: сгладим mask вдоль краёв, чтобы не было "рваных" краёв ===
+
+                //// ширина полосы вдоль краёв, где будем сглаживать маску
+                //int edgeBandPx = Math.Max(4, Math.Min(minDepthPx * 2, Math.Min(rows, cols) / 6));
+
+                //// если картинка слишком маленькая — просто пропустим
+                //if (edgeBandPx > 0 && rows > 2 && cols > 2)
+                //{
+                //    // горизонтальное сглаживание (top / bottom)
+                //    // ядро вытянуто по горизонтали: закрывает дырки и ступеньки вдоль линий
+                //    using var kHoriz = Cv2.GetStructuringElement(
+                //        MorphShapes.Rect,
+                //        new OpenCvSharp.Size(141, 1)); // длину можно потом подстроить
+
+                //    // TOP band
+                //    int topBand = Math.Min(edgeBandPx, rows);
+                //    if (topBand > 0)
+                //    {
+                //        var topRect = new Rect(0, 0, cols, topBand);
+                //        using var topRoi = new Mat(modMask, topRect);
+                //        Cv2.MorphologyEx(topRoi, topRoi, MorphTypes.Close, kHoriz);
+                //    }
+
+                //    // BOTTOM band
+                //    int bottomBand = Math.Min(edgeBandPx, rows);
+                //    if (bottomBand > 0)
+                //    {
+                //        var bottomRect = new Rect(0, rows - bottomBand, cols, bottomBand);
+                //        using var bottomRoi = new Mat(modMask, bottomRect);
+                //        Cv2.MorphologyEx(bottomRoi, bottomRoi, MorphTypes.Close, kHoriz);
+                //    }
+
+                //    // вертикальное сглаживание (left / right)
+                //    using var kVert = Cv2.GetStructuringElement(
+                //        MorphShapes.Rect,
+                //        new OpenCvSharp.Size(1, 141)); // вытянуто по вертикали
+
+                //    // LEFT band
+                //    int leftBand = Math.Min(edgeBandPx, cols);
+                //    if (leftBand > 0)
+                //    {
+                //        var leftRect = new Rect(0, 0, leftBand, rows);
+                //        using var leftRoi = new Mat(modMask, leftRect);
+                //        Cv2.MorphologyEx(leftRoi, leftRoi, MorphTypes.Close, kVert);
+                //    }
+
+                //    // RIGHT band
+                //    int rightBand = Math.Min(edgeBandPx, cols);
+                //    if (rightBand > 0)
+                //    {
+                //        var rightRect = new Rect(cols - rightBand, 0, rightBand, rows);
+                //        using var rightRoi = new Mat(modMask, rightRect);
+                //        Cv2.MorphologyEx(rightRoi, rightRoi, MorphTypes.Close, kVert);
+                //    }
+                //}
+                //// === END NEW ===
 
                 // Если в маске ничего нет — просто вернуть исходник
                 if (Cv2.CountNonZero(modMask) == 0)

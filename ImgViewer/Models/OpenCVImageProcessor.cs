@@ -1,4 +1,5 @@
 ﻿using ImgViewer.Interfaces;
+using ImgViewer.Models.Onnx;
 using OpenCvSharp;
 using System.Buffers;
 using System.Diagnostics;
@@ -1036,7 +1037,9 @@ namespace ImgViewer.Models
                                 }
                             }
 
-                            return SmartCrop(src);
+                            //return SmartCrop(src);
+
+                            return DetectDocumentAndCrop(src, false, out Mat debugMask, out Mat debugOverlay);
                             //applyAutoCropRectangleCurrent();
                             break;
                         case ProcessorCommand.LinesRemove:
@@ -1271,6 +1274,19 @@ namespace ImgViewer.Models
             }
             return null;
         }
+
+        private Mat DetectDocumentAndCrop(Mat src, bool debug, out Mat debugMask, out Mat debugOverlay)
+        {
+            // 1) Предикт маски
+            Mat mask = _appManager.DocBoundaryModel.PredictMask(src);
+            debugMask = mask.Clone();
+
+            // 2) Обрезка
+            Mat cropped = DocumentCropper.CropByMask(src, mask, out debugOverlay);
+
+            return cropped;
+        }
+
 
 
         public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)

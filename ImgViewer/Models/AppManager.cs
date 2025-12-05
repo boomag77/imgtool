@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.IO;
 using OpenCvSharp;
+using ImgViewer.Models.Onnx;
 
 namespace ImgViewer.Models
 {
@@ -23,12 +24,14 @@ namespace ImgViewer.Models
         private CancellationTokenSource? _rootFolderCts;
         private CancellationTokenSource _imgProcCts;
 
+        private DocBoundaryModel _docBoundaryModel;
+
         public Pipeline CurrentPipeline => _pipeline;
 
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
             _cts = cts;
-
+            InitOnnx();
             _appSettings = new AppSettings();
             _pipeline = new Pipeline(this);
             _mainViewModel = new MainViewModel(this);
@@ -39,6 +42,8 @@ namespace ImgViewer.Models
             _imageProcessor = new OpenCVImageProcessor(this, _imgProcCts.Token);
 
         }
+
+        public DocBoundaryModel DocBoundaryModel => _docBoundaryModel;
 
         public bool IsSavePipelineToMd
         {
@@ -76,6 +81,11 @@ namespace ImgViewer.Models
             {
                 _appSettings.LastOpenedFolder = value;
             }
+        }
+
+        public void InitOnnx()
+        {
+            _docBoundaryModel = new DocBoundaryModel("Models/ML/model.onnx");
         }
 
         public void Shutdown()

@@ -10,14 +10,18 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<StartupObject>ImgViewer.App</StartupObject>
 		<Platforms>AnyCPU</Platforms>
+		<PlatformTarget>x64</PlatformTarget>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>
 	  <PackageReference Include="BitMiracle.LibTiff.NET" Version="2.4.660" />
 	  <PackageReference Include="Magick.NET-Q16-HDRI-AnyCPU" Version="14.8.2" />
 	  <PackageReference Include="Magick.NET.Core" Version="14.8.2" />
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
 	  <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
+	  <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
 	  <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.11.0.20250507" />
 	  <PackageReference Include="System.Text.Json" Version="9.0.9" />
@@ -34,6 +38,15 @@
 	  <None Update="tessdata\eng.traineddata">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Models\ML\model.onnx">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Models\ML\model.data">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -56,6 +69,22 @@
 	  <Page Update="Views\MainWindow.xaml">
 	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Models\ML\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="Models\Onnx\DocBoundaryModel.cs">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Compile>
+	  <Compile Update="Models\Onnx\DocumentCropper.cs">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Compile>
+	  <Compile Update="Models\Onnx\OnnxModelInspector.cs">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Compile>
 	</ItemGroup>
 
 </Project>

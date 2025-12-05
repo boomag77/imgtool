@@ -1,5 +1,6 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Models;
+using ImgViewer.Models.Onnx;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
@@ -147,6 +148,9 @@ namespace ImgViewer.Views
         public MainWindow()
         {
             InitializeComponent();
+
+            OnnxModelInspector.PrintModelInfo("Models/ML/model.onnx");
+
 
             _originalImageColumnWidth = RootGrid.ColumnDefinitions[0].Width;
 
