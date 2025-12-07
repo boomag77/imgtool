@@ -297,6 +297,7 @@ namespace ImgViewer.Models
                             BitsPerSample = bitsPerSample,
                             IsRawCompressed = isRaw,
                             Data = data
+                            
                         };
 
 

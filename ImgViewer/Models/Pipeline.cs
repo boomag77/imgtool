@@ -194,9 +194,10 @@ namespace ImgViewer.Models
                                 // Sauvola
                                 new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
                                 new PipeLineParameter("K: ", "sauvolaK", 0.30, 0.01, 1.00, 0.01),
-                                new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 255.0, 1.00),
+                                new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 256.0, 1.00),
                                 new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
                                 new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 2.0, 0.01, 255.0, 1.0),
+                                new PipeLineParameter("CLAHE grid size", "sauvolaClaheGridSize", 8, 8, 64, 8),
                                 new PipeLineParameter("Morph radius", "sauvolaMorphRadius", 0, 0, 7, 1),
                                 // Majority
                                 new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
@@ -258,11 +259,11 @@ namespace ImgViewer.Models
                             new[]
                             {
                                 new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
-                                new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 2, 0.01),
+                                new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 5, 0.01),
                                 new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
-                                new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 1.00, 0.01),
-                                new PipeLineParameter("Proximity Radius Fraction", "proximityRadiusFraction", 0.80, 0.01, 1.00, 0.01),
-                                new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 1.00, 0.05),
+                                new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 5.00, 0.01),
+                                new PipeLineParameter("Proximity Radius Fraction", "proximityRadiusFraction", 0.80, 0.01, 5.00, 0.01),
+                                new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 3.00, 0.05),
                                 new PipeLineParameter("KeepClusters", "keepClusters", true),
                                 new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", false),
                                 new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),

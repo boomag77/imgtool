@@ -3131,7 +3131,15 @@ namespace ImgViewer.Models
 
         private Mat SauvolaBinarize(Mat src, BinarizeParameters p)
         {
-            using var binMat = BinarizeForHandwritten(src, p.SauvolaUseClahe, p.SauvolaClaheClip, claheGrid: default, p.SauvolaWindowSize, p.SauvolaK, p.SauvolaR, p.SauvolaMorphRadius);
+            //Debug.WriteLine($"clahe grid size {p.SauvolaClaheGridSize}");
+            using var binMat = BinarizeForHandwritten(src,
+                                                      p.SauvolaUseClahe,
+                                                      p.SauvolaClaheClip,
+                                                      p.SauvolaClaheGridSize,
+                                                      p.SauvolaWindowSize,
+                                                      p.SauvolaK,
+                                                      p.SauvolaR,
+                                                      p.SauvolaMorphRadius);
 
             Mat bin8;
             if (binMat.Type() != MatType.CV_8UC1)
@@ -3159,10 +3167,10 @@ namespace ImgViewer.Models
 
 
 
-        private Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, OpenCvSharp.Size claheGrid = default,
+        private Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
                                              int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0)
         {
-            if (claheGrid == default) claheGrid = new OpenCvSharp.Size(8, 8);
+            var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
             Mat gray = src;
             if (src.Type() != MatType.CV_8UC1)
             {

@@ -50,6 +50,7 @@ namespace ImgViewer.Models
         public bool UseGaussian;
         public bool UseMorphology;
         public bool SauvolaUseClahe;
+        public int SauvolaClaheGridSize;
 
 
 
@@ -70,6 +71,7 @@ namespace ImgViewer.Models
             UseGaussian = false,
             UseMorphology = false,
             SauvolaUseClahe = true,
+            SauvolaClaheGridSize = 8
 
         };
 

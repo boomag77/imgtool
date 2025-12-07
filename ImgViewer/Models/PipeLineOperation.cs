@@ -509,6 +509,7 @@ namespace ImgViewer.Models
                         p.IsVisible = isSauvola;
                         break;
                     case "sauvolaClaheClip":
+                    case "sauvolaClaheGridSize":
                         p.IsVisible= isSauvola && useClahe;
                         break;
                     default:
@@ -624,8 +625,9 @@ namespace ImgViewer.Models
 
             foreach (var q in _parameters)
             {
-                if (q.Key == "sauvolaClaheClip")
+                if (q.Key == "sauvolaClaheClip" || q.Key == "sauvolaClaheGridSize")
                     q.IsVisible = isSauvola && useClahe;
+                
             }
         }
 
