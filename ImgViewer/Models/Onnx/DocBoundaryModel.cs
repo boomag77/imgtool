@@ -95,7 +95,7 @@ namespace ImgViewer.Models.Onnx
             if (cropLevel > 100) cropLevel = 100;
             float t = cropLevel / 100f;
             float level = 0.3f + t * (0.95f - 0.3f);
-
+            Debug.WriteLine($"DocBoundaryModel: cropLevel={cropLevel} -> docProbThreshold={level:F3}");
             float docProbThreshold = level;
 
             for (int y = 0; y < outH; y++)

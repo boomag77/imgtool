@@ -1757,13 +1757,13 @@ namespace ImgViewer.Models
             Mat cropped = new Mat();
             try
             {
-                if (debug)
+                if (true)
                 {
                     cropped = cropper.ShowDetectedAreas(src, eastInputWidth, eastInputHeight,
                                                    eastScoreThreshold, eastNmsThreshold,
                                                    tesseractMinConfidence,
                                                    paddingPx,
-                                                   downscaleMaxWidth);
+                                                   downscaleMaxWidth, debug);
                 }
                 else
                 {

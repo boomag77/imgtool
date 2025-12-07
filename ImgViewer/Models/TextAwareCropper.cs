@@ -73,7 +73,7 @@ public class TextAwareCropper
     float eastNmsThreshold = 0.45f,
     int tesseractMinConfidence = 50,
     int paddingPx = 20,
-    int downscaleMaxWidth = 1600)
+    int downscaleMaxWidth = 1600, bool debug = false)
     {
         if (orig == null || orig.Empty()) return orig;
         _token.ThrowIfCancellationRequested();
@@ -296,6 +296,76 @@ public class TextAwareCropper
                 Cv2.Rectangle(outImg, textBg, new Scalar(0, 255, 0), thickness: -1);
                 Cv2.PutText(outImg, label, textOrg, font, fontScale, new Scalar(0, 0, 0), thickness: 1);
             }
+
+            if (!debug)
+            {
+                // 1) считаем прямоугольники и totalHeight как раньше
+                var rectsS = new List<OpenCvSharp.Rect>();
+                int totalHeight = 0;
+                foreach (var b in mergedProcBoxes)
+                {
+                    int x0 = (int)Math.Round(b.X / scale);
+                    int y0 = (int)Math.Round(b.Y / scale);
+                    int w0 = (int)Math.Round(b.Width / scale);
+                    int h0 = (int)Math.Round(b.Height / scale);
+
+                    if (x0 < 0) { w0 += x0; x0 = 0; }
+                    if (y0 < 0) { h0 += y0; y0 = 0; }
+                    if (x0 + w0 > orig.Width) w0 = orig.Width - x0;
+                    if (y0 + h0 > orig.Height) h0 = orig.Height - y0;
+                    if (w0 <= 0 || h0 <= 0) continue;
+
+                    var rect = new OpenCvSharp.Rect(x0, y0, w0, h0);
+                    rectsS.Add(rect);
+                    totalHeight += h0;
+                }
+
+                if (rectsS.Count == 0)
+                    return orig.Clone();
+
+                // <<< ВАЖНО: ширина по макс. боксу, а не orig.Width
+                int outWidth = rectsS.Max(r => r.Width);
+                var cropped = new OCMat(new OCSize(outWidth, totalHeight), orig.Type());
+
+                // Можно ещё залить фон белым, чтобы не было "мусора"
+                cropped.SetTo(orig.Channels() == 1 ? new Scalar(255) : new Scalar(255, 255, 255));
+
+                int offsetY = 0;
+                foreach (var rect in rectsS)
+                {
+                    using var roiView = new Mat(orig, rect);
+                    var destRect = new OpenCvSharp.Rect(0, offsetY, rect.Width, rect.Height);
+                    using var destRoi = new Mat(cropped, destRect);
+                    roiView.CopyTo(destRoi);
+                    offsetY += rect.Height;
+                }
+
+                return cropped;
+
+            }
+
+
+            //    var dbgImg = new OCMat(new OCSize(orig.Width, orig.Height * mergedProcBoxes.Count), orig.Type());
+            //    for (int i = 0; i < mergedProcBoxes.Count; i++)
+            //    {
+            //        var b = mergedProcBoxes[i];
+            //        int x0 = (int)System.Math.Round(b.X / scale);
+            //        int y0 = (int)System.Math.Round(b.Y / scale);
+            //        int w0 = (int)System.Math.Round(b.Width / scale);
+            //        int h0 = (int)System.Math.Round(b.Height / scale);
+            //        if (x0 < 0) { w0 += x0; x0 = 0; }
+            //        if (y0 < 0) { h0 += y0; y0 = 0; }
+            //        if (x0 + w0 > orig.Width) w0 = orig.Width - x0;
+            //        if (y0 + h0 > orig.Height) h0 = orig.Height - y0;
+            //        if (w0 <= 0 || h0 <= 0) continue;
+            //        var rect = new OpenCvSharp.Rect(x0, y0, w0, h0);
+            //        using var roiView = new Mat(orig, rect);
+            //        var destRect = new OpenCvSharp.Rect(0, i * orig.Height, w0, h0);
+            //        var destRoi = new Mat(dbgImg, destRect);
+            //        roiView.CopyTo(destRoi);
+            //    }
+            //    return dbgImg;
+            //}
 
             return outImg;
         }

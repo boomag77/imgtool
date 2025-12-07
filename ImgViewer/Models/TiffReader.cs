@@ -56,14 +56,14 @@ namespace ImgViewer.Models
                     try { return v[0].ToDouble(); } catch { return defaultValue; }
                 }
 #if DEBUG
-                //Debug.WriteLine($"ImageWidth: {GetInt(TiffTag.IMAGEWIDTH)}");
-                //Debug.WriteLine($"ImageLength: {GetInt(TiffTag.IMAGELENGTH)}");
-                //Debug.WriteLine($"RowsPerStrip: {GetInt(TiffTag.ROWSPERSTRIP)}");
-                //Debug.WriteLine($"Compression: {GetInt(TiffTag.COMPRESSION)}");
-                //Debug.WriteLine($"Photometric: {GetInt(TiffTag.PHOTOMETRIC)}");
-                //Debug.WriteLine($"PlanarConfiguration: {GetInt(TiffTag.PLANARCONFIG)}");
-                //Debug.WriteLine($"SamplesPerPixel: {GetInt(TiffTag.SAMPLESPERPIXEL)}");
-                //Debug.WriteLine($"BitsPerSample: {GetInt(TiffTag.BITSPERSAMPLE)}");
+                Debug.WriteLine($"ImageWidth: {GetInt(TiffTag.IMAGEWIDTH)}");
+                Debug.WriteLine($"ImageLength: {GetInt(TiffTag.IMAGELENGTH)}");
+                Debug.WriteLine($"RowsPerStrip: {GetInt(TiffTag.ROWSPERSTRIP)}");
+                Debug.WriteLine($"Compression: {GetInt(TiffTag.COMPRESSION)}");
+                Debug.WriteLine($"Photometric: {GetInt(TiffTag.PHOTOMETRIC)}");
+                Debug.WriteLine($"PlanarConfiguration: {GetInt(TiffTag.PLANARCONFIG)}");
+                Debug.WriteLine($"SamplesPerPixel: {GetInt(TiffTag.SAMPLESPERPIXEL)}");
+                Debug.WriteLine($"BitsPerSample: {GetInt(TiffTag.BITSPERSAMPLE)}");
 #endif
                 // Try to print STRIPOFFSETS and STRIPBYTECOUNTS if present
                 FieldValue[]? off = tif.GetField(TiffTag.STRIPOFFSETS);
@@ -196,7 +196,7 @@ namespace ImgViewer.Models
                             return null;
                         }
 #if DEBUG
-                        //DumpTiffInfo(filePath);
+                        DumpTiffInfo(filePath);
 #endif
                         int width = GetIntTag(tiff, TiffTag.IMAGEWIDTH);
                         int height = GetIntTag(tiff, TiffTag.IMAGELENGTH);
@@ -248,7 +248,8 @@ namespace ImgViewer.Models
                         switch (compression)
                         {
                             case (int)TiffCompression.None:
-                                data = ExtractDecodedPixels(tiff, width, height);
+                                //data = ExtractDecodedPixels(tiff, width, height);
+                                data = ExtractDecodedPixelsByStrip(tiff, width, height);
                                 break;
 
                             case (int)TiffCompression.CCITTG3:
