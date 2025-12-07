@@ -506,6 +506,7 @@ namespace ImgViewer.Models
                     case "sauvolaR":
                     case "sauvolaUseClahe":
                     case "sauvolaMorphRadius":
+                    case "pencilStrokeBoost":
                         p.IsVisible = isSauvola;
                         break;
                     case "sauvolaClaheClip":

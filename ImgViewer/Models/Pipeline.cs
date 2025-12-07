@@ -195,6 +195,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
                                 new PipeLineParameter("K: ", "sauvolaK", 0.30, 0.01, 1.00, 0.01),
                                 new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 256.0, 1.00),
+                                new PipeLineParameter("Pencil strokes boost", "pencilStrokeBoost", 0, 0, 30, 1),
                                 new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
                                 new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 2.0, 0.01, 255.0, 1.0),
                                 new PipeLineParameter("CLAHE grid size", "sauvolaClaheGridSize", 8, 8, 64, 8),

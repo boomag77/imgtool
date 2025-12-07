@@ -43,6 +43,7 @@ namespace ImgViewer.Models
         public int SauvolaWindowSize;
         public int Threshold;
         public int? BlockSize;
+        public int PencilStrokeBoost;
         public int MeanC;
         public int MorphKernelBinarize;
         public int MorphIterationsBinarize;
@@ -71,8 +72,8 @@ namespace ImgViewer.Models
             UseGaussian = false,
             UseMorphology = false,
             SauvolaUseClahe = true,
-            SauvolaClaheGridSize = 8
-
+            SauvolaClaheGridSize = 8,
+            PencilStrokeBoost = 0
         };
 
 

@@ -3074,7 +3074,7 @@ namespace ImgViewer.Models
         // k: обычно 0.2..0.5 (0.34 хороший старт)
         // R: динамический диапазон (обычно 128)
 
-        private Mat Sauvola(Mat srcGray, int windowSize = 25, double k = 0.34, double R = 128.0)
+        private Mat Sauvola(Mat srcGray, int windowSize = 25, double k = 0.34, double R = 128.0, int pencilStrokeBoost = 0)
         {
 
             if (srcGray.Empty()) throw new ArgumentException("srcGray is empty");
@@ -3118,9 +3118,14 @@ namespace ImgViewer.Models
             Cv2.Add(thresh, 1.0, thresh);               // thresh = 1 + k*(std/R -1)
             Cv2.Multiply(mean, thresh, thresh);         // thresh = mean * (...)
 
+            double pencilMargin = (double)pencilStrokeBoost; // TODO: вынести в BinarizeParameters (SauvolaPencilMargin)
+            using var threshShifted = new Mat();
+            Cv2.Add(thresh, new Scalar(pencilMargin), threshShifted);
+            Cv2.Min(threshShifted, new Scalar(255.0), threshShifted);
+
             // binarize: srcD > thresh -> 255 else 0
             Mat bin = new Mat();
-            Cv2.Compare(srcD, thresh, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
+            Cv2.Compare(srcD, threshShifted, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
             bin.ConvertTo(bin, MatType.CV_8UC1, 255.0);  // ensure 0/255
 
             // Clean-up mats
@@ -3139,7 +3144,8 @@ namespace ImgViewer.Models
                                                       p.SauvolaWindowSize,
                                                       p.SauvolaK,
                                                       p.SauvolaR,
-                                                      p.SauvolaMorphRadius);
+                                                      p.SauvolaMorphRadius,
+                                                      p.PencilStrokeBoost);
 
             Mat bin8;
             if (binMat.Type() != MatType.CV_8UC1)
@@ -3168,7 +3174,7 @@ namespace ImgViewer.Models
 
 
         private Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
-                                             int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0)
+                                             int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0, int pencilStrokeBoost = 0)
         {
             var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
             Mat gray = src;
@@ -3187,7 +3193,7 @@ namespace ImgViewer.Models
                 if (!ReferenceEquals(gray, src)) gray.Dispose();
             }
 
-            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR);
+            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
 
             // optional morphological cleaning (open to remove small noise, close to fill holes)
             if (morphRadius > 0)
