@@ -314,9 +314,10 @@ namespace ImgViewer.Models
                 var logMsg = $"Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
                 var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
                 var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
+                var plJsonMsg = _plJson;
                 File.WriteAllLines(
-                    Path.Combine(_outputFolder, "processing_log.txt"),
-                    new string[] { logMsg, timeMsg, "Operations performed:", plOps }
+                    Path.Combine(_outputFolder, "_processing_log.txt"),
+                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", _plJson }
                 );
 
             }

@@ -308,9 +308,10 @@ namespace ImgViewer.Models
                     opsLog.Add($"- {op.Command}");
                 }
                 var plOps = pipeline.Operations.Count > 0 ? string.Join(Environment.NewLine, opsLog) : "No operations were performed.";
+                var plJson = pipeline.BuildPipelineForSave();
                 File.WriteAllLines(
-                    Path.Combine(rootFolder, "processing_log.txt"),
-                    new string[] { logMsg, timeMsg, "Operations performed:", plOps }
+                    Path.Combine(rootFolder, "_processing_log.txt"),
+                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", plJson }
                 );
 
             }
