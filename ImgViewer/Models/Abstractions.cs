@@ -15,11 +15,23 @@ namespace ImgViewer.Models
         SmartCrop
     }
 
+    public enum SourceFileLayout
+    {
+        Left,
+        Right
+    }
+
+    public struct SourceImageFile
+    {
+        public string Path { get; set; }
+        public SourceFileLayout? Layout { get; set; }
+    }
+
     public class SourceImageFolder
     {
         public string Path { get; set; }
         public string ParentPath { get; set; }
-        public string[] Files { get; set; }
+        public SourceImageFile[] Files { get; set; }
     }
 
     enum OperationType

@@ -733,7 +733,7 @@ namespace ImgViewer.Models
 
         public Mat ProcessSingle(Mat src,
                           ProcessorCommand command,
-                          Dictionary<string, object> parameters, CancellationToken token)
+                          Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing)
         {
             lock (_commandLock)
             {
@@ -886,7 +886,7 @@ namespace ImgViewer.Models
                                             right = SafeInt(kv.Value, right);
                                             break;
                                         case "manualCutDebug":
-                                            manualCutDebug = SafeBool(kv.Value, manualCutDebug);
+                                            manualCutDebug = batchProcessing ? false : SafeBool(kv.Value, manualCutDebug);
                                             break;
                                         case "cutMethod":
                                             applyManualCut = SafeBool(kv.Value, applyManualCut);
@@ -995,7 +995,7 @@ namespace ImgViewer.Models
                                         settings.DilateIter = SafeInt(kv.Value, dilateIter);
                                         break;
                                     case "showDespeckleDebug":
-                                        settings.ShowDespeckleDebug = SafeBool(kv.Value, showDespeckleDebug);
+                                        settings.ShowDespeckleDebug = batchProcessing ? false : SafeBool(kv.Value, showDespeckleDebug);
                                         break;
 
                                 }
@@ -1049,7 +1049,7 @@ namespace ImgViewer.Models
                                         downscaleMaxWidth = SafeInt(kv.Value, downscaleMaxWidth);
                                         break;
                                     case "eastDebug":
-                                        eastDebug = SafeBool(kv.Value, eastDebug);
+                                        eastDebug = batchProcessing ? false : SafeBool(kv.Value, eastDebug);
                                         break;
 
                                 }
@@ -1258,13 +1258,13 @@ namespace ImgViewer.Models
                             spec1.Density = density;
                             spec1.SizeToleranceFraction = sizeTolerance;
 
-                            Debug.WriteLine(spec1.Shape.ToString());
-                            Debug.WriteLine(spec1.Diameter.ToString());
-                            Debug.WriteLine(width.ToString());
-                            Debug.WriteLine(height.ToString());
-                            Debug.WriteLine(spec1.Count.ToString());
-                            Debug.WriteLine(spec1.Density.ToString());
-                            Debug.WriteLine(spec1.SizeToleranceFraction.ToString());
+                            //Debug.WriteLine(spec1.Shape.ToString());
+                            //Debug.WriteLine(spec1.Diameter.ToString());
+                            //Debug.WriteLine(width.ToString());
+                            //Debug.WriteLine(height.ToString());
+                            //Debug.WriteLine(spec1.Count.ToString());
+                            //Debug.WriteLine(spec1.Density.ToString());
+                            //Debug.WriteLine(spec1.SizeToleranceFraction.ToString());
 
                             PunchSpec spec2 = new PunchSpec();
                             spec2.Diameter = diameter;
@@ -1290,9 +1290,9 @@ namespace ImgViewer.Models
                                 specs.Add(spec1);
                                 specs.Add(spec2);
                             }
-                            Debug.WriteLine($"Shape: {spec1.Shape}");
+                            //Debug.WriteLine($"Shape: {spec1.Shape}");
 
-                            Debug.WriteLine($"Specs len: {specs.Count}");
+                            //Debug.WriteLine($"Specs len: {specs.Count}");
 
                             var offsets = new Offsets
                             {
@@ -1364,10 +1364,10 @@ namespace ImgViewer.Models
 
 
 
-        public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null)
+        public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null, bool batchProcessing = false)
         {
             
-            WorkingImage = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token);
+            WorkingImage = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token, batchProcessing);
 
         }
 

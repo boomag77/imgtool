@@ -169,7 +169,9 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Top", "manualTop", 0, 0, 10000, 1),
                                 new PipeLineParameter("Bottom", "manualBottom", 0, 0, 10000, 1),
                                 new PipeLineParameter("Cut", "cutMethod", false),
-                                new PipeLineParameter("Preview cut", "manualCutDebug", false)
+                                new PipeLineParameter("Preview cut", "manualCutDebug", false),
+                                new PipeLineParameter("Apply to Left Page", "applyToLeftPage", true),
+                                new PipeLineParameter("Apply to Right Page", "applyToRightPage", true)
 
                             },
                             operation => ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));

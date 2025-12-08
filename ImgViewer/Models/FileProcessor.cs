@@ -90,7 +90,7 @@ namespace ImgViewer.Models
                 var bmp = TiffReader.LoadImageSourceFromTiff(path).GetAwaiter().GetResult();
                 if (bmp != null)
                 {
-                    return ((T)(object)bmp, []);
+                    return ((T)(object)bmp, Array.Empty<byte>());
                 }
                 // If failed, fallback to Magick.NET
             }
@@ -99,7 +99,7 @@ namespace ImgViewer.Models
             {
                 if (_token.IsCancellationRequested)
                 {
-                    return (null, null);
+                    return (null, Array.Empty<byte>());
                 }
                 //throw new Exception();
                 //return (null, null);
@@ -152,7 +152,7 @@ namespace ImgViewer.Models
 
                         default:
                             ErrorOccured?.Invoke($"Unsupported type requested while loading image {path}: {typeof(T).FullName}");
-                            return (null, null);
+                            return (null, Array.Empty<byte>());
                     }
                 }
             }
@@ -164,7 +164,7 @@ namespace ImgViewer.Models
                 {
                     if (_token.IsCancellationRequested)
                     {
-                        return (null, null);
+                        return (null, Array.Empty<byte>());
                     }
                     if (typeof(T) == typeof(BitmapImage) || typeof(T) == typeof(ImageSource))
                     {
@@ -188,13 +188,13 @@ namespace ImgViewer.Models
                     else
                     {
                         ErrorOccured?.Invoke($"Fallback WIC supports only BitmapImage, requested: {typeof(T).FullName}");
-                        return (null, null);
+                        return (null, Array.Empty<byte>());
                     }
                 }
                 catch (Exception ex2)
                 {
                     ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
-                    return (null, null);
+                    return (null, Array.Empty<byte>());
                 }
             }
 
@@ -297,11 +297,44 @@ namespace ImgViewer.Models
                                                 file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||   // если хочешь PNG тоже
                                                 file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
                                                 file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                                        .Select(f => new SourceImageFile
+                                        {
+                                            Path = f,
+                                            // layout left if filename is ending with number and number is odd, otherwise right
+                                            Layout = GetLayoutFromFileName(f)
+
+
+                                        })
                                         .ToArray()
             };
 
 
             return sourceFolder;
+        }
+
+        private static SourceFileLayout? GetLayoutFromFileName(string path)
+        {
+            var name = Path.GetFileNameWithoutExtension(path); // e.g. "page001"
+
+            if (string.IsNullOrEmpty(name))
+                return SourceFileLayout.Right;
+
+            int i = name.Length - 1;
+
+            // идём с конца, пока цифры
+            while (i >= 0 && char.IsDigit(name[i]))
+                i--;
+
+            int start = i + 1; // первая цифра в хвостовом числе
+            string digits = (start < name.Length)
+                ? name.Substring(start)    // всё от первой цифры до конца
+                : string.Empty;
+
+            if (digits.Length > 0 && int.TryParse(digits, out int num))
+                return (num % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
+
+            // нет числового суффикса → Right по умолчанию
+            return null;
         }
 
         public SourceImageFolder[]? GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath)

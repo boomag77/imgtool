@@ -17,7 +17,7 @@ namespace ImgViewer.Models
 
         private bool _disposed;
 
-        private readonly BlockingCollection<string> _filesQueue;
+        private readonly BlockingCollection<SourceImageFile> _filesQueue;
         private readonly BlockingCollection<SaveTaskInfo> _saveQueue;
         private readonly CancellationTokenSource _cts;
         private readonly CancellationToken _token;
@@ -73,7 +73,7 @@ namespace ImgViewer.Models
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount-1) : maxWorkersCount;
 
-            _filesQueue = new BlockingCollection<string>(
+            _filesQueue = new BlockingCollection<SourceImageFile>(
                 maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
             );
             _saveQueue = new BlockingCollection<SaveTaskInfo>( _workersCount );
@@ -187,11 +187,11 @@ namespace ImgViewer.Models
             using var fileProc = new FileProcessor(token);
             try
             {
-                foreach (var filePath in _filesQueue.GetConsumingEnumerable(token))
+                foreach (var file in _filesQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
 
-                    var loaded = fileProc.Load<ImageSource>(filePath);
+                    var loaded = fileProc.Load<ImageSource>(file.Path);
 
                     if (loaded.Item1 == null)
                     {
@@ -217,7 +217,36 @@ namespace ImgViewer.Models
                                 continue;
                             }
                             //var parameters = op.CreateParameterDictionary();
-                            imgProc.ApplyCommand(op.Command, op.Params);
+                            // if commant is Border remove and border removal algo is Manual, check if the file layout left or right
+                            if (op.Command == ProcessorCommand.BordersRemove &&
+                                op.Params.ContainsKey("borderRemovalAlgorithm") &&
+                                op.Params["borderRemovalAlgorithm"] is string algo &&
+                                algo == "Manual")
+                            {
+
+                                bool applyToLeftPage = (op.Params.ContainsKey("applyToLeftPage") && 
+                                                        op.Params["applyToLeftPage"] is bool applyLeft && 
+                                                        applyLeft);
+                                bool applyToRightPage = (op.Params.ContainsKey("applyToRightPage") &&
+                                                        op.Params["applyToRightPage"] is bool applyRight &&
+                                                        applyRight);
+                                if (file.Layout == SourceFileLayout.Left && !applyToLeftPage)
+                                {
+                                    continue;
+                                }
+                                if (file.Layout == SourceFileLayout.Right && !applyToRightPage)
+                                {
+                                    continue;
+                                }
+                                if (file.Layout == null)
+                                {
+                                    continue;
+                                }
+
+                            }
+                            
+                            imgProc.ApplyCommand(op.Command, op.Params, true);
+
                         }
                         catch (OperationCanceledException)
                         {
@@ -234,7 +263,7 @@ namespace ImgViewer.Models
 
                     //TODO make saving worker(s) and dissfetent queue for the saving
 
-                    var fileName = Path.ChangeExtension(Path.GetFileName(filePath), ".tif");
+                    var fileName = Path.ChangeExtension(Path.GetFileName(file.Path), ".tif");
                     var outputFilePath = Path.Combine(_outputFolder, fileName);
                     //proc.SaveCurrentImage(outputFilePath);
                     using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
@@ -288,11 +317,11 @@ namespace ImgViewer.Models
             var processingTasks = new List<Task>();
             try
             {
-                // if _plOperations contains SmartCrop _workersCount--
-                //if (_plOperations.Any(op => op.Command == ProcessorCommand.SmartCrop))
-                //{
-                //    _workersCount = Math.Max(1, _workersCount - 1);
-                //}
+                //if _plOperations contains SmartCrop _workersCount--
+                if (_plOperations.Any(op => op.Command == ProcessorCommand.SmartCrop))
+                {
+                    _workersCount = Math.Max(1, _workersCount - 1);
+                }
                 for (int i = 0; i < _workersCount; i++)
                 {
                     if (_cts.IsCancellationRequested) throw new OperationCanceledException();

@@ -27,6 +27,9 @@ namespace ImgViewer.Models
 
         private bool _isManualBordersRemove;
 
+        private bool _applyToLeftPage = false;
+        private bool _applyToRightPage = false;
+
         public PipelineOperation(PipelineOperationType type, ProcessorCommand procCommand, string displayName, string actionLabel, IEnumerable<PipeLineParameter> parameters, Action<PipelineOperation>? execute = null)
         {
             _displayName = displayName;
@@ -39,6 +42,34 @@ namespace ImgViewer.Models
 
             InitializeParameterVisibilityRules();
             HookParameterChanges();
+        }
+
+        public bool ApplyToLeftPage
+        {
+            get
+            {
+                return _applyToLeftPage;
+            }
+            set
+            {
+                _applyToLeftPage = value;
+                Debug.WriteLine($"[PipelineOperation] {DisplayName}: ApplyToLeftPage = {_applyToLeftPage}");
+                OnPropertyChanged();
+            }
+        }
+
+        public bool ApplyToRightPage
+        {
+            get
+            {
+                return _applyToRightPage;
+            }
+            set
+            {
+                _applyToRightPage = value;
+                Debug.WriteLine($"[PipelineOperation] {DisplayName}: ApplyToRightPage = {_applyToRightPage}");
+                OnPropertyChanged();
+            }
         }
 
         public bool IsManualBordersRemove
@@ -246,6 +277,21 @@ namespace ImgViewer.Models
                     //ApplyAutoThreshVisibility(autoThreshFlagImmediate.BoolValue);
                     autoThreshFlagImmediate.PropertyChanged -= AutoThreshFlag_PropertyChanged;
                     autoThreshFlagImmediate.PropertyChanged += AutoThreshFlag_PropertyChanged;
+                }
+
+                var applyToLeftPageFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "applyToLeftPage");
+                if (applyToLeftPageFlagImmediate != null)
+                {
+                    // subscribe once so further toggles update visibility
+                    applyToLeftPageFlagImmediate.PropertyChanged -= ApplyToPageFlag_PropertyChanged;
+                    applyToLeftPageFlagImmediate.PropertyChanged += ApplyToPageFlag_PropertyChanged;
+                }
+                var applyToRightPageFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "applyToRightPage");
+                if (applyToRightPageFlagImmediate != null)
+                {
+                    // subscribe once so further toggles update visibility
+                    applyToRightPageFlagImmediate.PropertyChanged -= ApplyToPageFlag_PropertyChanged;
+                    applyToRightPageFlagImmediate.PropertyChanged += ApplyToPageFlag_PropertyChanged;
                 }
 
                 bordersAlgo.PropertyChanged += (s, e) =>
@@ -590,6 +636,8 @@ namespace ImgViewer.Models
                     case "manualBottom":
                     case "cutMethod":
                     case "manualCutDebug":
+                    case "applyToLeftPage":
+                    case "applyToRightPage":
                         p.IsVisible = isManual;
                         break;
                     default:
@@ -630,6 +678,40 @@ namespace ImgViewer.Models
                     q.IsVisible = isSauvola && useClahe;
                 
             }
+        }
+
+        // property changed handler for Apply to Left Page / Apply to Right Page checkboxes
+        private void ApplyToPageFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            // apply the logic to the PipelineOperation properties
+            if (sender is not PipeLineParameter pageFlagParam) return;
+            if (pageFlagParam.Key == "applyToLeftPage")
+            {
+                ApplyToLeftPage = pageFlagParam.BoolValue;
+                if (!ApplyToLeftPage && !ApplyToRightPage)
+                {
+                    var rightParam = _parameters.FirstOrDefault(p => p.Key == "applyToRightPage");
+                    if (rightParam != null && rightParam.IsBool && !rightParam.BoolValue)
+                        rightParam.BoolValue = true;
+                }
+            }
+            else if (pageFlagParam.Key == "applyToRightPage")
+            {
+
+                ApplyToRightPage = pageFlagParam.BoolValue;
+
+                if (!ApplyToLeftPage && !ApplyToRightPage)
+                {
+                    var leftParam = _parameters.FirstOrDefault(p => p.Key == "applyToLeftPage");
+                    if (leftParam != null && leftParam.IsBool && !leftParam.BoolValue)
+                    {
+                        leftParam.BoolValue = true;
+                    }
+                }
+            }
+
+
         }
 
 
