@@ -20,9 +20,9 @@ namespace ImgViewer.Interfaces
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
 
-        Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token);
+        Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
 
-        void ApplyCommand(ProcessorCommand commandName, Dictionary<string, object> parameters);
+        void ApplyCommand(ProcessorCommand commandName, Dictionary<string, object> parameters, bool batchProcessing = false);
 
         event Action<Stream> ImageUpdated;
         event Action<string> ErrorOccured;
