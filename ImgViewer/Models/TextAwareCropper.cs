@@ -10,6 +10,38 @@ using OCMat = OpenCvSharp.Mat;
 using OCRect = OpenCvSharp.Rect;
 using OCSize = OpenCvSharp.Size;
 
+public sealed class TextDetectionSettings
+{
+    public int DownscaleMaxWidth { get; set; } = 1600;
+
+    // EAST
+    public int EastInputWidth { get; set; } = 1280;
+    public int EastInputHeight { get; set; } = 1280;
+    public float EastScoreThreshold { get; set; } = 0.45f;
+    public float EastNmsThreshold { get; set; } = 0.45f;
+
+    // OCR
+    public int TesseractMinConfidence { get; set; } = 50;
+    public double OcrMinAlnumRatio { get; set; } = 0.50;
+    public int OcrMinAlnumCount { get; set; } = 1;
+
+    // Дополнительные типы контента
+    public bool IncludeHandwritten { get; set; } = true;
+    public bool IncludeStamps { get; set; } = true;
+    public int HandwrittenMinAreaFraction { get; set; } = 5;
+    public double StampMinAreaFraction { get; set; } = 0.00002;
+
+    // Merge / padding (потом будем использовать в MergeAndInflateBoxes)
+    public int PaddingPx { get; set; } = 20;
+    public int MergePaddingPx { get; set; } = 10;
+    public double MergeRelInflate { get; set; } = 0.2;
+    public int MergeDilateIterations { get; set; } = 3;
+    public int MergeNearbyMaxGapPx { get; set; } = 24;
+    public double MergeNearbyIouThresh { get; set; } = 0.12;
+
+    public static TextDetectionSettings CreateDefault() => new TextDetectionSettings();
+}
+
 public class TextAwareCropper
 {
     private readonly string _eastModelPath;   // путь к frozen_east_text_detection.pb
@@ -25,7 +57,10 @@ public class TextAwareCropper
         _tessLang = tessLang;
     }
 
-    private static List<OCRect> MergeAndInflateBoxes(OCMat proc, List<OCRect> boxes, int paddingPx = 12, double relInflate = 0.15, int dilateIterations = 2)
+    private static List<OCRect> MergeAndInflateBoxes(OCMat proc, List<OCRect> boxes,
+                                                    int paddingPx = 12,
+                                                    double relInflate = 0.15,
+                                                    int dilateIterations = 2)
     {
         var outRects = new List<OCRect>();
         if (proc == null || proc.Empty() || boxes == null || boxes.Count == 0) return outRects;
@@ -47,8 +82,30 @@ public class TextAwareCropper
             Cv2.Rectangle(mask, new OCRect(x, y, w, h), Scalar.All(255), thickness: -1);
         }
 
-        // dilate чтобы сцепить близкие bbox'ы (ядро зависит от размера изображения)
-        int kSize = Math.Max(3, Math.Min(Math.Max(W, H) / 200, 31)); // ~ proportional
+        // dilate чтобы сцепить близкие bbox'ы
+        // базовый размер ядра — от типичного размера бокса, а не только от размера страницы
+        int imageBased = Math.Max(3, Math.Min(Math.Max(W, H) / 200, 31)); // как было раньше
+
+        int kSize;
+        if (boxes.Count >= 3)
+        {
+            // медианные ширина/высота бокса
+            var widths = boxes.Select(b => Math.Max(1, b.Width)).OrderBy(v => v).ToArray();
+            var heights = boxes.Select(b => Math.Max(1, b.Height)).OrderBy(v => v).ToArray();
+            int medW = widths[widths.Length / 2];
+            int medH = heights[heights.Length / 2];
+            int baseSize = Math.Max(medW, medH);
+
+            // ядро ~ четверть типичного бокса, но не больше imageBased и не больше 31
+            int medianBased = Math.Max(3, baseSize / 4);
+            kSize = Math.Max(3, Math.Min(medianBased, imageBased));
+        }
+        else
+        {
+            // если боксов мало — fallback к старой эвристике
+            kSize = imageBased;
+        }
+
         var ker = Cv2.GetStructuringElement(MorphShapes.Rect, new OCSize(kSize, kSize));
         Cv2.Dilate(mask, mask, ker, iterations: dilateIterations);
 
@@ -67,16 +124,54 @@ public class TextAwareCropper
         return outRects;
     }
 
+    public OCMat ShowDetectedAreas(OCMat orig, TextDetectionSettings settings, bool debug = false)
+    {
+        if (settings == null)
+            settings = TextDetectionSettings.CreateDefault();
+
+        return ShowDetectedAreas(
+            orig,
+            eastInputWidth: settings.EastInputWidth,
+            eastInputHeight: settings.EastInputHeight,
+            eastScoreThreshold: settings.EastScoreThreshold,
+            eastNmsThreshold: settings.EastNmsThreshold,
+            tesseractMinConfidence: settings.TesseractMinConfidence,
+            paddingPx: settings.PaddingPx,
+            downscaleMaxWidth: settings.DownscaleMaxWidth,
+            debug: debug,
+            settings: settings); // <-- ВАЖНО: прокидываем объект настроек внутрь
+    }
+
     public OCMat ShowDetectedAreas(OCMat orig,
-    int eastInputWidth = 1280, int eastInputHeight = 1280,
-    float eastScoreThreshold = 0.45f,
-    float eastNmsThreshold = 0.45f,
-    int tesseractMinConfidence = 50,
-    int paddingPx = 20,
-    int downscaleMaxWidth = 1600, bool debug = false)
+                                    int eastInputWidth = 1280, int eastInputHeight = 1280,
+                                    float eastScoreThreshold = 0.45f,
+                                    float eastNmsThreshold = 0.45f,
+                                    int tesseractMinConfidence = 50,
+                                    int paddingPx = 20,
+                                    int downscaleMaxWidth = 1600, bool debug = false,
+                                    TextDetectionSettings settings = null)
     {
         if (orig == null || orig.Empty()) return orig;
         _token.ThrowIfCancellationRequested();
+
+        if (settings == null)
+        {
+            settings = new TextDetectionSettings
+            {
+                DownscaleMaxWidth = downscaleMaxWidth,
+                EastInputWidth = eastInputWidth,
+                EastInputHeight = eastInputHeight,
+                EastScoreThreshold = eastScoreThreshold,
+                EastNmsThreshold = eastNmsThreshold,
+                TesseractMinConfidence = tesseractMinConfidence,
+                PaddingPx = paddingPx
+                // остальные поля возьмут дефолтные значения
+            };
+        }
+
+        //Debug.WriteLine($"Include handritten : {settings.IncludeHandwritten}, min area fraction: {settings.HandwrittenMinAreaFraction}");
+        //Debug.WriteLine($"Include stamps      : {settings.IncludeStamps}, min area fraction: {settings.StampMinAreaFraction}");
+
         OCMat resized = null;
 
         try
@@ -84,12 +179,29 @@ public class TextAwareCropper
             // 0) downscale (как в CropKeepingText)
             double scale = 1.0;
             OCMat proc = orig;
-            if (downscaleMaxWidth > 0 && orig.Width > downscaleMaxWidth)
+            if (settings.DownscaleMaxWidth > 0 && orig.Width > settings.DownscaleMaxWidth)
             {
-                scale = downscaleMaxWidth / (double)orig.Width;
+                scale = settings.DownscaleMaxWidth / (double)orig.Width;
                 resized = new OCMat();
                 Cv2.Resize(orig, resized, new OCSize((int)(orig.Width * scale), (int)(orig.Height * scale)), 0, 0, InterpolationFlags.Area);
                 proc = resized;
+            }
+
+            // подгоняем размер входа для EAST под текущий proc
+            // (кратно 32, не больше 1280, ближе к реальному размеру страницы)
+            int modelW = eastInputWidth;
+            int modelH = eastInputHeight;
+
+            if (modelW <= 0 || modelH <= 0)
+            {
+                const int maxSide = 1280;
+                modelW = Math.Min(maxSide, Math.Max(32, (proc.Width / 32) * 32));
+                modelH = Math.Min(maxSide, Math.Max(32, (proc.Height / 32) * 32));
+            }
+            else
+            {
+                modelW = Math.Max(32, (modelW / 32) * 32);
+                modelH = Math.Max(32, (modelH / 32) * 32);
             }
 
             // 1) EAST detector
@@ -97,7 +209,7 @@ public class TextAwareCropper
             net.SetPreferableBackend(Backend.OPENCV);
             net.SetPreferableTarget(Target.CPU);
 
-            using var blob = CvDnn.BlobFromImage(proc, 1.0, new OCSize(eastInputWidth, eastInputHeight),
+            using var blob = CvDnn.BlobFromImage(proc, 1.0, new OCSize(modelW, modelH),
                                                  new Scalar(123.68, 116.78, 103.94), swapRB: true, crop: false);
             net.SetInput(blob);
 
@@ -107,11 +219,12 @@ public class TextAwareCropper
             using var scores = net.Forward(kScores);
             using var geometry = net.Forward(kGeom);
 
-            Debug.WriteLine("score Size: " + scores.Size());
-            Debug.WriteLine("geometry Size: " + geometry.Size());
-            Debug.WriteLine("Layers names: " + net.GetUnconnectedOutLayersNames());
+            //Debug.WriteLine("score Size: " + scores.Size());
+            //Debug.WriteLine("geometry Size: " + geometry.Size());
+            //Debug.WriteLine("Layers names: " + net.GetUnconnectedOutLayersNames());
 
-            var rects = DecodeEAST(scores, geometry, eastScoreThreshold, eastInputWidth, eastInputHeight, proc.Width, proc.Height);
+            var rects = DecodeEAST(scores, geometry, eastScoreThreshold, modelW, modelH, proc.Width, proc.Height);
+
             rects = NonMaxSuppression(rects, eastNmsThreshold);
 
             // объединяем кандидатов: EAST + (опционально) handwriting + stamp
@@ -119,12 +232,31 @@ public class TextAwareCropper
 
             _token.ThrowIfCancellationRequested();
 
-            // Добавим handwritten и stamp кандидаты (рекомендуется включать, если нужны печати/записи)
-            var hwCandidates = DetectHandwrittenCandidates(proc, minAreaFraction: 0.0002);
-            if (hwCandidates != null && hwCandidates.Count > 0) textCandidates.AddRange(hwCandidates);
+            // нам нужны stampCandidates чуть позже как fallback
+            List<OpenCvSharp.Rect> hwCandidates = null;
+            List<OpenCvSharp.Rect> stampCandidates = null;
 
-            var stampCandidates = DetectStampCandidates(proc, minAreaFraction: 0.00002);
-            if (stampCandidates != null && stampCandidates.Count > 0) textCandidates.AddRange(stampCandidates);
+            // handwritten (если включён в настройках)
+            if (settings.IncludeHandwritten)
+            {
+                hwCandidates = DetectHandwrittenCandidates(
+                    proc,
+                    minAreaFraction: MapHandwrittenSensitivityToFraction(settings.HandwrittenMinAreaFraction));
+
+                if (hwCandidates != null && hwCandidates.Count > 0)
+                    textCandidates.AddRange(hwCandidates);
+            }
+
+            // stamps (если включены в настройках)
+            if (settings.IncludeStamps)
+            {
+                stampCandidates = DetectStampCandidates(
+                    proc,
+                    minAreaFraction: settings.StampMinAreaFraction);
+
+                if (stampCandidates != null && stampCandidates.Count > 0)
+                    textCandidates.AddRange(stampCandidates);
+            }
 
             if (textCandidates == null || textCandidates.Count == 0)
             {
@@ -132,12 +264,17 @@ public class TextAwareCropper
                 return orig.Clone();
             }
 
+
             // ПАРАМЕТРЫ OCR-first
-            int ocrPadding = Math.Min(60, Math.Max(20, paddingPx / 2)); // небольшой padding для OCR
+            int ocrPadding = Math.Min(10, Math.Max(20, paddingPx / 2)); // небольшой padding для OCR
             int targetCharHeight = 48;    // апскейлим до этой высоты для OCR - 48
-            double minAlnumRatio = 0.50;  // доля букв/цифр
-            int minAlnumCount = 1;
-            int minTessConf = Math.Max(30, Math.Min(60, tesseractMinConfidence)); // допустимый диапазон
+
+            double minAlnumRatio = settings.OcrMinAlnumRatio;  // доля букв/цифр
+            int minAlnumCount = settings.OcrMinAlnumCount;
+
+            int minTessConf = Math.Max(5, Math.Min(60, settings.TesseractMinConfidence)); // допустимый диапазон
+
+
 
             var confirmedProcBoxes = new List<OpenCvSharp.Rect>();
 
@@ -236,9 +373,21 @@ public class TextAwareCropper
             } // using engine
 
             // Если ничего не прошло OCR — попробуем принять stampCandidates (visual only) чтобы не терять печати
-            if (confirmedProcBoxes.Count == 0 && stampCandidates != null && stampCandidates.Count > 0)
+            // Если ничего не прошло OCR — примем handwritten и/или stamp кандидаты,
+            // чтобы не потерять страницы, где весь текст рукописный или есть только печати
+            if (confirmedProcBoxes.Count == 0)
             {
-                confirmedProcBoxes.AddRange(stampCandidates);
+                // 1) сначала рукописные, если они включены
+                if (settings.IncludeHandwritten && hwCandidates != null && hwCandidates.Count > 0)
+                {
+                    confirmedProcBoxes.AddRange(hwCandidates);
+                }
+
+                // 2) если всё ещё пусто — используем stamps (как раньше)
+                if (confirmedProcBoxes.Count == 0 && settings.IncludeStamps && stampCandidates != null && stampCandidates.Count > 0)
+                {
+                    confirmedProcBoxes.AddRange(stampCandidates);
+                }
             }
 
             if (confirmedProcBoxes.Count == 0)
@@ -248,16 +397,55 @@ public class TextAwareCropper
             }
             _token.ThrowIfCancellationRequested();
             // 3) merge уже подтверждённых боксов (proc coords)
-            int mergePaddingPx = Math.Min(80, Math.Max(20, paddingPx / 2));
-            double relInflate = 0.4;
-            int dilateIters = 3;
-            var mergedProcBoxes = MergeAndInflateBoxes(proc, confirmedProcBoxes, paddingPx: mergePaddingPx, relInflate: relInflate, dilateIterations: dilateIters);
+            int mergePaddingPx = settings.MergePaddingPx > 0
+                ? settings.MergePaddingPx
+                : Math.Min(80, Math.Max(20, paddingPx / 2));
+
+            double relInflate = settings.MergeRelInflate;
+            int dilateIters = Math.Max(1, settings.MergeDilateIterations);
+
+            var mergedProcBoxes = MergeAndInflateBoxes(
+                proc,
+                confirmedProcBoxes,
+                paddingPx: mergePaddingPx,
+                relInflate: relInflate,
+                dilateIterations: dilateIters);
 
             //+++ дополнительно сливаем близкие боксы (без инфлейта)
-            mergedProcBoxes = MergeNearbyRects(mergedProcBoxes, maxGapPx: 24, iouThresh: 0.12);
+            int nearbyGap = settings.MergeNearbyMaxGapPx;
+            double nearbyIou = settings.MergeNearbyIouThresh;
+
+            mergedProcBoxes = MergeNearbyRects(
+                mergedProcBoxes,
+                maxGapPx: nearbyGap,
+                iouThresh: nearbyIou);
 
 
             resized?.Dispose();
+
+            // 4) переводим mergedProcBoxes в координаты orig
+            var origRects = new List<OpenCvSharp.Rect>();
+            for (int i = 0; mergedProcBoxes != null && i < mergedProcBoxes.Count; i++)
+            {
+                _token.ThrowIfCancellationRequested();
+                var b = mergedProcBoxes[i];
+
+                int x0 = (int)Math.Round(b.X / scale);
+                int y0 = (int)Math.Round(b.Y / scale);
+                int w0 = (int)Math.Round(b.Width / scale);
+                int h0 = (int)Math.Round(b.Height / scale);
+
+                if (x0 < 0) { w0 += x0; x0 = 0; }
+                if (y0 < 0) { h0 += y0; y0 = 0; }
+                if (x0 + w0 > orig.Width) w0 = orig.Width - x0;
+                if (y0 + h0 > orig.Height) h0 = orig.Height - y0;
+                if (w0 <= 0 || h0 <= 0) continue;
+
+                origRects.Add(new OpenCvSharp.Rect(x0, y0, w0, h0));
+            }
+
+            if (origRects.Count == 0)
+                return orig.Clone();
 
             // 4) переводим в координаты orig и рисуем
             var outImg = orig.Clone();
@@ -278,7 +466,11 @@ public class TextAwareCropper
                 if (w0 <= 0 || h0 <= 0) continue;
 
                 var rect = new OpenCvSharp.Rect(x0, y0, w0, h0);
-                Cv2.Rectangle(outImg, rect, new Scalar(0, 255, 0), thickness: 2);
+                // make fillColor with opacity
+                var opacity = 20; // 0-255
+                var fillColor = new Scalar(0, 255, 0, opacity);
+
+                Cv2.Rectangle(outImg, rect, fillColor, thickness: -1);
 
                 // подпись индекса (без ambigous Math)
                 string label = (i + 1).ToString();
@@ -299,48 +491,85 @@ public class TextAwareCropper
 
             if (!debug)
             {
-                // 1) считаем прямоугольники и totalHeight как раньше
-                var rectsS = new List<OpenCvSharp.Rect>();
-                int totalHeight = 0;
-                foreach (var b in mergedProcBoxes)
-                {
-                    int x0 = (int)Math.Round(b.X / scale);
-                    int y0 = (int)Math.Round(b.Y / scale);
-                    int w0 = (int)Math.Round(b.Width / scale);
-                    int h0 = (int)Math.Round(b.Height / scale);
+                // --- CROP MODE: один общий ROI по всему контенту ---
 
-                    if (x0 < 0) { w0 += x0; x0 = 0; }
-                    if (y0 < 0) { h0 += y0; y0 = 0; }
-                    if (x0 + w0 > orig.Width) w0 = orig.Width - x0;
-                    if (y0 + h0 > orig.Height) h0 = orig.Height - y0;
-                    if (w0 <= 0 || h0 <= 0) continue;
+                // 1) union всех боксов контента (то, что ты видишь в debug)
+                int contentMinX = origRects.Min(r => r.X);
+                int contentMinY = origRects.Min(r => r.Y);
+                int contentMaxX = origRects.Max(r => r.X + r.Width);
+                int contentMaxY = origRects.Max(r => r.Y + r.Height);
 
-                    var rect = new OpenCvSharp.Rect(x0, y0, w0, h0);
-                    rectsS.Add(rect);
-                    totalHeight += h0;
-                }
+                var contentRect = new OpenCvSharp.Rect(
+                    contentMinX,
+                    contentMinY,
+                    contentMaxX - contentMinX,
+                    contentMaxY - contentMinY);
 
-                if (rectsS.Count == 0)
+                // 2) немного расширим contentRect наружу (margin)
+                int margin = Math.Max(5, settings.PaddingPx);
+
+                int roiMinX = Math.Max(0, contentMinX - margin);
+                int roiMinY = Math.Max(0, contentMinY - margin);
+                int roiMaxX = Math.Min(orig.Width, contentMaxX + margin);
+                int roiMaxY = Math.Min(orig.Height, contentMaxY + margin);
+
+                var finalRoi = new OpenCvSharp.Rect(
+                    roiMinX,
+                    roiMinY,
+                    roiMaxX - roiMinX,
+                    roiMaxY - roiMinY);
+
+                if (finalRoi.Width <= 0 || finalRoi.Height <= 0)
                     return orig.Clone();
 
-                // <<< ВАЖНО: ширина по макс. боксу, а не orig.Width
-                int outWidth = rectsS.Max(r => r.Width);
-                var cropped = new OCMat(new OCSize(outWidth, totalHeight), orig.Type());
-
-                // Можно ещё залить фон белым, чтобы не было "мусора"
-                cropped.SetTo(orig.Channels() == 1 ? new Scalar(255) : new Scalar(255, 255, 255));
-
-                int offsetY = 0;
-                foreach (var rect in rectsS)
+                // 3) доп. border-crop по рамке, как в CropKeepingText,
+                //    но НЕ заходим внутрь contentRect
+                using (var roiView = new Mat(orig, finalRoi))
                 {
-                    using var roiView = new Mat(orig, rect);
-                    var destRect = new OpenCvSharp.Rect(0, offsetY, rect.Width, rect.Height);
-                    using var destRoi = new Mat(cropped, destRect);
-                    roiView.CopyTo(destRoi);
-                    offsetY += rect.Height;
+                    // Максимально допустимые инсетты, чтобы не "съесть" contentRect
+                    int safeInside = 0; // если хочешь разрешить съесть 1–2 px текста, увеличь это значение
+
+                    int maxInsetL = Math.Max(0, contentRect.X - finalRoi.X + safeInside);
+                    int maxInsetT = Math.Max(0, contentRect.Y - finalRoi.Y + safeInside);
+                    int maxInsetR = Math.Max(0, (finalRoi.X + finalRoi.Width) - (contentRect.X + contentRect.Width) + safeInside);
+                    int maxInsetB = Math.Max(0, (finalRoi.Y + finalRoi.Height) - (contentRect.Y + contentRect.Height) + safeInside);
+
+                    var (insetLraw, insetTraw, insetRraw, insetBraw) = ComputeBorderInsets(roiView, useHoughRefine: true);
+
+                    // 3А. Зажимаем инсетты так, чтобы они НЕ заходили внутрь contentRect
+                    int insetL = Math.Min(insetLraw, maxInsetL);
+                    int insetT = Math.Min(insetTraw, maxInsetT);
+                    int insetR = Math.Min(insetRraw, maxInsetR);
+                    int insetB = Math.Min(insetBraw, maxInsetB);
+
+                    int nx = finalRoi.X + insetL;
+                    int ny = finalRoi.Y + insetT;
+                    int nw = finalRoi.Width - insetL - insetR;
+                    int nh = finalRoi.Height - insetT - insetB;
+
+                    // 3Б. Доп. защита от "слишком агрессивного" отрезания:
+                    // если после всех инсетов мы съели >30% по ширине/высоте — режем мягче
+                    if (nw < finalRoi.Width * 0.7 || nh < finalRoi.Height * 0.7)
+                    {
+                        insetL /= 2; insetR /= 2; insetT /= 2; insetB /= 2;
+
+                        // и снова зажимаем, чтобы не залезть глубже contentRect
+                        insetL = Math.Min(insetL, maxInsetL);
+                        insetT = Math.Min(insetT, maxInsetT);
+                        insetR = Math.Min(insetR, maxInsetR);
+                        insetB = Math.Min(insetB, maxInsetB);
+
+                        nx = finalRoi.X + insetL;
+                        ny = finalRoi.Y + insetT;
+                        nw = finalRoi.Width - insetL - insetR;
+                        nh = finalRoi.Height - insetT - insetB;
+                    }
+
+                    if (nw > 0 && nh > 0)
+                        finalRoi = new OpenCvSharp.Rect(nx, ny, nw, nh);
                 }
 
-                return cropped;
+                return new OCMat(orig, finalRoi).Clone();
 
             }
 
@@ -375,6 +604,20 @@ public class TextAwareCropper
             return orig.Clone();
         }
     }
+
+    private static double MapHandwrittenSensitivityToFraction(int sensitivityPercent)
+    {
+        sensitivityPercent = Math.Max(0, Math.Min(100, sensitivityPercent));
+
+        const double maxFrac = 0.0003;  // low sensitivity (ignore small stuff)
+        const double minFrac = 0.00001; // high sensitivity (detect small handwriting)
+
+        double t = sensitivityPercent / 100.0;
+
+        // Чем больше чувствительность, тем ближе к minFrac
+        return maxFrac - t * (maxFrac - minFrac);
+    }
+
 
 
 

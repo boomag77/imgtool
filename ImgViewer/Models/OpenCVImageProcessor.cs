@@ -906,11 +906,14 @@ namespace ImgViewer.Models
                                         switch (kv.Value.ToString())
                                         {
                                             case "Auto":
+                                                
                                                 if (autoThresh)
                                                 {
                                                     darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
                                                 }
-                                                return RemoveBorders_Auto(src,
+
+                                                Mat enhanced = Enhancer.ApplyClahe(src, clipLimit: 2.0, gridSize: 8);
+                                                return RemoveBorders_Auto(enhanced,
                                                     darkThresh,
                                                     bgColor,
                                                     minAreaPx,
@@ -1008,16 +1011,20 @@ namespace ImgViewer.Models
                             break;
                         case ProcessorCommand.SmartCrop:
 
-
+                            // U-net
                             int cropLevel = 62;
-                            int eastInputWidth = 1280;
-                            int eastInputHeight = 1280;
-                            float eastScoreThreshold = 0.45f;
-                            float eastNmsThreshold = 0.45f;
-                            int tesseractMinConfidence = 50;
-                            int paddingPx = 20;
-                            int downscaleMaxWidth = 1600;
+
+                            // EAST
+                            //int eastInputWidth = 1280;
+                            //int eastInputHeight = 1280;
+                            //float eastScoreThreshold = 0.45f;
+                            //float eastNmsThreshold = 0.45f;
+                            //int tesseractMinConfidence = 50;
+                            //int paddingPx = 20;
+                            //int downscaleMaxWidth = 1600;
                             bool eastDebug = true;
+
+                            var tds = TextDetectionSettings.CreateDefault();
 
                             foreach (var kv in parameters)
                             {
@@ -1028,25 +1035,34 @@ namespace ImgViewer.Models
                                         cropLevel = SafeInt(kv.Value, cropLevel);
                                         break;
                                     case "eastInputWidth":
-                                        eastInputWidth = SafeInt(kv.Value, eastInputWidth);
+                                        tds.EastInputWidth = SafeInt(kv.Value, tds.EastInputWidth);
                                         break;
                                     case "eastInputHeight":
-                                        eastInputHeight = SafeInt(kv.Value, eastInputHeight);
+                                        tds.EastInputHeight = SafeInt(kv.Value, tds.EastInputHeight);
                                         break;
                                     case "eastScoreThreshold":
-                                        eastScoreThreshold = SafeDoubleToFloat(kv.Value, eastScoreThreshold);
+                                        tds.EastScoreThreshold = SafeDoubleToFloat(kv.Value, tds.EastScoreThreshold);
                                         break;
                                     case "eastNmsThreshold":
-                                        eastNmsThreshold = SafeDoubleToFloat(kv.Value, eastNmsThreshold);
+                                        tds.EastNmsThreshold = SafeDoubleToFloat(kv.Value, tds.EastNmsThreshold);
                                         break;
                                     case "tesseractMinConfidence":
-                                        tesseractMinConfidence = SafeInt(kv.Value, tesseractMinConfidence);
+                                        tds.TesseractMinConfidence = SafeInt(kv.Value, tds.TesseractMinConfidence);
                                         break;
                                     case "paddingPx":
-                                        paddingPx = SafeInt(kv.Value, paddingPx);
+                                        tds.PaddingPx = SafeInt(kv.Value, tds.PaddingPx);
                                         break;
                                     case "downscaleMaxWidth":
-                                        downscaleMaxWidth = SafeInt(kv.Value, downscaleMaxWidth);
+                                        tds.DownscaleMaxWidth = SafeInt(kv.Value, tds.DownscaleMaxWidth);
+                                        break;
+                                    case "includeHandwritten":
+                                        tds.IncludeHandwritten = SafeBool(kv.Value, tds.IncludeHandwritten);
+                                        break;
+                                    case "handwrittenSensitivity":
+                                        tds.HandwrittenMinAreaFraction = SafeInt(kv.Value, tds.HandwrittenMinAreaFraction);
+                                        break;
+                                    case "includeStamps":
+                                        tds.IncludeStamps = SafeBool(kv.Value, tds.IncludeStamps);
                                         break;
                                     case "eastDebug":
                                         eastDebug = batchProcessing ? false : SafeBool(kv.Value, eastDebug);
@@ -1062,19 +1078,14 @@ namespace ImgViewer.Models
                                     switch (kv.Value.ToString())
                                     {
                                         case "U-net":
-                                            return DetectDocumentAndCrop(src, cropLevel, false, out Mat debugMask, out Mat debugOverlay); ;
+                                            return DetectDocumentAndCrop(src, cropLevel, false, out Mat debugMask, out Mat debugOverlay);
                                             break;
                                         case "EAST":
                                             //return SmartCrop(src);
                                             return SmartCrop(
                                                 src,
-                                                eastInputWidth,
-                                                eastInputHeight,
-                                                eastScoreThreshold,
-                                                eastNmsThreshold,
-                                                tesseractMinConfidence,
-                                                paddingPx,
-                                                downscaleMaxWidth, eastDebug
+                                                tds,
+                                                eastDebug
                                             );
                                             break;
                                     }
@@ -1357,7 +1368,7 @@ namespace ImgViewer.Models
             debugMask = mask.Clone();
 
             // 2) Обрезка
-            Mat cropped = DocumentCropper.CropByMask(src, mask, out debugOverlay);
+            Mat cropped = DocumentCropper.CropByMask(bigMat, mask, out debugOverlay);
 
             return cropped;
         }
@@ -1741,12 +1752,7 @@ namespace ImgViewer.Models
         //    return work;
         //}
 
-        private Mat? SmartCrop(Mat src, int eastInputWidth = 1280, int eastInputHeight = 1280,
-                                float eastScoreThreshold = 0.45f,
-                                float eastNmsThreshold = 0.45f,
-                                int tesseractMinConfidence = 50,
-                                int paddingPx = 20,
-                                int downscaleMaxWidth = 1600, bool debug = true)
+        private Mat? SmartCrop(Mat src, TextDetectionSettings tds, bool debug = true)
         {
 
             string eastPath = Path.Combine(AppContext.BaseDirectory, "Models", "frozen_east_text_detection.pb");
@@ -1759,19 +1765,15 @@ namespace ImgViewer.Models
             {
                 if (true)
                 {
-                    cropped = cropper.ShowDetectedAreas(src, eastInputWidth, eastInputHeight,
-                                                   eastScoreThreshold, eastNmsThreshold,
-                                                   tesseractMinConfidence,
-                                                   paddingPx,
-                                                   downscaleMaxWidth, debug);
+                    cropped = cropper.ShowDetectedAreas(src, tds, debug);
                 }
                 else
                 {
-                    cropped = cropper.CropKeepingText(src, eastInputWidth, eastInputHeight,
-                                                   eastScoreThreshold, eastNmsThreshold,
-                                                   tesseractMinConfidence,
-                                                   paddingPx,
-                                                   downscaleMaxWidth);
+                    //cropped = cropper.CropKeepingText(src, eastInputWidth, eastInputHeight,
+                    //                               eastScoreThreshold, eastNmsThreshold,
+                    //                               tesseractMinConfidence,
+                    //                               paddingPx,
+                    //                               downscaleMaxWidth);
                 }
                
             }
@@ -3171,6 +3173,8 @@ namespace ImgViewer.Models
 
         }
 
+        
+
 
 
         private Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
@@ -3210,6 +3214,111 @@ namespace ImgViewer.Models
             if (gray != src && gray != pre) gray.Dispose();
 
             return bin;
+        }
+
+        private sealed class Enhancer
+        {
+            public static Mat ApplyClahe(Mat src, double clipLimit = 4.0, int gridSize = 8)
+            {
+                if (src == null)
+                    throw new ArgumentNullException(nameof(src));
+
+                // --- 1) Одноканальное изображение (GRAY / бинарное) ---
+                if (src.Type() == MatType.CV_8UC1)
+                {
+                    // 1.1) Проверяем, бинарное ли оно (только 0 и 255)
+                    using (var midMask = new Mat())
+                    {
+                        // midMask = 255 там, где значение в диапазоне [1..254]
+                        Cv2.InRange(src, new Scalar(1), new Scalar(254), midMask);
+                        bool hasMidtones = Cv2.CountNonZero(midMask) > 0;
+
+                        if (!hasMidtones)
+                        {
+                            // Нет промежуточных значений → считаем изображение бинарным → CLAHE не нужен
+                            return src.Clone(); // безопаснее вернуть копию, чтобы не трогать src
+                        }
+                    }
+
+                    // 1.2) Нормальный GRAY (есть полутона) → применяем CLAHE и возвращаем gray
+                    using var clahe = Cv2.CreateCLAHE(clipLimit, new OpenCvSharp.Size(gridSize, gridSize));
+                    var enhancedGray = new Mat();
+                    clahe.Apply(src, enhancedGray);
+                    return enhancedGray;
+                }
+
+                // --- 2) Цветное изображение → работаем через Lab и L-канал ---
+                // Приводим к BGR 8UC3, если вдруг тип другой
+                Mat bgr = null;
+                bool needDisposeBgr = false;
+
+                try
+                {
+                    if (src.Type() == MatType.CV_8UC3)
+                    {
+                        // можем работать прямо с ним, не выделяя новый Mat
+                        bgr = src;
+                        needDisposeBgr = false;
+                    }
+                    else if (src.Type() == MatType.CV_8UC4)
+                    {
+                        // есть альфа → выкинем её, работаем в BGR
+                        bgr = new Mat();
+                        Cv2.CvtColor(src, bgr, ColorConversionCodes.BGRA2BGR);
+                        needDisposeBgr = true;
+                    }
+                    else
+                    {
+                        // fallback: просто приводим к 8UC3 (если ты знаешь, что к тебе приходят только нормальные BGR/BGRA,
+                        // этот кусок можно упростить / убрать)
+                        bgr = new Mat();
+                        src.ConvertTo(bgr, MatType.CV_8UC3);
+                        needDisposeBgr = true;
+                    }
+
+                    // BGR → Lab
+                    using var lab = new Mat();
+                    Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
+
+                    // Разбиваем на каналы: L, a, b
+                    var labChannels = lab.Split();
+                    var l = labChannels[0]; // яркость
+
+                    // CLAHE только по L-каналу
+                    using (var clahe = Cv2.CreateCLAHE(clipLimit, new OpenCvSharp.Size(gridSize, gridSize)))
+                    {
+                        var lEnhanced = new Mat();
+                        clahe.Apply(l, lEnhanced);
+
+                        // старый L можно освободить
+                        l.Dispose();
+                        labChannels[0] = lEnhanced;
+                    }
+
+                    // Склеиваем L', a, b обратно
+                    using var labMerged = new Mat();
+                    Cv2.Merge(labChannels, labMerged);
+
+                    // каналы больше не нужны
+                    foreach (var ch in labChannels)
+                    {
+                        if (!ch.IsDisposed)
+                            ch.Dispose();
+                    }
+
+                    // Lab → BGR
+                    var dst = new Mat();
+                    Cv2.CvtColor(labMerged, dst, ColorConversionCodes.Lab2BGR);
+
+                    return dst;
+                }
+                finally
+                {
+                    if (needDisposeBgr && bgr != null && !bgr.IsDisposed)
+                        bgr.Dispose();
+                }
+            }
+
         }
     }
 }

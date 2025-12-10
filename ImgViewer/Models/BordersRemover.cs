@@ -56,6 +56,7 @@ namespace ImgViewer.Models
                 disposeWorking = true;
             }
 
+
             try
             {
                 int rows = working.Rows;
@@ -68,7 +69,7 @@ namespace ImgViewer.Models
                 {
 
 
-                    int cornerSize = Math.Max(2, Math.Min(32, Math.Min(rows, cols) / 30));
+                    int cornerSize = Math.Max(5, Math.Min(2, Math.Min(rows, cols) / 30));
                     double sb = 0, sg = 0, sr = 0; int cnt = 0;
                     var rects = new[]
                     {
@@ -89,22 +90,25 @@ namespace ImgViewer.Models
                     if (cnt > 0) chosenBg = new Scalar(sb / cnt, sg / cnt, sr / cnt);
                 }
 
+                
+
                 // 1) binary dark mask
                 using var gray = new Mat();
                 Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
+
                 using var darkMask = new Mat();
                 Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
 
 
-
+                
 
                 // small open to reduce noise
-                token.ThrowIfCancellationRequested();
-                using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3)))
-                {
-                    token.ThrowIfCancellationRequested();
-                    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kOpen);
-                }
+                //token.ThrowIfCancellationRequested();
+                //using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3)))
+                //{
+                //    token.ThrowIfCancellationRequested();
+                //    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kOpen);
+                //}
 
                 // 2) connected components
                 using var labels = new Mat();
@@ -120,6 +124,7 @@ namespace ImgViewer.Models
                 // selected mask init
                 //  var selectedMask = Mat.Zeros(darkMask.Size(), MatType.CV_8U);
                 var selectedMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
+
 
                 // будем накапливать максимальную "глубину" бордюра для каждой стороны
                 //int maxTopDepth = 0, maxBottomDepth = 0, maxLeftDepth = 0, maxRightDepth = 0;

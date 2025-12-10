@@ -393,6 +393,9 @@ namespace ImgViewer.Models
                     case "tesseractMinConfidence":
                     case "paddingPx":
                     case "downscaleMaxWidth":
+                    case "includeHandwritten":
+                    case "handwrittenSensitivity":
+                    case "includeStamps":
                     case "eastDebug":
                         p.IsVisible = selected.Equals("EAST", StringComparison.OrdinalIgnoreCase);
                         break;
