@@ -12,6 +12,13 @@ namespace ImgViewer.Models
             Fill
         }
 
+        public enum BrickInpaintMode
+        {
+            Fill,           // старое поведение: просто залить цветом страницы
+            Telea,          // Cv2.Inpaint(..., InpaintMethod.Telea)
+            NavierStokes    // Cv2.Inpaint(..., InpaintMethod.NavierStokes)
+        }
+
 
         public static Mat RemoveBorderArtifactsGeneric_Safe(
             CancellationToken token,
@@ -1266,9 +1273,11 @@ namespace ImgViewer.Models
 
         public static Mat RemoveBorders_LabBricks(
     Mat src,
-    int brickThickness = 8,
-    double bordersColorTolerance = 0.2,
-    Scalar? fillColor = null)
+    int brickThickness = 32,
+    double bordersColorTolerance = 0.8,
+    Scalar? fillColor = null,
+    BrickInpaintMode inpaintMode = BrickInpaintMode.Fill,
+    double inpaintRadius = 5.0)
         {
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
@@ -1661,6 +1670,25 @@ namespace ImgViewer.Models
             }
 
             // 6) Заливка
+            //Scalar fill;
+            //if (fillColor.HasValue)
+            //{
+            //    fill = fillColor.Value;
+            //}
+            //else
+            //{
+            //    using var innerBgr = new Mat(bgr, innerRect);
+            //    fill = Cv2.Mean(innerBgr);
+            //}
+
+            //var dst = bgr.Clone();
+            //dst.SetTo(fill, borderMask);
+
+            //if (disposeBgr) bgr.Dispose();
+            //return dst;
+            // 6) Заливка / инпейнт
+
+            // Цвет страницы (нам нужен и для Fill, и для “гибридного” inpaint)
             Scalar fill;
             if (fillColor.HasValue)
             {
@@ -1672,11 +1700,59 @@ namespace ImgViewer.Models
                 fill = Cv2.Mean(innerBgr);
             }
 
-            var dst = bgr.Clone();
-            dst.SetTo(fill, borderMask);
+            Mat dst;
+
+            // --- режим 1: старый Fill (просто залить бордюр цветом страницы) ---
+            if (inpaintMode == BrickInpaintMode.Fill)
+            {
+                dst = bgr.Clone();
+                dst.SetTo(fill, borderMask);
+            }
+            else
+            {
+                // --- режим 2: Inpaint (Telea / Navier-Stokes) по кирпичной маске ---
+
+                // 1) Маска бордюра (outer) – всё, что мы считаем рамкой
+                using var outerMask = borderMask.Clone();
+
+                // 2) Внутренний пояс (innerMask) – слегка эрозим,
+                // чтобы inpaint затронул только “переходную” зону у края страницы
+                using var innerMask = borderMask.Clone();
+                int innerRadius = Math.Max(1, (int)Math.Round(inpaintRadius / 2.0));
+                if (innerRadius > 0)
+                {
+                    using var kInner = Cv2.GetStructuringElement(
+                        MorphShapes.Rect,
+                        new OpenCvSharp.Size(2 * innerRadius + 1, 2 * innerRadius + 1));
+                    Cv2.Erode(innerMask, innerMask, kInner, iterations: 1);
+                }
+
+                // 3) Inpaint по всей зоне outerMask
+                using var inpainted = new Mat();
+                double radius = Math.Max(2.0, inpaintRadius);
+
+                var method = (inpaintMode == BrickInpaintMode.Telea)
+                    ? InpaintMethod.Telea
+                    : InpaintMethod.NS;
+
+                Cv2.Inpaint(bgr, outerMask, inpainted, radius, method);
+
+                // 4) Собираем результат:
+                //    - снаружи рамки → просто цвет страницы (fill),
+                //    - по innerMask → втыкаем результат Telea/NS
+                dst = bgr.Clone();
+
+                // 4.1. Удаляем бордюр: заливаем его цветом страницы
+                dst.SetTo(fill, outerMask);
+
+                // 4.2. Мягко восстанавливаем/сглаживаем переход: вставляем inpaint
+                inpainted.CopyTo(dst, innerMask);
+            }
 
             if (disposeBgr) bgr.Dispose();
             return dst;
+
+
         }
 
 
