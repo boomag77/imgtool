@@ -953,12 +953,13 @@ namespace ImgViewer.Models
                                                 );
                                                 break;
                                             case "By Contrast":
-                                                return RemoveBordersByRowColWhite(src,
-                                                        threshFrac: treshFrac,
-                                                        contrastThr: contrastThr,
-                                                        centralSample: centralSample,
-                                                        maxRemoveFrac: maxRemoveFrac
-                                                    );
+                                                //return RemoveBordersByRowColWhite(src,
+                                                //        threshFrac: treshFrac,
+                                                //        contrastThr: contrastThr,
+                                                //        centralSample: centralSample,
+                                                //        maxRemoveFrac: maxRemoveFrac
+                                                //    );
+                                                return BordersRemover.RemoveBorders_LabBricks(src);
                                                 break;
                                             case "Manual":
 

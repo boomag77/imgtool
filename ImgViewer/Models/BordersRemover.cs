@@ -1168,5 +1168,245 @@ namespace ImgViewer.Models
 
             }
         }
+
+
+
+
+        public static Mat RemoveBorders_LabBricks(
+                                                Mat src,
+                                                int brickThickness = 32,
+                                                double bordersColorTolerance = 0.6,
+                                                Scalar? fillColor = null)
+        {
+
+
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return src.Clone();
+
+            bordersColorTolerance = Math.Max(0, Math.Min(1.0, bordersColorTolerance));
+
+            // 0) Нормализуем к BGR
+            Mat bgr = src;
+            bool disposeBgr = false;
+            if (src.Type() != MatType.CV_8UC3)
+            {
+                bgr = new Mat();
+                if (src.Channels() == 1)
+                    Cv2.CvtColor(src, bgr, ColorConversionCodes.GRAY2BGR);
+                else if (src.Channels() == 4)
+                    Cv2.CvtColor(src, bgr, ColorConversionCodes.BGRA2BGR);
+                else
+                    src.ConvertTo(bgr, MatType.CV_8UC3);
+                disposeBgr = true;
+            }
+
+            int rows = bgr.Rows;
+            int cols = bgr.Cols;
+            if (rows < 40 || cols < 40)
+                return bgr.Clone();
+
+            brickThickness = Math.Max(4, brickThickness);
+
+            // 1) BGR -> Lab
+            using var lab = new Mat();
+            Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
+            var ch = lab.Split();
+            using var L = ch[0];
+            using var A = ch[1];
+            using var B = ch[2];
+
+            // 2) Цвет страницы по центру
+            int margin = Math.Max(brickThickness * 2, Math.Min(rows, cols) / 10);
+            margin = Math.Min(margin, Math.Min(rows, cols) / 4);
+
+            var innerRect = new Rect(
+                margin,
+                margin,
+                cols - 2 * margin,
+                rows - 2 * margin);
+            if (innerRect.Width <= 0 || innerRect.Height <= 0)
+                innerRect = new Rect(0, 0, cols, rows);
+
+            using var innerL = new Mat(L, innerRect);
+            using var innerA = new Mat(A, innerRect);
+            using var innerB = new Mat(B, innerRect);
+
+            Cv2.MeanStdDev(innerL, out var meanL, out var stdL);
+            Scalar meanA = Cv2.Mean(innerA);
+            Scalar meanB = Cv2.Mean(innerB);
+
+            double pageL = meanL.Val0;
+            double pageA = meanA.Val0;
+            double pageB = meanB.Val0;
+            double pageLStd = Math.Max(4.0, stdL.Val0);
+
+            double colorDistThr = 8.0 + 0.3 * pageLStd;
+            double LDiffThr = Math.Max(4.0, 0.8 * pageLStd);
+            double textureThr = pageLStd * 0.7;
+
+            
+
+
+
+            int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
+            maxDepth = Math.Max(brickThickness, maxDepth);
+
+            // 3) Маска бордюра
+            using var borderMask = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(0));
+
+            // --- Helper для оценки одного вертикального кирпича (left/right) ---
+            bool IsBorderColumnSegment(int x0, int x1, int y0, int y1)
+            {
+                var rect = new Rect(x0, y0, x1 - x0, y1 - y0);
+                using var roiL = new Mat(L, rect);
+                using var roiA = new Mat(A, rect);
+                using var roiB = new Mat(B, rect);
+
+                Cv2.MeanStdDev(roiL, out var mL, out var sL);
+                var mA = Cv2.Mean(roiA);
+                var mB = Cv2.Mean(roiB);
+
+                double Lm = mL.Val0;
+                double Lsigma = sL.Val0;
+                double dL = Lm - pageL;
+                double da = mA.Val0 - pageA;
+                double db = mB.Val0 - pageB;
+                double colorDist = Math.Sqrt(dL * dL + da * da + db * db);
+
+                bool isBorder =
+                    (colorDist >= colorDistThr || Math.Abs(dL) >= LDiffThr) &&
+                    Lsigma <= textureThr;
+
+                return isBorder;
+            }
+
+            // --- Helper для горизонтального кирпича (top/bottom) ---
+            bool IsBorderRowSegment(int x0, int x1, int y0, int y1)
+            {
+                // геометрия та же, меняются только диапазоны
+                return IsBorderColumnSegment(x0, x1, y0, y1);
+            }
+
+            int shrink = Math.Max(2, brickThickness / 3);
+
+            // 4) LEFT / RIGHT – кирпичи высотой brickThickness, ширина вычисляется
+            for (int y0 = 0; y0 < rows; y0 += brickThickness)
+            {
+                int y1 = Math.Min(rows, y0 + brickThickness);
+
+                // LEFT
+                int maxSearchX = Math.Min(cols / 3, maxDepth);
+                int lastBorderX = -1;
+                for (int x = 0; x < maxSearchX; x++)
+                {
+                    int x1 = x + 1;
+                    if (IsBorderColumnSegment(x, x1, y0, y1))
+                        lastBorderX = x;
+                    else if (lastBorderX >= 0)
+                        break;
+                }
+                int wLeft = Math.Max(0, lastBorderX + 1 - shrink);
+                if (wLeft > 0)
+                {
+                    var rect = new Rect(0, y0, wLeft, y1 - y0);
+                    using var roi = new Mat(borderMask, rect);
+                    roi.SetTo(255);
+                }
+
+                // RIGHT
+                lastBorderX = -1;
+                int startX = cols - 1;
+                int minX = Math.Max(0, cols - maxSearchX);
+                for (int x = startX; x >= minX; x--)
+                {
+                    int x1 = x + 1;
+                    if (IsBorderColumnSegment(x, x1, y0, y1))
+                        lastBorderX = x;
+                    else if (lastBorderX >= 0)
+                        break;
+                }
+                int wRight = 0;
+                if (lastBorderX >= 0)
+                {
+                    wRight = Math.Max(0, cols - lastBorderX - shrink);
+                }
+                if (wRight > 0)
+                {
+                    var rect = new Rect(cols - wRight, y0, wRight, y1 - y0);
+                    using var roi = new Mat(borderMask, rect);
+                    roi.SetTo(255);
+                }
+            }
+
+            // 5) TOP / BOTTOM – кирпичи шириной brickThickness, высота вычисляется
+            for (int x0 = 0; x0 < cols; x0 += brickThickness)
+            {
+                int x1 = Math.Min(cols, x0 + brickThickness);
+
+                // TOP
+                int maxSearchY = Math.Min(rows / 3, maxDepth);
+                int lastBorderY = -1;
+                for (int y = 0; y < maxSearchY; y++)
+                {
+                    int y1 = y + 1;
+                    if (IsBorderRowSegment(x0, x1, y, y1))
+                        lastBorderY = y;
+                    else if (lastBorderY >= 0)
+                        break;
+                }
+                int hTop = Math.Max(0, lastBorderY + 1 - shrink);
+                if (hTop > 0)
+                {
+                    var rect = new Rect(x0, 0, x1 - x0, hTop);
+                    using var roi = new Mat(borderMask, rect);
+                    roi.SetTo(255);
+                }
+
+                // BOTTOM
+                lastBorderY = -1;
+                int startY = rows - 1;
+                int minY = Math.Max(0, rows - maxSearchY);
+                for (int y = startY; y >= minY; y--)
+                {
+                    int y1 = y + 1;
+                    if (IsBorderRowSegment(x0, x1, y, y1))
+                        lastBorderY = y;
+                    else if (lastBorderY >= 0)
+                        break;
+                }
+                int hBottom = 0;
+                if (lastBorderY >= 0)
+                {
+                    hBottom = Math.Max(0, rows - lastBorderY - shrink);
+                }
+                if (hBottom > 0)
+                {
+                    var rect = new Rect(x0, rows - hBottom, x1 - x0, hBottom);
+                    using var roi = new Mat(borderMask, rect);
+                    roi.SetTo(255);
+                }
+            }
+
+
+
+            // 6) Заливка
+            Scalar fill;
+            if (fillColor.HasValue)
+            {
+                fill = fillColor.Value;
+            }
+            else
+            {
+                using var innerBgr = new Mat(bgr, innerRect);
+                fill = Cv2.Mean(innerBgr);
+            }
+
+            var dst = bgr.Clone();
+            dst.SetTo(fill, borderMask);
+
+            if (disposeBgr) bgr.Dispose();
+            return dst;
+        }
+
     }
 }
