@@ -450,10 +450,13 @@ namespace ImgViewer.Models
                     }
                     catch (OperationCanceledException)
                     {
+#if DEBUG
+                        Debug.WriteLine("Processing Folder was canceled.");
+#endif
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // TODO Error handling
+                        ReportError("Error during processing folder.", ex, "Processing error");
                     }
 
                 }

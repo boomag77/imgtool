@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using System.Windows.Media;
 
 namespace ImgViewer.Models
@@ -33,6 +34,9 @@ namespace ImgViewer.Models
 
         private readonly object _savingLock = new();
         private readonly List<Task> _savingTasks = new();
+        private readonly HashSet<string> _existingOutputNames;
+
+        private bool overWriteExistingOutputs = true;
 
 
         private int _processedCount;
@@ -58,6 +62,43 @@ namespace ImgViewer.Models
             string sourceFolderName = Path.GetFileName(_sourceFolder.Path);
             _outputFolder = Path.Combine(_sourceFolder.ParentPath, sourceFolderName + "_processed");
             Directory.CreateDirectory(_outputFolder);
+
+            _existingOutputNames = LoadExistingOutputNamesAndCleanupTmp(_outputFolder);
+
+            if (_existingOutputNames.Count > 0)
+            {
+                // inform user that there is existing files and ask for overwrite or skip existing files
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                string title = "Existing Processed Files Detected";
+                string message =
+                    $"The output folder '{_outputFolder}' already contains {_existingOutputNames.Count} processed TIFF files. Do you want to overwrite them (Yes) or Proceed (No). Press Cancel to cancel processing?";
+                MessageBoxResult result = MessageBoxResult.Cancel;
+                if (dispatcher == null || dispatcher.CheckAccess())
+                {
+                    
+                    result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                }
+                else
+                {
+                    dispatcher.InvokeAsync(
+                        () => result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question),
+                        System.Windows.Threading.DispatcherPriority.Background);
+                }
+                if (result == MessageBoxResult.Yes)
+                {
+                    overWriteExistingOutputs = true;
+                }
+                else if (result == MessageBoxResult.No)
+                {
+                    overWriteExistingOutputs = false;
+                }
+                else
+                {
+                    throw new OperationCanceledException("User cancelled processing due to existing files.");
+                }
+            }
+
+
             //_pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
             var opsSnapshot = pipeline.Operations
                 .Where(op => op.InPipeline)
@@ -94,6 +135,39 @@ namespace ImgViewer.Models
             _fileErrors.Add(msg);
         }
 
+        private static HashSet<string> LoadExistingOutputNamesAndCleanupTmp(string outputFolder)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!Directory.Exists(outputFolder))
+                return set;
+
+            foreach (var file in Directory.EnumerateFiles(outputFolder, "*.*", SearchOption.TopDirectoryOnly))
+            {
+                var fileName = Path.GetFileName(file);
+
+                // 1) Чистим незавершённые временные файлы
+                if (fileName.EndsWith(".tif.tmp", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.EndsWith(".tiff.tmp", StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(file); } catch { /* можно залогировать, если нужно */ }
+                    continue;
+                }
+
+                // 2) Запоминаем уже готовые TIFF'ы
+                var ext = Path.GetExtension(file);
+                if (ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
+                    ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
+                {
+                    var baseName = Path.GetFileNameWithoutExtension(file);
+                    set.Add(baseName);
+                }
+            }
+
+            return set;
+        }
+
+
 
         public void Dispose()
         {
@@ -110,10 +184,27 @@ namespace ImgViewer.Models
         {
             try
             {
+                if (overWriteExistingOutputs)
+                {
+                    // clear output folder from all files
+                    foreach (var file in Directory.EnumerateFiles(_outputFolder, "*.*", SearchOption.TopDirectoryOnly))
+                    {
+                        _token.ThrowIfCancellationRequested();
+                        try { File.Delete(file); } catch { /* log if needed */ }
+                    }
+
+
+                }
                 foreach (var file in _sourceFolder.Files)
                 {
                     _token.ThrowIfCancellationRequested();
-
+                    var baseName = Path.GetFileNameWithoutExtension(file.Path);
+                    if (!overWriteExistingOutputs && _existingOutputNames.Contains(baseName))
+                    {
+                        // skip existing output
+                        _processedCount++;
+                        continue;
+                    }
                     _filesQueue.Add(file, _token);
                     await Task.Yield();
                 }
@@ -391,7 +482,7 @@ namespace ImgViewer.Models
             catch (OperationCanceledException)
             {
 #if DEBUG
-                Debug.WriteLine("Enqueing cancelled!");
+                Debug.WriteLine("Batch processing cancelled!");
 #endif
             }
             catch (Exception ex)
