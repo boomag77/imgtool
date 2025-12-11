@@ -1212,7 +1212,26 @@ namespace ImgViewer.Models
             return (strongBorder, Lmean, Amean, Bmean, LstdLocal, distToPage);
         }
 
+        private static int ComputeMaxBorderDepth(int rows, int cols, int brickThickness)
+        {
+            if (brickThickness <= 0)
+                brickThickness = 8;
 
+            int minSide = Math.Min(rows, cols);
+
+            // Не лезем глубже, чем 18% от меньшей стороны
+            int maxDepthBySize = (int)Math.Round(minSide * 0.40); // 0.15–0.25 можно подкрутить
+
+            // И не лезем глубже, чем 10 кирпичей
+            int maxDepthByBricks = brickThickness * 30;
+
+            int maxDepth = Math.Max(
+                brickThickness,                     // минимум: один кирпич по глубине
+                Math.Min(maxDepthBySize, maxDepthByBricks)
+            );
+
+            return maxDepth;
+        }
 
 
         public static Mat RemoveBorders_LabBricks(
@@ -1286,8 +1305,9 @@ namespace ImgViewer.Models
             double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd);
             double textureThr = pageLStd * 0.7;
 
-            int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
-            maxDepth = Math.Max(brickThickness, maxDepth);
+            //int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
+            //maxDepth = Math.Max(brickThickness, maxDepth);
+            int maxDepth = ComputeMaxBorderDepth(rows, cols, brickThickness);
 
             // Максимальное количество подряд "сомнительных" полос внутри бордюра (для градиента)
             int maxNonBorderRun = (bordersColorTolerance < 0.3)
