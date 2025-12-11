@@ -32,7 +32,7 @@ namespace ImgViewer.Views
     public partial class MainWindow : Window, IMainView
     {
         //private readonly IImageProcessor _processor;
-        private readonly IFileProcessor _explorer;
+        //private readonly IFileProcessor _explorer;
 
         //private readonly HashSet<PipelineOperation> _handlingOps = new();
 
@@ -135,7 +135,7 @@ namespace ImgViewer.Views
         private IViewModel _viewModel;
 
 
-        private CancellationTokenSource _cts;
+        //private CancellationTokenSource _cts;
 
         public bool SavePipelineToMd
         {
@@ -149,14 +149,27 @@ namespace ImgViewer.Views
         {
             InitializeComponent();
 
-            OnnxModelInspector.PrintModelInfo("Models/ML/model.onnx");
+        #if DEBUG
+            try
+            {
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var modelPath = System.IO.Path.Combine(baseDir, "Models", "ML", "model.onnx");
+                OnnxModelInspector.PrintModelInfo(modelPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ONNX inspector failed: {ex}");
+            }
+        #endif
+
+            //OnnxModelInspector.PrintModelInfo("Models/ML/model.onnx");
 
 
             _originalImageColumnWidth = RootGrid.ColumnDefinitions[0].Width;
 
-            _cts = new CancellationTokenSource();
-
-            _manager = new AppManager(this, _cts);
+            //_cts = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
+            _manager = new AppManager(this, cts);
             //_pipeline = new Pipeline(_manager);
 
             _eraseOffset = _manager.EraseOperationOffset;
@@ -165,14 +178,14 @@ namespace ImgViewer.Views
             DataContext = _viewModel;
 
 
-            _explorer = new FileProcessor(_cts.Token);
-            _explorer.ErrorOccured += (msg) =>
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    System.Windows.MessageBox.Show(this, msg, "Explorer Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                });
-            };
+            //_explorer = new FileProcessor(_cts.Token);
+            //_explorer.ErrorOccured += (msg) =>
+            //{
+            //    Dispatcher.InvokeAsync(() =>
+            //    {
+            //        System.Windows.MessageBox.Show(this, msg, "Explorer Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            //    });
+            //};
 
 
 
@@ -939,7 +952,7 @@ namespace ImgViewer.Views
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            _cts?.Cancel();
+            _manager.Shutdown();
             base.OnClosing(e);
         }
 

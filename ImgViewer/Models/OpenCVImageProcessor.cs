@@ -17,18 +17,18 @@ namespace ImgViewer.Models
     public class OpenCVImageProcessor : IImageProcessor, IDisposable
     {
         private Mat _currentImage;
-        private Scalar _pageColor;
-        private Scalar _borderColor;
-        private Mat _blurred;
+        //private Scalar _pageColor;
+        //private Scalar _borderColor;
+        //private Mat _blurred;
         private readonly IAppManager _appManager;
 
         private CancellationToken _token;
-        private readonly CancellationTokenSource _onnxCts;
+        //private readonly CancellationTokenSource _onnxCts;
 
         private readonly object _imageLock = new();
         private readonly object _commandLock = new();
 
-        private readonly DocBoundaryModel _docBoundaryModel;
+        private readonly DocBoundaryModel? _docBoundaryModel;
 
         private Mat WorkingImage
         {
@@ -78,8 +78,31 @@ namespace ImgViewer.Models
         {
             _appManager = appManager;
             _token = token;
-            _onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            _docBoundaryModel = new DocBoundaryModel(_onnxCts.Token, "Models/ML/model.onnx");
+            //_onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+
+            try
+            {
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var modelPath = Path.Combine(baseDir, "Models", "ML", "model.onnx");
+
+                if (!File.Exists(modelPath))
+                {
+                    Debug.WriteLine($"[DocBoundaryModel] Model file not found: {modelPath}");
+                    _docBoundaryModel = null;
+                    return;
+                }
+
+                var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var onnxToken = linkedCts.Token;
+                _docBoundaryModel = new DocBoundaryModel(onnxToken, modelPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DocBoundaryModel] Failed to initialize: {ex}");
+                _docBoundaryModel = null;
+            }
+
+            //_docBoundaryModel = new DocBoundaryModel(_onnxCts.Token, "Models/ML/model.onnx");
         }
 
         private Mat BitmapSourceToMat(BitmapSource src)
@@ -189,16 +212,16 @@ namespace ImgViewer.Models
 
         public void Dispose()
         {
-            _docBoundaryModel.Dispose();
-            _onnxCts.Dispose();
+            _docBoundaryModel?.Dispose();
+            //_onnxCts.Dispose();
             lock (_imageLock)
             {
                 _currentImage?.Dispose();
                 _currentImage = null;
             }
 
-            _blurred?.Dispose();
-            _blurred = null;
+            //_blurred?.Dispose();
+            //_blurred = null;
             //throw new NotImplementedException();
 
         }
@@ -228,7 +251,7 @@ namespace ImgViewer.Models
 
         public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
-            var img = WorkingImage; // clone for thread safety
+            using var img = WorkingImage; // clone for thread safety
             if (img == null || img.Empty())
                 throw new InvalidOperationException("WorkingImage is null or empty");
             if (format == ImageFormat.Tiff)
@@ -1365,6 +1388,14 @@ namespace ImgViewer.Models
 
         private Mat DetectDocumentAndCrop(Mat src, int cropLevel, bool debug, bool batchProcessing, out Mat debugMask, out Mat debugOverlay)
         {
+            debugMask = new Mat();
+            debugOverlay = new Mat();
+            if (_docBoundaryModel == null)
+            {
+                Debug.WriteLine("DocBoundaryModel is not initialized. Smart crop disabled.");
+                return src.Clone();
+            }
+
             // 1) Предикт маски
             Scalar bgColor = GetBgColor(src);
             // create new Mat with bgColor and add 20px on each side
@@ -1383,19 +1414,15 @@ namespace ImgViewer.Models
             catch (OperationCanceledException) when (!batchProcessing)
             {
                 Debug.WriteLine("Document Detection cancelled (UI)!");
-                debugMask = new Mat();
-                debugOverlay = new Mat();
                 return src.Clone();
             }
             catch (OperationCanceledException)
             {
-                debugMask = new Mat();
-                debugOverlay = new Mat();
                 throw;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(ex);
+                Debug.WriteLine($"DetectDocumentAndCrop failed: {ex}");
                 debugMask = new Mat();
                 debugOverlay = new Mat();
                 return src.Clone();
@@ -1411,7 +1438,7 @@ namespace ImgViewer.Models
                                 string currentFilePath = null,
                                 Action<string> log = null)
         {
-            var src = WorkingImage; // cloned inside WorkingImage getter
+            using var src = WorkingImage; // cloned inside WorkingImage getter
             var result = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token, batchProcessing);
             if (result == null)
             {
@@ -1428,6 +1455,7 @@ namespace ImgViewer.Models
                 return false;
             }
             WorkingImage = result;
+
             return true;
         }
 
