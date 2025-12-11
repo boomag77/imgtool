@@ -1169,17 +1169,58 @@ namespace ImgViewer.Models
             }
         }
 
+        /// <summary>
+        /// Оценивает один кирпич в Lab: средний цвет, текстуру и то,
+        /// является ли он "сильным" бордюром (явно отличается от страницы).
+        /// </summary>
+        private static (bool strongBorder,
+                        double meanL,
+                        double meanA,
+                        double meanB,
+                        double stdL,
+                        double distToPage)
+            EvaluateBrickLab(
+                Mat L, Mat A, Mat B,
+                Rect rect,
+                double pageL, double pageA, double pageB,
+                double colorDistStrongThr,
+                double LDiffStrongThr,
+                double textureThr)
+        {
+            using var roiL = new Mat(L, rect);
+            using var roiA = new Mat(A, rect);
+            using var roiB = new Mat(B, rect);
+
+            Cv2.MeanStdDev(roiL, out var mL, out var sL);
+            var mA = Cv2.Mean(roiA);
+            var mB = Cv2.Mean(roiB);
+
+            double Lmean = mL.Val0;
+            double LstdLocal = sL.Val0;
+            double Amean = mA.Val0;
+            double Bmean = mB.Val0;
+
+            double dL = Lmean - pageL;
+            double da = Amean - pageA;
+            double db = Bmean - pageB;
+            double distToPage = Math.Sqrt(dL * dL + da * da + db * db);
+
+            bool strongBorder =
+                (distToPage >= colorDistStrongThr || Math.Abs(dL) >= LDiffStrongThr) &&
+                LstdLocal <= textureThr;
+
+            return (strongBorder, Lmean, Amean, Bmean, LstdLocal, distToPage);
+        }
+
 
 
 
         public static Mat RemoveBorders_LabBricks(
-                                                Mat src,
-                                                int brickThickness = 32,
-                                                double bordersColorTolerance = 0.6,
-                                                Scalar? fillColor = null)
+    Mat src,
+    int brickThickness = 16,
+    double bordersColorTolerance = 0.7,
+    Scalar? fillColor = null)
         {
-
-
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
 
@@ -1240,91 +1281,167 @@ namespace ImgViewer.Models
             double pageB = meanB.Val0;
             double pageLStd = Math.Max(4.0, stdL.Val0);
 
-            double colorDistThr = 8.0 + 0.3 * pageLStd;
-            double LDiffThr = Math.Max(4.0, 0.8 * pageLStd);
+            // "сильный" бордюр (seed)
+            double colorDistStrongThr = 8.0 + 0.3 * pageLStd;
+            double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd);
             double textureThr = pageLStd * 0.7;
-
-            
-
-
 
             int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
             maxDepth = Math.Max(brickThickness, maxDepth);
 
+            // Максимальное количество подряд "сомнительных" полос внутри бордюра (для градиента)
+            int maxNonBorderRun = (bordersColorTolerance < 0.3)
+                ? 0
+                : (bordersColorTolerance < 0.7 ? 1 : 2);
+
             // 3) Маска бордюра
             using var borderMask = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(0));
 
-            // --- Helper для оценки одного вертикального кирпича (left/right) ---
-            bool IsBorderColumnSegment(int x0, int x1, int y0, int y1)
-            {
-                var rect = new Rect(x0, y0, x1 - x0, y1 - y0);
-                using var roiL = new Mat(L, rect);
-                using var roiA = new Mat(A, rect);
-                using var roiB = new Mat(B, rect);
-
-                Cv2.MeanStdDev(roiL, out var mL, out var sL);
-                var mA = Cv2.Mean(roiA);
-                var mB = Cv2.Mean(roiB);
-
-                double Lm = mL.Val0;
-                double Lsigma = sL.Val0;
-                double dL = Lm - pageL;
-                double da = mA.Val0 - pageA;
-                double db = mB.Val0 - pageB;
-                double colorDist = Math.Sqrt(dL * dL + da * da + db * db);
-
-                bool isBorder =
-                    (colorDist >= colorDistThr || Math.Abs(dL) >= LDiffThr) &&
-                    Lsigma <= textureThr;
-
-                return isBorder;
-            }
-
-            // --- Helper для горизонтального кирпича (top/bottom) ---
-            bool IsBorderRowSegment(int x0, int x1, int y0, int y1)
-            {
-                // геометрия та же, меняются только диапазоны
-                return IsBorderColumnSegment(x0, x1, y0, y1);
-            }
-
             int shrink = Math.Max(2, brickThickness / 3);
 
-            // 4) LEFT / RIGHT – кирпичи высотой brickThickness, ширина вычисляется
+            // =============== 4) LEFT / RIGHT – кирпичи высотой brickThickness ===============
+
             for (int y0 = 0; y0 < rows; y0 += brickThickness)
             {
                 int y1 = Math.Min(rows, y0 + brickThickness);
+                int bandH = y1 - y0;
 
-                // LEFT
                 int maxSearchX = Math.Min(cols / 3, maxDepth);
+
+                // ----- LEFT -----
                 int lastBorderX = -1;
+                int nonBorderRun = 0;
+
+                // опорный цвет бордюра для ЭТОГО вертикального сегмента
+                bool hasLeftRef = false;
+                double leftRefL = 0, leftRefA = 0, leftRefB = 0, leftBaseDiff = 0;
+
                 for (int x = 0; x < maxSearchX; x++)
                 {
-                    int x1 = x + 1;
-                    if (IsBorderColumnSegment(x, x1, y0, y1))
+                    var rect = new Rect(x, y0, 1, bandH);
+
+                    var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                        EvaluateBrickLab(
+                            L, A, B,
+                            rect,
+                            pageL, pageA, pageB,
+                            colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                    bool isBorderHere = false;
+
+                    if (!hasLeftRef)
+                    {
+                        // ищем первый "надёжный" seed-кирпич
+                        if (strongBorder)
+                        {
+                            hasLeftRef = true;
+                            leftRefL = Lm;
+                            leftRefA = Am;
+                            leftRefB = Bm;
+                            leftBaseDiff = Math.Max(4.0, distToPage);
+                            isBorderHere = true;
+                        }
+                    }
+                    else
+                    {
+                        // у нас уже есть опорный цвет бордюра → допускаем градиент по tolerance
+                        double dLRef = Lm - leftRefL;
+                        double daRef = Am - leftRefA;
+                        double dbRef = Bm - leftRefB;
+                        double distToRef = Math.Sqrt(dLRef * dLRef + daRef * daRef + dbRef * dbRef);
+
+                        double allowedDelta = leftBaseDiff * bordersColorTolerance;
+                        bool closeToBorderRef = distToRef <= allowedDelta;
+
+                        isBorderHere =
+                            (strongBorder || closeToBorderRef) &&
+                            Lsigma <= textureThr;
+                    }
+
+                    if (isBorderHere)
+                    {
                         lastBorderX = x;
+                        nonBorderRun = 0;
+                    }
                     else if (lastBorderX >= 0)
-                        break;
+                    {
+                        nonBorderRun++;
+                        if (nonBorderRun > maxNonBorderRun)
+                            break; // бордюр закончился
+                    }
                 }
+
                 int wLeft = Math.Max(0, lastBorderX + 1 - shrink);
                 if (wLeft > 0)
                 {
-                    var rect = new Rect(0, y0, wLeft, y1 - y0);
+                    var rect = new Rect(0, y0, wLeft, bandH);
                     using var roi = new Mat(borderMask, rect);
                     roi.SetTo(255);
                 }
 
-                // RIGHT
+                // ----- RIGHT -----
                 lastBorderX = -1;
+                nonBorderRun = 0;
+
+                bool hasRightRef = false;
+                double rightRefL = 0, rightRefA = 0, rightRefB = 0, rightBaseDiff = 0;
+
                 int startX = cols - 1;
                 int minX = Math.Max(0, cols - maxSearchX);
+
                 for (int x = startX; x >= minX; x--)
                 {
-                    int x1 = x + 1;
-                    if (IsBorderColumnSegment(x, x1, y0, y1))
+                    var rect = new Rect(x, y0, 1, bandH);
+
+                    var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                        EvaluateBrickLab(
+                            L, A, B,
+                            rect,
+                            pageL, pageA, pageB,
+                            colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                    bool isBorderHere = false;
+
+                    if (!hasRightRef)
+                    {
+                        if (strongBorder)
+                        {
+                            hasRightRef = true;
+                            rightRefL = Lm;
+                            rightRefA = Am;
+                            rightRefB = Bm;
+                            rightBaseDiff = Math.Max(4.0, distToPage);
+                            isBorderHere = true;
+                        }
+                    }
+                    else
+                    {
+                        double dLRef = Lm - rightRefL;
+                        double daRef = Am - rightRefA;
+                        double dbRef = Bm - rightRefB;
+                        double distToRef = Math.Sqrt(dLRef * dLRef + daRef * daRef + dbRef * dbRef);
+
+                        double allowedDelta = rightBaseDiff * bordersColorTolerance;
+                        bool closeToBorderRef = distToRef <= allowedDelta;
+
+                        isBorderHere =
+                            (strongBorder || closeToBorderRef) &&
+                            Lsigma <= textureThr;
+                    }
+
+                    if (isBorderHere)
+                    {
                         lastBorderX = x;
+                        nonBorderRun = 0;
+                    }
                     else if (lastBorderX >= 0)
-                        break;
+                    {
+                        nonBorderRun++;
+                        if (nonBorderRun > maxNonBorderRun)
+                            break;
+                    }
                 }
+
                 int wRight = 0;
                 if (lastBorderX >= 0)
                 {
@@ -1332,48 +1449,152 @@ namespace ImgViewer.Models
                 }
                 if (wRight > 0)
                 {
-                    var rect = new Rect(cols - wRight, y0, wRight, y1 - y0);
+                    var rect = new Rect(cols - wRight, y0, wRight, bandH);
                     using var roi = new Mat(borderMask, rect);
                     roi.SetTo(255);
                 }
             }
 
-            // 5) TOP / BOTTOM – кирпичи шириной brickThickness, высота вычисляется
+            // =============== 5) TOP / BOTTOM – кирпичи шириной brickThickness ===============
+
             for (int x0 = 0; x0 < cols; x0 += brickThickness)
             {
                 int x1 = Math.Min(cols, x0 + brickThickness);
+                int bandW = x1 - x0;
 
-                // TOP
                 int maxSearchY = Math.Min(rows / 3, maxDepth);
+
+                // ----- TOP -----
                 int lastBorderY = -1;
+                int nonBorderRun = 0;
+
+                bool hasTopRef = false;
+                double topRefL = 0, topRefA = 0, topRefB = 0, topBaseDiff = 0;
+
                 for (int y = 0; y < maxSearchY; y++)
                 {
-                    int y1 = y + 1;
-                    if (IsBorderRowSegment(x0, x1, y, y1))
+                    var rect = new Rect(x0, y, bandW, 1);
+
+                    var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                        EvaluateBrickLab(
+                            L, A, B,
+                            rect,
+                            pageL, pageA, pageB,
+                            colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                    bool isBorderHere = false;
+
+                    if (!hasTopRef)
+                    {
+                        if (strongBorder)
+                        {
+                            hasTopRef = true;
+                            topRefL = Lm;
+                            topRefA = Am;
+                            topRefB = Bm;
+                            topBaseDiff = Math.Max(4.0, distToPage);
+                            isBorderHere = true;
+                        }
+                    }
+                    else
+                    {
+                        double dLRef = Lm - topRefL;
+                        double daRef = Am - topRefA;
+                        double dbRef = Bm - topRefB;
+                        double distToRef = Math.Sqrt(dLRef * dLRef + daRef * daRef + dbRef * dbRef);
+
+                        double allowedDelta = topBaseDiff * bordersColorTolerance;
+                        bool closeToBorderRef = distToRef <= allowedDelta;
+
+                        isBorderHere =
+                            (strongBorder || closeToBorderRef) &&
+                            Lsigma <= textureThr;
+                    }
+
+                    if (isBorderHere)
+                    {
                         lastBorderY = y;
+                        nonBorderRun = 0;
+                    }
                     else if (lastBorderY >= 0)
-                        break;
+                    {
+                        nonBorderRun++;
+                        if (nonBorderRun > maxNonBorderRun)
+                            break;
+                    }
                 }
+
                 int hTop = Math.Max(0, lastBorderY + 1 - shrink);
                 if (hTop > 0)
                 {
-                    var rect = new Rect(x0, 0, x1 - x0, hTop);
+                    var rect = new Rect(x0, 0, bandW, hTop);
                     using var roi = new Mat(borderMask, rect);
                     roi.SetTo(255);
                 }
 
-                // BOTTOM
+                // ----- BOTTOM -----
                 lastBorderY = -1;
+                nonBorderRun = 0;
+
+                bool hasBottomRef = false;
+                double bottomRefL = 0, bottomRefA = 0, bottomRefB = 0, bottomBaseDiff = 0;
+
                 int startY = rows - 1;
                 int minY = Math.Max(0, rows - maxSearchY);
+
                 for (int y = startY; y >= minY; y--)
                 {
-                    int y1 = y + 1;
-                    if (IsBorderRowSegment(x0, x1, y, y1))
+                    var rect = new Rect(x0, y, bandW, 1);
+
+                    var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                        EvaluateBrickLab(
+                            L, A, B,
+                            rect,
+                            pageL, pageA, pageB,
+                            colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                    bool isBorderHere = false;
+
+                    if (!hasBottomRef)
+                    {
+                        if (strongBorder)
+                        {
+                            hasBottomRef = true;
+                            bottomRefL = Lm;
+                            bottomRefA = Am;
+                            bottomRefB = Bm;
+                            bottomBaseDiff = Math.Max(4.0, distToPage);
+                            isBorderHere = true;
+                        }
+                    }
+                    else
+                    {
+                        double dLRef = Lm - bottomRefL;
+                        double daRef = Am - bottomRefA;
+                        double dbRef = Bm - bottomRefB;
+                        double distToRef = Math.Sqrt(dLRef * dLRef + daRef * daRef + dbRef * dbRef);
+
+                        double allowedDelta = bottomBaseDiff * bordersColorTolerance;
+                        bool closeToBorderRef = distToRef <= allowedDelta;
+
+                        isBorderHere =
+                            (strongBorder || closeToBorderRef) &&
+                            Lsigma <= textureThr;
+                    }
+
+                    if (isBorderHere)
+                    {
                         lastBorderY = y;
+                        nonBorderRun = 0;
+                    }
                     else if (lastBorderY >= 0)
-                        break;
+                    {
+                        nonBorderRun++;
+                        if (nonBorderRun > maxNonBorderRun)
+                            break;
+                    }
                 }
+
                 int hBottom = 0;
                 if (lastBorderY >= 0)
                 {
@@ -1381,13 +1602,11 @@ namespace ImgViewer.Models
                 }
                 if (hBottom > 0)
                 {
-                    var rect = new Rect(x0, rows - hBottom, x1 - x0, hBottom);
+                    var rect = new Rect(x0, rows - hBottom, bandW, hBottom);
                     using var roi = new Mat(borderMask, rect);
                     roi.SetTo(255);
                 }
             }
-
-
 
             // 6) Заливка
             Scalar fill;
@@ -1407,6 +1626,7 @@ namespace ImgViewer.Models
             if (disposeBgr) bgr.Dispose();
             return dst;
         }
+
 
     }
 }
