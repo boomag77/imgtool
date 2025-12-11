@@ -17,9 +17,9 @@ namespace ImgViewer.Models.Onnx
         private readonly int _width;
         private readonly CancellationToken _token;
 
-        public DocBoundaryModel(CancellationToken token, string modelPath)
+        public DocBoundaryModel(string modelPath)
         {
-            _token = token;
+            //_token = token;
             _session = new InferenceSession(modelPath);
 
             var inMeta = _session.InputMetadata.First();
@@ -39,7 +39,7 @@ namespace ImgViewer.Models.Onnx
         /// <summary>
         /// BGR Mat -> маска документа (0/255, CV_8UC1), растянутая до размера src.
         /// </summary>
-        public Mat PredictMask(Mat srcBgr, int cropLevel = 62)
+        public Mat PredictMask(Mat srcBgr, int cropLevel, CancellationToken token)
         {
             if (srcBgr.Empty())
                 throw new ArgumentException("srcBgr is empty", nameof(srcBgr));
@@ -100,7 +100,7 @@ namespace ImgViewer.Models.Onnx
 
             for (int y = 0; y < outH; y++)
             {
-                _token.ThrowIfCancellationRequested();
+                token.ThrowIfCancellationRequested();
                 for (int x = 0; x < outW; x++)
                 {
                     int pixelIndex = y * outW + x;

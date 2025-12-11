@@ -94,7 +94,7 @@ namespace ImgViewer.Models
 
                 var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
                 var onnxToken = linkedCts.Token;
-                _docBoundaryModel = new DocBoundaryModel(onnxToken, modelPath);
+                _docBoundaryModel = new DocBoundaryModel(modelPath);
             }
             catch (Exception ex)
             {
@@ -1403,7 +1403,7 @@ namespace ImgViewer.Models
             src.CopyTo(new Mat(bigMat, new Rect(20, 20, src.Cols, src.Rows)));
             try
             {
-                using Mat mask = _docBoundaryModel.PredictMask(bigMat, cropLevel);
+                using Mat mask = _docBoundaryModel.PredictMask(bigMat, cropLevel, _token);
                 debugMask = mask.Clone();
 
                 // 2) Обрезка

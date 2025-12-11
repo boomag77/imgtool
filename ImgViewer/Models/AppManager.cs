@@ -18,6 +18,10 @@ namespace ImgViewer.Models
         private readonly AppSettings _appSettings;
         private readonly Pipeline _pipeline;
 
+        private readonly List<string> _uiErrors = new();
+        private readonly object _uiErrorsLock = new();
+
+
 
         private readonly CancellationTokenSource _cts;
         private CancellationTokenSource? _poolCts;
@@ -94,6 +98,32 @@ namespace ImgViewer.Models
             Dispose();
         }
 
+        private void ReportError(string message, Exception ex = null, string title = "Error")
+        {
+            // собираем полный текст (для лога / списка ошибок)
+            var fullMessage = ex != null
+                ? $"{message}{Environment.NewLine}{ex.Message}"
+                : message;
+
+            lock (_uiErrorsLock)
+            {
+                _uiErrors.Add(fullMessage);
+            }
+
+            // показываем MessageBox безопасно с точки зрения UI-потока
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                System.Windows.MessageBox.Show(fullMessage, title, MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            else
+            {
+                dispatcher.InvokeAsync(
+                    () => System.Windows.MessageBox.Show(fullMessage, title, MessageBoxButton.OK, MessageBoxImage.Error),
+                    System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
         public void UpdateStatus(string status)
         {
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
@@ -153,14 +183,25 @@ namespace ImgViewer.Models
 
         public async Task SetImageOnPreview(string imagePath)
         {
-            _mainViewModel.CurrentImagePath = imagePath;
-            var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
-            await SetBmpImageAsOriginal(bmpImage);
-            await SetBmpImageOnPreview(bmpImage);
-            await SetImageForProcessing(bmpImage);
-
-
-
+            try
+            {
+                _mainViewModel.CurrentImagePath = imagePath;
+                var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
+                await SetBmpImageAsOriginal(bmpImage);
+                await SetBmpImageOnPreview(bmpImage);
+                await SetImageForProcessing(bmpImage);
+            }
+            catch (OperationCanceledException)
+            {
+                #if DEBUG
+                Debug.WriteLine("Loading image was canceled by user.");
+                #endif
+            }
+            catch (Exception ex)
+            {
+                string msg = $"Error loading image: {ex.Message}.";
+                ReportError(msg, ex, "Error");
+            }
         }
 
         public async Task ResetWorkingImagePreview()
@@ -187,17 +228,20 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
+                #if DEBUG
                 Debug.WriteLine($"Command {command} canceled by user.");
+                #endif
             }
             catch (Exception ex)
             {
-                string msg = $"Error applying command: {ex.Message}.";
-                Debug.WriteLine(msg);
-                System.Windows.MessageBox.Show(
-                        $"Error while applying {command}: {ex.Message}",
-                        "Error",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
+                string msg = $"Error applying command: {command}.";
+                ReportError(msg, ex, "Error");
+                //Debug.WriteLine(msg);
+                //System.Windows.MessageBox.Show(
+                //        $"Error while applying {command}: {ex.Message}",
+                //        "Error",
+                //        MessageBoxButton.OK,
+                //        MessageBoxImage.Error);
             }
             finally
             {
@@ -210,13 +254,27 @@ namespace ImgViewer.Models
 
         public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
         {
-            var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
-            //Debug.WriteLine($"Stream length: {stream.Length}");
+            try
+            {
+                var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
+                //Debug.WriteLine($"Stream length: {stream.Length}");
 
-            
-            string json = IsSavePipelineToMd ? _pipeline.BuildPipelineForSave() : null;
 
-            _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
+                string json = IsSavePipelineToMd ? _pipeline.BuildPipelineForSave() : null;
+
+                _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
+            }
+            catch (OperationCanceledException)
+            {
+                #if DEBUG
+                Debug.WriteLine("Saving image was canceled by user.");
+                #endif
+            }
+            catch (Exception ex)
+            {
+                string msg = $"EError while saving processed image to: {outputPath}";
+                ReportError(msg, ex, "Error");
+            }
         }
 
         public async Task SavePipelineToJSON(string path, string json)
@@ -234,11 +292,7 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Error while saving Pipeline to JSON {ex.Message}",
-                                                "Error!",
-                                                MessageBoxButton.OK,
-                                                MessageBoxImage.Error
-                );
+                ReportError($"Error while saving Pipeline to JSON: {ex.Message}", ex, "Save pipeline");
             }
 
         }
@@ -437,13 +491,8 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show
-                (
-                    $"Error loading preset: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
-                );
+                var msg = $"Error loading preset from file: {fileNamePath}";
+                ReportError(msg, ex, "Load preset error");
             }
 
 #if DEBUG
