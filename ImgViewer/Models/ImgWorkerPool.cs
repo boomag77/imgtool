@@ -120,7 +120,13 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
+#if DEBUG
                 Debug.WriteLine("EnqueueFiles cancelled by token");
+#endif
+            }
+            catch (Exception ex)
+            {
+                RegisterFileError("<enqueueing>", "Error enqueuing files.", ex);
             }
             finally
             {
@@ -158,26 +164,39 @@ namespace ImgViewer.Models
         {
             var token = _token;
             using var fileProc = new FileProcessor(token);
+            string currentOutputFile = null;
             try
             {
                 foreach (var saveTask in _saveQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
+                    currentOutputFile = saveTask.OutputFilePath;
                     using (var ms = saveTask.ImageStream)
                     {
                         ms.Position = 0;
-                        fileProc.SaveTiff(ms, saveTask.OutputFilePath, TiffCompression.CCITTG4, 300, true, _plJson);
+                        var finalPath = saveTask.OutputFilePath;
+                        var tempPath = finalPath + ".tmp";
+                        fileProc.SaveTiff(ms, tempPath, TiffCompression.CCITTG4, 300, true, _plJson);
+
+                        // Если старый финальный файл уже есть – удаляем
+                        if (File.Exists(finalPath))
+                            File.Delete(finalPath);
+                        File.Move(tempPath, finalPath);
+
                     }
                 }
             }
             catch (OperationCanceledException)
             {
+#if DEBUG
                 Debug.WriteLine("ImageSaverWorker cancelled!");
+#endif
                 return;
+
             }
             catch (Exception ex)
             {
-                ErrorOccured?.Invoke($"Error in ImageSaverWorker: {ex.Message}");
+                RegisterFileError(currentOutputFile ?? "<unknown>", "Error in ImageSavingWorker.", ex);
             }
 
         }
@@ -308,15 +327,20 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
+#if DEBUG
                 string logMsg = "Worker cancelled by token.";
                 Debug.WriteLine(logMsg);
+#endif
                 return;
 
             }
             catch (Exception ex)
             {
                 string logMsg = $"Error in ImageProcessingWorker: {ex.Message}";
+                RegisterFileError("<Image processing worker>", logMsg, ex);
+#if DEBUG
                 Debug.WriteLine(logMsg);
+#endif
             }
 
         }
@@ -366,11 +390,13 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
+#if DEBUG
                 Debug.WriteLine("Enqueing cancelled!");
+#endif
             }
             catch (Exception ex)
             {
-                ErrorOccured?.Invoke($"Error in Enqueing (Worker Pool): {ex.Message}");
+                RegisterFileError("<ImgWorkerPool>", "Error in Batch processing.", ex);
             }
             finally
             {
