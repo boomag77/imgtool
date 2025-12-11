@@ -1274,10 +1274,10 @@ namespace ImgViewer.Models
         public static Mat RemoveBorders_LabBricks(
     Mat src,
     int brickThickness = 32,
-    double bordersColorTolerance = 0.8,
+    double bordersColorTolerance = 0.7,
     Scalar? fillColor = null,
     BrickInpaintMode inpaintMode = BrickInpaintMode.Fill,
-    double inpaintRadius = 5.0)
+    double inpaintRadius = 15.0)
         {
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
@@ -1304,7 +1304,7 @@ namespace ImgViewer.Models
             if (rows < 40 || cols < 40)
                 return bgr.Clone();
 
-            brickThickness = Math.Max(4, brickThickness);
+            brickThickness = Math.Max(2, brickThickness);
 
             // 1) BGR -> Lab
             using var lab = new Mat();
@@ -1358,7 +1358,8 @@ namespace ImgViewer.Models
             // 3) Маска бордюра
             using var borderMask = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(0));
 
-            int shrink = Math.Max(1, brickThickness / 5);
+            int shrink = Math.Max(1, brickThickness / 10);
+            shrink = -3;
 
             // =============== 4) LEFT / RIGHT – кирпичи высотой brickThickness ===============
 
@@ -1706,7 +1707,22 @@ namespace ImgViewer.Models
             if (inpaintMode == BrickInpaintMode.Fill)
             {
                 dst = bgr.Clone();
+                // 1) Заливка бордюрной маски цветом страницы
                 dst.SetTo(fill, borderMask);
+
+                // 2) Небольшое размытие только в области бордюра,
+                //    чтобы сделать переход к странице мягким
+                double sigma = Math.Max(0.5, inpaintRadius); // можно подправить при желании
+                if (sigma > 0.0)
+                {
+                    using var blurred = dst.Clone();
+
+                    // Размываем ВСЁ изображение...
+                    Cv2.GaussianBlur(blurred, blurred, new OpenCvSharp.Size(0, 0), sigma, sigma);
+
+                    // ...но копируем из размытого только в зону borderMask
+                    blurred.CopyTo(dst, borderMask);
+                }
             }
             else
             {
