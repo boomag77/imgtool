@@ -1212,21 +1212,50 @@ namespace ImgViewer.Models
             return (strongBorder, Lmean, Amean, Bmean, LstdLocal, distToPage);
         }
 
-        private static int ComputeMaxBorderDepth(int rows, int cols, int brickThickness)
+        /// <summary>
+        /// Максимальная глубина поиска бордюра слева/справа (по оси X).
+        /// Для горизонтальных бордюров используем долю от ширины.
+        /// </summary>
+        private static int ComputeMaxBorderDepthHorizontal(int cols, int brickThickness,
+                                                           double maxBorderFraction = 0.40,
+                                                           int maxBricks = 60)
         {
             if (brickThickness <= 0)
                 brickThickness = 8;
 
-            int minSide = Math.Min(rows, cols);
+            // Не лезем глубже, чем maxBorderFraction от ширины
+            int maxDepthBySize = (int)Math.Round(cols * maxBorderFraction);
 
-            // Не лезем глубже, чем 18% от меньшей стороны
-            int maxDepthBySize = (int)Math.Round(minSide * 0.40); // 0.15–0.25 можно подкрутить
-
-            // И не лезем глубже, чем 10 кирпичей
-            int maxDepthByBricks = brickThickness * 30;
+            // И не лезем глубже, чем maxBricks "кирпичей" по глубине
+            int maxDepthByBricks = brickThickness * maxBricks;
 
             int maxDepth = Math.Max(
-                brickThickness,                     // минимум: один кирпич по глубине
+                brickThickness,                     // минимум: один кирпич
+                Math.Min(maxDepthBySize, maxDepthByBricks)
+            );
+
+            return maxDepth;
+        }
+
+        /// <summary>
+        /// Максимальная глубина поиска бордюра сверху/снизу (по оси Y).
+        /// Для вертикальных бордюров используем долю от высоты.
+        /// </summary>
+        private static int ComputeMaxBorderDepthVertical(int rows, int brickThickness,
+                                                         double maxBorderFraction = 0.25,
+                                                         int maxBricks = 14)
+        {
+            if (brickThickness <= 0)
+                brickThickness = 8;
+
+            // Не лезем глубже, чем maxBorderFraction от высоты
+            int maxDepthBySize = (int)Math.Round(rows * maxBorderFraction);
+
+            // И не лезем глубже, чем maxBricks "кирпичей" по глубине
+            int maxDepthByBricks = brickThickness * maxBricks;
+
+            int maxDepth = Math.Max(
+                brickThickness,
                 Math.Min(maxDepthBySize, maxDepthByBricks)
             );
 
@@ -1234,10 +1263,11 @@ namespace ImgViewer.Models
         }
 
 
+
         public static Mat RemoveBorders_LabBricks(
     Mat src,
-    int brickThickness = 16,
-    double bordersColorTolerance = 0.7,
+    int brickThickness = 8,
+    double bordersColorTolerance = 0.2,
     Scalar? fillColor = null)
         {
             if (src == null) throw new ArgumentNullException(nameof(src));
@@ -1307,7 +1337,9 @@ namespace ImgViewer.Models
 
             //int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
             //maxDepth = Math.Max(brickThickness, maxDepth);
-            int maxDepth = ComputeMaxBorderDepth(rows, cols, brickThickness);
+            //int maxDepth = ComputeMaxBorderDepth(rows, cols, brickThickness);
+            int maxDepthX = ComputeMaxBorderDepthHorizontal(cols, brickThickness);
+            int maxDepthY = ComputeMaxBorderDepthVertical(rows, brickThickness);
 
             // Максимальное количество подряд "сомнительных" полос внутри бордюра (для градиента)
             int maxNonBorderRun = (bordersColorTolerance < 0.3)
@@ -1317,7 +1349,7 @@ namespace ImgViewer.Models
             // 3) Маска бордюра
             using var borderMask = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(0));
 
-            int shrink = Math.Max(2, brickThickness / 3);
+            int shrink = Math.Max(1, brickThickness / 5);
 
             // =============== 4) LEFT / RIGHT – кирпичи высотой brickThickness ===============
 
@@ -1326,7 +1358,7 @@ namespace ImgViewer.Models
                 int y1 = Math.Min(rows, y0 + brickThickness);
                 int bandH = y1 - y0;
 
-                int maxSearchX = Math.Min(cols / 3, maxDepth);
+                int maxSearchX = Math.Min(cols / 2, maxDepthX);
 
                 // ----- LEFT -----
                 int lastBorderX = -1;
@@ -1482,7 +1514,7 @@ namespace ImgViewer.Models
                 int x1 = Math.Min(cols, x0 + brickThickness);
                 int bandW = x1 - x0;
 
-                int maxSearchY = Math.Min(rows / 3, maxDepth);
+                int maxSearchY = Math.Min(rows / 2, maxDepthY);
 
                 // ----- TOP -----
                 int lastBorderY = -1;
