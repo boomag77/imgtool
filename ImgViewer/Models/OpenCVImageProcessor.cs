@@ -23,6 +23,7 @@ namespace ImgViewer.Models
         private readonly IAppManager _appManager;
 
         private CancellationToken _token;
+        private readonly CancellationTokenSource _onnxCts;
 
         private readonly object _imageLock = new();
         private readonly object _commandLock = new();
@@ -45,12 +46,12 @@ namespace ImgViewer.Models
                 {
                     old = _currentImage;
                     _currentImage = value;
-                    old?.Dispose();
-                    if (_appManager == null) return;
-                    _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
+                    
                 }
+                old?.Dispose();
+                if (_appManager == null) return;
+                _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
 
-                
             }
         }
         public ImageSource CurrentImage
@@ -77,8 +78,8 @@ namespace ImgViewer.Models
         {
             _appManager = appManager;
             _token = token;
-            var onnxToken = CancellationTokenSource.CreateLinkedTokenSource(token).Token;
-            _docBoundaryModel = new DocBoundaryModel(onnxToken, "Models/ML/model.onnx");
+            _onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            _docBoundaryModel = new DocBoundaryModel(_onnxCts.Token, "Models/ML/model.onnx");
         }
 
         private Mat BitmapSourceToMat(BitmapSource src)
@@ -189,6 +190,15 @@ namespace ImgViewer.Models
         public void Dispose()
         {
             _docBoundaryModel.Dispose();
+            _onnxCts.Dispose();
+            lock (_imageLock)
+            {
+                _currentImage?.Dispose();
+                _currentImage = null;
+            }
+
+            _blurred?.Dispose();
+            _blurred = null;
             //throw new NotImplementedException();
 
         }
@@ -216,73 +226,71 @@ namespace ImgViewer.Models
         }
 
 
-        public Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression)
+        public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
-            //throw new NotImplementedException();
-            if (WorkingImage != null && !WorkingImage.Empty())
+            var img = WorkingImage; // clone for thread safety
+            if (img == null || img.Empty())
+                throw new InvalidOperationException("WorkingImage is null or empty");
+            if (format == ImageFormat.Tiff)
             {
-                if (format == ImageFormat.Tiff)
+                var paramsList = new List<int>();
+                switch (compression)
                 {
-                    var paramsList = new List<int>();
-                    switch (compression)
-                    {
-                        case TiffCompression.None:
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.None);
-                            break;
-                        case TiffCompression.CCITTG4:
-                            if (WorkingImage.Channels() != 1)
-                            {
-                                // для G4 нужно 1-битное изображение
-                                //using var gray = new Mat();
-                                //Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
-                                //_currentImage = gray.Clone();
-                                //using var bin = new Mat();
-                                //Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-                                //_currentImage = bin.Clone();
-                                //if (_currentImage.Type() != MatType.CV_8UC1)
-                                //    _currentImage.ConvertTo(_currentImage, MatType.CV_8UC1);
-                            }
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.CCITTG4);
-                            break;
-                        case TiffCompression.CCITTG3:
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.CCITTG3);
-                            break;
-                        case TiffCompression.LZW:
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.LZW);
-                            break;
-                        case TiffCompression.Deflate:
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.Deflate);
-                            break;
-                        case TiffCompression.JPEG:
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.JPEG);
-                            break;
-                        case TiffCompression.PackBits:
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.PackBits);
-                            break;
-                        default:
-                            // default to None
-                            paramsList.Add((int)ImwriteFlags.TiffCompression);
-                            paramsList.Add((int)TiffCompression.None);
-                            break;
-                    }
-                    //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
-                    byte[] pngData = WorkingImage.ImEncode(".png");
-                    return new MemoryStream(pngData);
+                    case TiffCompression.None:
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.None);
+                        break;
+                    case TiffCompression.CCITTG4:
+                        if (WorkingImage.Channels() != 1)
+                        {
+                            // для G4 нужно 1-битное изображение
+                            //using var gray = new Mat();
+                            //Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
+                            //_currentImage = gray.Clone();
+                            //using var bin = new Mat();
+                            //Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                            //_currentImage = bin.Clone();
+                            //if (_currentImage.Type() != MatType.CV_8UC1)
+                            //    _currentImage.ConvertTo(_currentImage, MatType.CV_8UC1);
+                        }
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.CCITTG4);
+                        break;
+                    case TiffCompression.CCITTG3:
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.CCITTG3);
+                        break;
+                    case TiffCompression.LZW:
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.LZW);
+                        break;
+                    case TiffCompression.Deflate:
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.Deflate);
+                        break;
+                    case TiffCompression.JPEG:
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.JPEG);
+                        break;
+                    case TiffCompression.PackBits:
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.PackBits);
+                        break;
+                    default:
+                        // default to None
+                        paramsList.Add((int)ImwriteFlags.TiffCompression);
+                        paramsList.Add((int)TiffCompression.None);
+                        break;
                 }
-                else
-                {
-                    // для других форматов просто PNG
-                    return MatToStream(WorkingImage);
-                }
+                //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
+                byte[] pngData = img.ImEncode(".png");
+                return new MemoryStream(pngData);
             }
-            return null;
+            else
+            {
+                // для других форматов просто PNG
+                return MatToStream(img);
+            }
         }
 
 
@@ -297,20 +305,20 @@ namespace ImgViewer.Models
             // Приведём к CV_8UC3 (BGR) если нужно
             Mat img = src;
             Mat tmp = null;
-            if (src.Type() == MatType.CV_8UC3)
+            if (img.Type() == MatType.CV_8UC3)
             {
                 // ничего не делаем
             }
-            else if (src.Type() == MatType.CV_8UC1)
+            else if (img.Type() == MatType.CV_8UC1)
             {
                 tmp = new Mat();
-                Cv2.CvtColor(src, tmp, ColorConversionCodes.GRAY2BGR);
+                Cv2.CvtColor(img, tmp, ColorConversionCodes.GRAY2BGR);
                 img = tmp;
             }
-            else if (src.Type() == MatType.CV_8UC4)
+            else if (img.Type() == MatType.CV_8UC4)
             {
                 tmp = new Mat();
-                Cv2.CvtColor(src, tmp, ColorConversionCodes.BGRA2BGR);
+                Cv2.CvtColor(img, tmp, ColorConversionCodes.BGRA2BGR);
                 img = tmp;
             }
             else
@@ -375,6 +383,7 @@ namespace ImgViewer.Models
             }
             finally
             {
+                img.Dispose();
                 tmp?.Dispose();
             }
         }
@@ -1074,7 +1083,7 @@ namespace ImgViewer.Models
                                     switch (kv.Value.ToString())
                                     {
                                         case "U-net":
-                                            return DetectDocumentAndCrop(src, cropLevel, false, out Mat debugMask, out Mat debugOverlay);
+                                            return DetectDocumentAndCrop(src, cropLevel, false, batchProcessing, out Mat debugMask, out Mat debugOverlay);
                                             break;
                                         case "EAST":
                                             //return SmartCrop(src);
@@ -1144,9 +1153,11 @@ namespace ImgViewer.Models
                             }
 
                             //WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
-                            Mat mask;
+                            var mask = new Mat();
+
                             if (orientation == LineOrientation.Vertical)
                             {
+                                
                                 return LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
                             }
                             if (orientation == LineOrientation.Horizontal)
@@ -1163,9 +1174,10 @@ namespace ImgViewer.Models
 
                             break;
                         case ProcessorCommand.DotsRemove:
-                            //RemoveSpecksWithHandler();
+                            return src.Clone();
                             break;
                         case ProcessorCommand.ChannelsCorrection:
+                            return src.Clone();
                             break;
                         case ProcessorCommand.PunchHolesRemove:
 
@@ -1319,7 +1331,7 @@ namespace ImgViewer.Models
                     }
                 }
             }
-            return null;
+            return src.Clone();
         }
 
         private Scalar GetBgColor(Mat src)
@@ -1351,34 +1363,75 @@ namespace ImgViewer.Models
             return bgScalar;
         }
 
-        private Mat DetectDocumentAndCrop(Mat src, int cropLevel, bool debug, out Mat debugMask, out Mat debugOverlay)
+        private Mat DetectDocumentAndCrop(Mat src, int cropLevel, bool debug, bool batchProcessing, out Mat debugMask, out Mat debugOverlay)
         {
             // 1) Предикт маски
-            Mat mask = new Mat();
             Scalar bgColor = GetBgColor(src);
             // create new Mat with bgColor and add 20px on each side
-            Mat bigMat = new Mat(src.Rows + 40, src.Cols + 40, src.Type(), bgColor);
+            using Mat bigMat = new Mat(src.Rows + 40, src.Cols + 40, src.Type(), bgColor);
             src.CopyTo(new Mat(bigMat, new Rect(20, 20, src.Cols, src.Rows)));
-            mask = _docBoundaryModel.PredictMask(bigMat, cropLevel);
-                                                                
-            debugMask = mask.Clone();
+            try
+            {
+                using Mat mask = _docBoundaryModel.PredictMask(bigMat, cropLevel);
+                debugMask = mask.Clone();
 
-            // 2) Обрезка
-            Mat cropped = DocumentCropper.CropByMask(bigMat, mask, out debugOverlay);
+                // 2) Обрезка
+                Mat cropped = DocumentCropper.CropByMask(bigMat, mask, out debugOverlay);
 
-            return cropped;
+                return cropped;
+            }
+            catch (OperationCanceledException) when (!batchProcessing)
+            {
+                Debug.WriteLine("Document Detection cancelled (UI)!");
+                debugMask = new Mat();
+                debugOverlay = new Mat();
+                return src.Clone();
+            }
+            catch (OperationCanceledException)
+            {
+                debugMask = new Mat();
+                debugOverlay = new Mat();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+                debugMask = new Mat();
+                debugOverlay = new Mat();
+                return src.Clone();
+            }
         }
 
 
 
-        public void ApplyCommand(ProcessorCommand command, Dictionary<string, object> parameters = null, bool batchProcessing = false)
+        public bool ApplyCommand(
+                                ProcessorCommand command,
+                                Dictionary<string, object> parameters = null,
+                                bool batchProcessing = false,
+                                string currentFilePath = null,
+                                Action<string> log = null)
         {
-            
-            WorkingImage = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token, batchProcessing);
+            var src = WorkingImage; // cloned inside WorkingImage getter
+            var result = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token, batchProcessing);
+            if (result == null)
+            {
+                var msg = $"[{currentFilePath ?? "<unknown>"}] Command {command} returned null.";
+                log?.Invoke(msg);
+                Debug.WriteLine(msg);
 
+                if (batchProcessing)
+                {
+                    throw new InvalidOperationException(msg);
+                }
+
+                // в UI-режиме просто не меняем картинку
+                return false;
+            }
+            WorkingImage = result;
+            return true;
         }
 
-        private Mat? RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool applyCut, bool debug)
+        private Mat RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool applyCut, bool debug)
         {
             int x = left;
             int y = top;
@@ -1396,12 +1449,12 @@ namespace ImgViewer.Models
             catch (OperationCanceledException)
             {
                 Debug.WriteLine("Manual Cut cancelled!");
-                return null;
+                return src.Clone();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
-                return null;
+                return src.Clone();
             }
         }
 
@@ -1521,7 +1574,7 @@ namespace ImgViewer.Models
             return grayU8;
         }
 
-        private Mat? PunchHolesRemove(Mat src, List<PunchSpec> specs, double roundness, double fillRatio, Offsets offsets)
+        private Mat PunchHolesRemove(Mat src, List<PunchSpec> specs, double roundness, double fillRatio, Offsets offsets)
         {
             if (src == null || src.Empty()) return new Mat();
             try
@@ -1531,12 +1584,12 @@ namespace ImgViewer.Models
             catch (OperationCanceledException)
             {
                 Debug.WriteLine("PunchHoles Removal cancelled!");
-                return null;
+                return src.Clone();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
-                return null;
+                return src.Clone();
             }
 
         }
@@ -1748,7 +1801,7 @@ namespace ImgViewer.Models
         //    return work;
         //}
 
-        private Mat? SmartCrop(Mat src, TextDetectionSettings tds, bool debug = true)
+        private Mat SmartCrop(Mat src, TextDetectionSettings tds, bool debug = true)
         {
 
             string eastPath = Path.Combine(AppContext.BaseDirectory, "Models", "frozen_east_text_detection.pb");
@@ -1775,7 +1828,13 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-
+                Debug.WriteLine("Smart Crop (EAST) cancelled!");
+                return src.Clone();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error while performing EAST Smart crop {ex}");
+                return src.Clone();
             }
 
             return cropped;
@@ -2024,7 +2083,7 @@ namespace ImgViewer.Models
 
 
 
-        private Mat? MatToGray(Mat src)
+        private Mat MatToGray(Mat src)
         {
             if (src == null || src.Empty()) return null; // уже в градациях серого
             var gray = new Mat();
@@ -2049,24 +2108,21 @@ namespace ImgViewer.Models
             catch (Exception ex)
             {
                 Debug.WriteLine($"MatToGray error: {ex}");
-                gray.Dispose();
-                return null;
+                return gray;
             }
 
 
             return gray;
         }
 
-        private Mat? BinarizeAdaptive(Mat src, BinarizeParameters p, bool invert = false)
+        private Mat BinarizeAdaptive(Mat src, BinarizeParameters p, bool invert = false)
         {
             if (src == null || src.Empty()) return null;
 
             // Debug all args
-            DumpStruct(p);
+            //DumpStruct(p);
 
             using var gray = MatToGray(src);
-            if (gray == null) return null;
-
 
             int bs;
             if (p.BlockSize.HasValue && p.BlockSize > 0)
@@ -2237,9 +2293,9 @@ namespace ImgViewer.Models
 
 
 
-        private Mat? BinarizeThreshold(Mat src, int threshold = 128)
+        private Mat BinarizeThreshold(Mat src, int threshold = 128)
         {
-            if (src == null || src.Empty()) return null;
+            if (src == null || src.Empty()) return new Mat();
 
             using var gray = new Mat();
             Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
@@ -2328,7 +2384,7 @@ namespace ImgViewer.Models
                     case "minLineLength":
                         {
                             int v = SafeInt(kv.Value, result.minLineLength);
-                            Math.Max(0, v);
+                            result.minLineLength = Math.Max(0, v);
                         }
                         break;
 
@@ -2345,7 +2401,7 @@ namespace ImgViewer.Models
             return result;
         }
 
-        public Mat? NewDeskew(Mat src, Dictionary<string, object> parameters)
+        public Mat NewDeskew(Mat src, Dictionary<string, object> parameters)
         {
             if (src == null || src.Empty()) return new Mat();
 
@@ -2360,13 +2416,14 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-
-                return null;
+                string logMessage = "Deskew operation cancelled.";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error while Deskew: {ex.Message}");
-                return null;
+                return src.Clone();
             }
 
         }
@@ -2454,7 +2511,7 @@ namespace ImgViewer.Models
         //    return darkMask;
         //}
 
-        private Mat? RemoveBordersByRowColWhite(Mat src,
+        private Mat RemoveBordersByRowColWhite(Mat src,
                                                 double threshFrac,
                                                 int contrastThr,
                                                 double centralSample,
@@ -2467,16 +2524,19 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-                return null;
+                string logMessage = "Border removal (By contrast) cancelled.";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error while removing borders (By contrast): {ex.Message}");
-                return null;
+                string logMessage = $"Error while removing borders (By contrast): {ex.Message}";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
             }
         }
 
-        private Mat? RemoveBorders_Auto(Mat src, byte darkThresh, Scalar? bgColor, int minAreaPx, double minSpanFraction, double solidityThreshold,
+        private Mat RemoveBorders_Auto(Mat src, byte darkThresh, Scalar? bgColor, int minAreaPx, double minSpanFraction, double solidityThreshold,
                                     double minDepthFraction, int featherPx, bool useTeleaHybrid)
         {
             try
@@ -2495,12 +2555,15 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-                return null;
+                string logMessage = "Border removal (Auto) cancelled.";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error while removing borders (Auto): {ex.Message}");
-                return null;
+                string logMessage = $"Error while removing borders (Auto): {ex.Message}";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
             }
         }
 

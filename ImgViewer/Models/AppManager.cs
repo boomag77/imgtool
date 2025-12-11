@@ -31,7 +31,6 @@ namespace ImgViewer.Models
         public AppManager(IMainView mainView, CancellationTokenSource cts)
         {
             _cts = cts;
-            //InitOnnx();
             _appSettings = new AppSettings();
             _pipeline = new Pipeline(this);
             _mainViewModel = new MainViewModel(this);
@@ -83,16 +82,15 @@ namespace ImgViewer.Models
             }
         }
 
-        //public void InitOnnx()
-        //{
-        //    var onnxToken = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token).Token;
-        //    _docBoundaryModel = new DocBoundaryModel(onnxToken, "Models/ML/model.onnx");
-        //}
-
         public void Shutdown()
         {
             _cts.Cancel();
             _cts.Dispose();
+            _poolCts?.Dispose();
+            _rootFolderCts?.Dispose();
+            _imgProcCts?.Dispose();
+            (_imageProcessor as IDisposable)?.Dispose();
+            (_fileProcessor as IDisposable)?.Dispose();
             Dispose();
         }
 
@@ -177,10 +175,36 @@ namespace ImgViewer.Models
             if (_mainViewModel.OriginalImage == null) return;
 
             UpdateStatus($"Applying command: {command}...");
+            try
+            {
+                await Task.Run(() =>
+                {
+                    _imageProcessor.ApplyCommand(
+                                            command,
+                                            parameters,
+                                            batchProcessing: false);
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine($"Command {command} canceled by user.");
+            }
+            catch (Exception ex)
+            {
+                string msg = $"Error applying command: {ex.Message}.";
+                Debug.WriteLine(msg);
+                System.Windows.MessageBox.Show(
+                        $"Error while applying {command}: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+            }
+            finally
+            {
+                UpdateStatus("Standby");
+            }
 
-            await Task.Run(() => _imageProcessor.ApplyCommand(command, parameters));
-
-            UpdateStatus("Standby");
+            
 
         }
 
@@ -459,6 +483,11 @@ namespace ImgViewer.Models
 
         public void Dispose()
         {
+            _poolCts?.Dispose();
+            _rootFolderCts?.Dispose();
+            _imgProcCts?.Dispose();
+            (_imageProcessor as IDisposable)?.Dispose();
+            (_fileProcessor as IDisposable)?.Dispose();
             GC.SuppressFinalize(this);
         }
 

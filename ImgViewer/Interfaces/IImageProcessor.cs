@@ -22,7 +22,11 @@ namespace ImgViewer.Interfaces
 
         Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
 
-        void ApplyCommand(ProcessorCommand commandName, Dictionary<string, object> parameters, bool batchProcessing = false);
+        bool ApplyCommand(ProcessorCommand commandName,
+            Dictionary<string, object> parameters,
+            bool batchProcessing = false,
+            string currentFilePath = null,
+            Action<string> log = null);
 
         event Action<Stream> ImageUpdated;
         event Action<string> ErrorOccured;

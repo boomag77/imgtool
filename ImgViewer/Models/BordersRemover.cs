@@ -46,8 +46,11 @@ namespace ImgViewer.Models
                 try
                 {
                     token.ThrowIfCancellationRequested();
-
-                    if (srcClone.Type() == MatType.CV_8UC4)
+                    if (srcClone.Type() == MatType.CV_8UC3)
+                    {
+                    // already BGR
+                    }
+                    else if (srcClone.Type() == MatType.CV_8UC4)
                     {
                         working = new Mat();
                         Cv2.CvtColor(srcClone, working, ColorConversionCodes.BGRA2BGR);
@@ -710,7 +713,11 @@ namespace ImgViewer.Models
             bool converted = false;
             try
             {
-                if (src.Type() == MatType.CV_8UC4)
+                if (src.Type() == MatType.CV_8UC3)
+                {
+                    // already BGR
+                }
+                else if (src.Type() == MatType.CV_8UC4)
                 {
                     srcBgr = new Mat();
                     Cv2.CvtColor(src, srcBgr, ColorConversionCodes.BGRA2BGR);

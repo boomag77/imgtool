@@ -17,6 +17,8 @@ namespace ImgViewer.Models
 
         private bool _disposed;
 
+        private readonly ConcurrentBag<string> _fileErrors = new();
+
         private readonly BlockingCollection<SourceImageFile> _filesQueue;
         private readonly BlockingCollection<SaveTaskInfo> _saveQueue;
         private readonly CancellationTokenSource _cts;
@@ -32,11 +34,6 @@ namespace ImgViewer.Models
         private readonly object _savingLock = new();
         private readonly List<Task> _savingTasks = new();
 
-
-        //private readonly (ProcessorCommand command, Dictionary<string, object> parameters)[] _pipelineTemplate;
-        //private Pipeline _pipline;
-
-        //private readonly ProcessorCommands[] _commandsQueue;
 
         private int _processedCount;
         private readonly int _totalCount;
@@ -58,7 +55,6 @@ namespace ImgViewer.Models
             _token = _cts.Token;
             _sourceFolder = sourceFolder;
 
-            //_outputFolder = Path.Combine(_sourceFolder.Path, "Processed");
             string sourceFolderName = Path.GetFileName(_sourceFolder.Path);
             _outputFolder = Path.Combine(_sourceFolder.ParentPath, sourceFolderName + "_processed");
             Directory.CreateDirectory(_outputFolder);
@@ -91,6 +87,13 @@ namespace ImgViewer.Models
                 _opsLog.Add($"- {op.Command}");
             }
         }
+
+        private void RegisterFileError(string filePath, string message, Exception ex = null)
+        {
+            var msg = $"[{filePath}] {message}" + (ex != null ? $" :: {ex.Message}" : "");
+            _fileErrors.Add(msg);
+        }
+
 
         public void Dispose()
         {
@@ -197,7 +200,8 @@ namespace ImgViewer.Models
                     {
                         // если здесь токен отменён — просто выходим/продолжаем без ошибки
                         if (token.IsCancellationRequested) throw new OperationCanceledException(token);
-                        continue; // или лог и continue
+                        RegisterFileError(file.Path, "Load failed: FileProcessor.Load returned null.");
+                        continue; 
                     }
 
                     imgProc.CurrentImage = loaded.Item1;
@@ -244,8 +248,14 @@ namespace ImgViewer.Models
                                 }
 
                             }
-                            
-                            imgProc.ApplyCommand(op.Command, op.Params, true);
+
+                            imgProc.ApplyCommand
+                                (op.Command,
+                                op.Params,
+                                batchProcessing: true,
+                                currentFilePath: file.Path,
+                                log: msg => RegisterFileError(file.Path, msg)
+                                );
 
                         }
                         catch (OperationCanceledException)
@@ -254,6 +264,8 @@ namespace ImgViewer.Models
                         }
                         catch (Exception exOp)
                         {
+                            RegisterFileError(file.Path, $"Error applying op {op.Command}", exOp);
+                            break;
                             //ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
                         }
                     }
@@ -261,52 +273,50 @@ namespace ImgViewer.Models
                     token.ThrowIfCancellationRequested();
 
 
-                    //TODO make saving worker(s) and dissfetent queue for the saving
 
                     var fileName = Path.ChangeExtension(Path.GetFileName(file.Path), ".tif");
                     var outputFilePath = Path.Combine(_outputFolder, fileName);
                     //proc.SaveCurrentImage(outputFilePath);
-                    using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
+                    try
                     {
-                        var saveTask = new SaveTaskInfo
+                        using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
                         {
-                            ImageStream = new MemoryStream(),
-                            OutputFilePath = outputFilePath
-                        };
-                        if (outStream.CanSeek) outStream.Position = 0;
-                        outStream.CopyTo(saveTask.ImageStream);
-                        _saveQueue.Add(saveTask, token);
-                        if (_saveQueue.Count >= 2)
-                        {
-                            StartSavingWorkerIfNeeded();
+                            var saveTask = new SaveTaskInfo
+                            {
+                                ImageStream = new MemoryStream(),
+                                OutputFilePath = outputFilePath
+                            };
+                            if (outStream.CanSeek) outStream.Position = 0;
+                            outStream.CopyTo(saveTask.ImageStream);
+                            _saveQueue.Add(saveTask, token);
+                            if (_saveQueue.Count >= 2)
+                            {
+                                StartSavingWorkerIfNeeded();
+                            }
+
                         }
-
-                        //using (var ms = new MemoryStream())
-                        //{
-                        //    if (outStream.CanSeek) outStream.Position = 0;
-                        //    outStream.CopyTo(ms);
-                        //    ms.Position = 0;
-                        //    fileProc.SaveTiff(ms, outputFilePath, TiffCompression.CCITTG4, 300, true, _plJson);
-                        //}
                     }
-
-
-
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception exSave)
+                    {
+                        RegisterFileError(file.Path, "Error saving processed image.", exSave);
+                        continue;
+                    }
                     Interlocked.Increment(ref _processedCount);
-                    ProgressChanged?.Invoke(_processedCount, _totalCount);
 
                 }
             }
             catch (OperationCanceledException)
             {
-
-                Debug.WriteLine("Worker cancelled!");
+                string logMsg = "Worker cancelled by token.";
+                Debug.WriteLine(logMsg);
                 return;
 
             }
             catch (Exception ex)
             {
-                ErrorOccured?.Invoke($"Error in worker: {ex.Message}");
+                string logMsg = $"Error in ImageProcessingWorker: {ex.Message}";
+                Debug.WriteLine(logMsg);
             }
 
         }
@@ -342,11 +352,15 @@ namespace ImgViewer.Models
                 var durationSeconds = duration.Seconds;
                 var logMsg = $"Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
                 var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
+                
                 var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
+                var errors = _fileErrors.Count > 0
+                    ? string.Join(Environment.NewLine, _fileErrors)
+                    : "No errors.";
                 var plJsonMsg = _plJson;
                 File.WriteAllLines(
                     Path.Combine(_outputFolder, "_processing_log.txt"),
-                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", _plJson }
+                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", "Errors:", "\n", errors, "\n", _plJson ?? "Error get PL json" }
                 );
 
             }
