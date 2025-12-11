@@ -315,11 +315,7 @@ namespace ImgViewer.Models
             }
             else
             {
-                // универсальный fallback: конвертируем в 8UC3 через преобразование типа + возможное BGR конвертирование
-                tmp = new Mat();
-                src.ConvertTo(tmp, MatType.CV_8UC3);
-                // Если исходный имел 1 канал, ConvertTo даст 3 одинаковых канала — но это крайний случай.
-                img = tmp;
+                throw new ArgumentException("EstimatePageColor expects 1, 3, or 4 channel Mat", nameof(src));
             }
 
             try
@@ -912,8 +908,8 @@ namespace ImgViewer.Models
                                                     darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
                                                 }
 
-                                                Mat enhanced = Enhancer.ApplyClahe(src, clipLimit: 2.0, gridSize: 8);
-                                                return RemoveBorders_Auto(enhanced,
+                                                //Mat enhanced = Enhancer.ApplyClahe(src, clipLimit: 2.0, gridSize: 8);
+                                                return RemoveBorders_Auto(src,
                                                     darkThresh,
                                                     bgColor,
                                                     minAreaPx,
@@ -2032,27 +2028,31 @@ namespace ImgViewer.Models
         {
             if (src == null || src.Empty()) return null; // уже в градациях серого
             var gray = new Mat();
-            switch (src.Channels())
+            try
             {
-                case 1:
-                    // уже в градациях серого
-                    src.CopyTo(gray);
-                    break;
-                case 3:
-                    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-                    break;
-                case 4:
-                    Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
-                    break;
-                default:
-                    {
-                        // универсальный fallback: конвертируем в 8UC3 через преобразование типа + возможное BGR конвертирование
-                        using var tmp = new Mat();
-                        src.ConvertTo(tmp, MatType.CV_8UC3);
-                        Cv2.CvtColor(tmp, gray, ColorConversionCodes.BGR2GRAY);
-                    }
-                    break;
+                switch (src.Channels())
+                {
+                    case 1:
+                        // уже в градациях серого
+                        src.CopyTo(gray);
+                        break;
+                    case 3:
+                        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+                        break;
+                    case 4:
+                        Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
+                        break;
+                    default:
+                        throw new ArgumentException("MatToGray supports only 1, 3, or 4 channel Mats", nameof(src));
+                }
             }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"MatToGray error: {ex}");
+                gray.Dispose();
+                return null;
+            }
+
 
             return gray;
         }
@@ -3258,7 +3258,6 @@ namespace ImgViewer.Models
                     {
                         // можем работать прямо с ним, не выделяя новый Mat
                         bgr = src;
-                        needDisposeBgr = false;
                     }
                     else if (src.Type() == MatType.CV_8UC4)
                     {
@@ -3267,13 +3266,16 @@ namespace ImgViewer.Models
                         Cv2.CvtColor(src, bgr, ColorConversionCodes.BGRA2BGR);
                         needDisposeBgr = true;
                     }
+                    else if (src.Type() == MatType.CV_8UC1)
+                    {
+                        // одноканальное (но не бинарное) → конвертим в BGR
+                        bgr = new Mat();
+                        Cv2.CvtColor(src, bgr, ColorConversionCodes.GRAY2BGR);
+                        needDisposeBgr = true;
+                    }
                     else
                     {
-                        // fallback: просто приводим к 8UC3 (если ты знаешь, что к тебе приходят только нормальные BGR/BGRA,
-                        // этот кусок можно упростить / убрать)
-                        bgr = new Mat();
-                        src.ConvertTo(bgr, MatType.CV_8UC3);
-                        needDisposeBgr = true;
+                        throw new ArgumentException("ApplyClahe expects 1, 3, or 4 channel Mats", nameof(src));
                     }
 
                     // BGR → Lab

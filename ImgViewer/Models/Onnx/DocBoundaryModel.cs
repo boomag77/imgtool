@@ -45,11 +45,11 @@ namespace ImgViewer.Models.Onnx
                 throw new ArgumentException("srcBgr is empty", nameof(srcBgr));
 
             // 1) BGR -> RGB
-            Mat rgb = new Mat();
+            using var rgb = new Mat();
             Cv2.CvtColor(srcBgr, rgb, ColorConversionCodes.BGR2RGB);
 
             // 2) Resize к размеру модели
-            Mat resized = new Mat();
+            using var resized = new Mat();
             Cv2.Resize(rgb, resized, new Size(_width, _height));
 
             // 3) float32 [0..1]
@@ -86,7 +86,7 @@ namespace ImgViewer.Models.Onnx
 
             float[] outData = output.ToArray();
 
-            Mat maskSmall = new Mat(outH, outW, MatType.CV_8UC1);
+            using var maskSmall = new Mat(outH, outW, MatType.CV_8UC1);
 
             // Насколько агрессивно отрезаем бордюры:
             // 0.5f – мягко, 0.7f – обычно хорошо, 0.8–0.9f – агрессивно.
@@ -100,6 +100,7 @@ namespace ImgViewer.Models.Onnx
 
             for (int y = 0; y < outH; y++)
             {
+                _token.ThrowIfCancellationRequested();
                 for (int x = 0; x < outW; x++)
                 {
                     int pixelIndex = y * outW + x;
@@ -122,7 +123,7 @@ namespace ImgViewer.Models.Onnx
             }
 
             // Растянуть маску до размера исходного изображения
-            Mat mask = new Mat();
+            var mask = new Mat();
             Cv2.Resize(maskSmall, mask, srcBgr.Size(), interpolation: InterpolationFlags.Nearest);
 
             return mask;
