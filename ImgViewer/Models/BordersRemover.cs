@@ -1273,11 +1273,11 @@ namespace ImgViewer.Models
 
         public static Mat RemoveBorders_LabBricks(
     Mat src,
-    int brickThickness = 32,
-    double bordersColorTolerance = 0.7,
+    int brickThickness = 64,
+    double bordersColorTolerance = 0.9,
     Scalar? fillColor = null,
     BrickInpaintMode inpaintMode = BrickInpaintMode.Fill,
-    double inpaintRadius = 15.0)
+    double inpaintRadius = 0.0)
         {
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
@@ -1304,7 +1304,7 @@ namespace ImgViewer.Models
             if (rows < 40 || cols < 40)
                 return bgr.Clone();
 
-            brickThickness = Math.Max(2, brickThickness);
+            brickThickness = Math.Max(1, brickThickness);
 
             // 1) BGR -> Lab
             using var lab = new Mat();
@@ -1349,6 +1349,8 @@ namespace ImgViewer.Models
             //int maxDepth = ComputeMaxBorderDepth(rows, cols, brickThickness);
             int maxDepthX = ComputeMaxBorderDepthHorizontal(cols, brickThickness);
             int maxDepthY = ComputeMaxBorderDepthVertical(rows, brickThickness);
+            //maxDepthX = 600;
+            //maxDepthY = 600;
 
             // Максимальное количество подряд "сомнительных" полос внутри бордюра (для градиента)
             int maxNonBorderRun = (bordersColorTolerance < 0.3)
@@ -1358,9 +1360,8 @@ namespace ImgViewer.Models
             // 3) Маска бордюра
             using var borderMask = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(0));
 
-            int shrink = Math.Max(1, brickThickness / 10);
-            shrink = -3;
-
+            int shrink = Math.Max(5, brickThickness / 5);
+            shrink = 0;
             // =============== 4) LEFT / RIGHT – кирпичи высотой brickThickness ===============
 
             for (int y0 = 0; y0 < rows; y0 += brickThickness)

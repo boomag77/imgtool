@@ -145,7 +145,7 @@ namespace ImgViewer.Models
                             buttonText,
                             new[]
                             {
-                                new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "By Contrast", "Manual"}, 0),
+                                new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "Integral", "By Contrast", "Manual"}, 0),
                                 // By contrast
                                 new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
                                 new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 255, 1),
@@ -171,7 +171,17 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Cut", "cutMethod", false),
                                 new PipeLineParameter("Preview cut", "manualCutDebug", false),
                                 new PipeLineParameter("Apply to Left Page", "applyToLeftPage", true),
-                                new PipeLineParameter("Apply to Right Page", "applyToRightPage", true)
+                                new PipeLineParameter("Apply to Right Page", "applyToRightPage", true),
+                                // Integral
+                                new PipeLineParameter("Scan step px", "scanStepPx", 10, 1, 100, 1),
+                                new PipeLineParameter("Inpaint radius", "inpaintRadius", 3, 1, 50, 1),
+                                new PipeLineParameter("Inpaint mode", "inpaintMode", new [] {"Fill", "Telea", "Navier-Stokes"}, 0),
+                                new PipeLineParameter("Border color variation", "borderColorVariation", 0.5, 0.05, 1.0, 0.05),
+                                new PipeLineParameter("Border safety offset px", "borderSafetyOffsetPx", 5, -30, 30, 1),
+                                new PipeLineParameter("Auto max border width fraction", "autoMaxBorderDepthFrac", true),
+                                new PipeLineParameter("Max border depthX fraction", "maxBorderDepthFracX", 0.2, 0, 1, 0.05),
+                                new PipeLineParameter("Max border depthY fraction", "maxBorderDepthFracY", 0.2, 0, 1, 0.05)
+
 
                             },
                             operation => ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));
