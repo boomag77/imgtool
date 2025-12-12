@@ -175,7 +175,7 @@ namespace ImgViewer.Models
                                 // Integral
                                 new PipeLineParameter("Scan step px", "scanStepPx", 10, 1, 100, 1),
                                 new PipeLineParameter("Inpaint radius", "inpaintRadius", 3, 1, 50, 1),
-                                new PipeLineParameter("Inpaint mode", "inpaintMode", new [] {"Fill", "Telea", "Navier-Stokes"}, 0),
+                                new PipeLineParameter("Inpaint mode", "inpaintMode", new [] {"Fill", "Telea", "NS"}, 0),
                                 new PipeLineParameter("Border color variation", "borderColorVariation", 0.5, 0.05, 1.0, 0.05),
                                 new PipeLineParameter("Border safety offset px", "borderSafetyOffsetPx", 5, -30, 30, 1),
                                 new PipeLineParameter("Auto max border width fraction", "autoMaxBorderDepthFrac", true),
