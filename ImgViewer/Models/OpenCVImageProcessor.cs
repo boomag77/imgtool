@@ -11,6 +11,7 @@ using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using static ImgViewer.Models.BordersRemover;
 
 namespace ImgViewer.Models
 {
@@ -841,6 +842,26 @@ namespace ImgViewer.Models
                                 bool useTeleaHybrid = true;
                                 bool applyManualCut = false;
 
+                                // integral method parameters
+                                int brickThickness = 16;
+                                int safetyOffsetPx = 2;
+                                BordersRemover.BrickInpaintMode inpaintMode = BordersRemover.BrickInpaintMode.Fill;
+                                double inpaintRadius = 0.0;
+                                double borderColorTolerance = 0.5;
+                                bool autoMaxBorderDepthFrac = true;
+                                BordersRemover.MaxBorderDepthsFrac maxBorderDepthsFrac = new BordersRemover.MaxBorderDepthsFrac()
+                                {
+                                    Left = 0.15,
+                                    Right = 0.15,
+                                    Top = 0.15,
+                                    Bottom = 0.15
+                                };
+                                double seedContrastStrictness = 1.0;
+                                double seedBrightnessStrictness = 1.0;
+                                double textureAllowance = 1.0;
+                                int kInterpolation = 0;
+
+
                                 foreach (var kv in parameters)
                                 {
                                     if (kv.Key == null) continue;
@@ -919,7 +940,82 @@ namespace ImgViewer.Models
                                         case "cutMethod":
                                             applyManualCut = SafeBool(kv.Value, applyManualCut);
                                             break;
+                                        case "scanStepPx":
+                                            brickThickness = SafeInt(kv.Value, brickThickness);
+                                            break;
+                                        case "borderSafetyOffsetPx":
+                                            safetyOffsetPx = SafeInt(kv.Value, safetyOffsetPx);
+                                            break;
+                                         case "inpaintMode":
+                                            var raw = kv.Value?.ToString();
+                                            if (string.IsNullOrWhiteSpace(raw))
+                                            {
+                                                inpaintMode = BordersRemover.BrickInpaintMode.Fill;
+                                                break;
+                                            }
 
+                                            raw = raw.Trim().Trim('"');          // in case value comes with quotes
+                                            raw = raw.Replace("–", "-").Replace("—", "-"); // normalize unicode dashes
+
+                                            // 1) numeric value support (0/1/2)
+                                            if (int.TryParse(raw, out var modeInt) &&
+                                                Enum.IsDefined(typeof(BordersRemover.BrickInpaintMode), modeInt))
+                                            {
+                                                inpaintMode = (BordersRemover.BrickInpaintMode)modeInt;
+                                                break;
+                                            }
+
+                                            // 2) normalize to compare
+                                            var key = raw.Replace(" ", "").Replace("-", "");
+
+                                            // 3) aliases
+                                            if (key.Equals("Fill", StringComparison.OrdinalIgnoreCase))
+                                                inpaintMode = BordersRemover.BrickInpaintMode.Fill;
+                                            else if (key.Equals("Telea", StringComparison.OrdinalIgnoreCase))
+                                                inpaintMode = BordersRemover.BrickInpaintMode.Telea;
+                                            else if (key.Equals("NS", StringComparison.OrdinalIgnoreCase))
+                                                inpaintMode = BordersRemover.BrickInpaintMode.NS;
+                                            else
+                                            {
+                                                // 4) direct enum parse fallback (case-insensitive)
+                                                if (!Enum.TryParse(raw, ignoreCase: true, out inpaintMode))
+                                                    inpaintMode = BordersRemover.BrickInpaintMode.Fill;
+                                            }
+
+                                            break;
+                                        case "inpaintRadius":
+                                            inpaintRadius = SafeDouble(kv.Value, inpaintRadius);
+                                            break;
+                                        case "borderColorTolerance":
+                                            borderColorTolerance = SafeDouble(kv.Value, borderColorTolerance);
+                                            break;
+                                        case "autoMaxBorderDepthFrac":
+                                            autoMaxBorderDepthFrac = SafeBool(kv.Value, autoMaxBorderDepthFrac);
+                                            break;
+                                        case "maxBorderDepthFracLeft":
+                                            maxBorderDepthsFrac.Left = SafeDouble(kv.Value, maxBorderDepthsFrac.Left);
+                                            break;
+                                        case "maxBorderDepthFracRight":
+                                            maxBorderDepthsFrac.Right = SafeDouble(kv.Value, maxBorderDepthsFrac.Right);
+                                            break;
+                                        case "maxBorderDepthFracTop":
+                                            maxBorderDepthsFrac.Top = SafeDouble(kv.Value, maxBorderDepthsFrac.Top);
+                                            break;
+                                        case "maxBorderDepthFracBottom":
+                                            maxBorderDepthsFrac.Bottom = SafeDouble(kv.Value, maxBorderDepthsFrac.Bottom);
+                                            break;
+                                        case "seedContrastStrictness":
+                                            seedContrastStrictness = SafeDouble(kv.Value, seedContrastStrictness);
+                                            break;
+                                        case "seedBrightnessStrictness":
+                                            seedBrightnessStrictness = SafeDouble(kv.Value, seedBrightnessStrictness);
+                                            break;
+                                        case "textureAllowance":
+                                            textureAllowance = SafeDouble(kv.Value, textureAllowance);
+                                            break;
+                                        case "kInterpolation":
+                                            kInterpolation = SafeInt(kv.Value, kInterpolation);
+                                            break;
                                         default:
                                             // ignore unknown key
                                             break;
@@ -953,17 +1049,33 @@ namespace ImgViewer.Models
                                                 );
                                                 break;
                                             case "By Contrast":
-                                                //return RemoveBordersByRowColWhite(src,
-                                                //        threshFrac: treshFrac,
-                                                //        contrastThr: contrastThr,
-                                                //        centralSample: centralSample,
-                                                //        maxRemoveFrac: maxRemoveFrac
-                                                //    );
-                                                return BordersRemover.RemoveBorders_LabBricks(src);
+                                                return RemoveBordersByRowColWhite(src,
+                                                        threshFrac: treshFrac,
+                                                        contrastThr: contrastThr,
+                                                        centralSample: centralSample,
+                                                        maxRemoveFrac: maxRemoveFrac
+                                                    );
                                                 break;
                                             case "Manual":
 
                                                 return RemoveBorders_Manual(src, top, bottom, left, right, applyManualCut, manualCutDebug);
+                                                break;
+                                            case "Integral":
+                                                return RemoveBorders_Integral(token,
+                                                        batchProcessing,
+                                                        src,
+                                                        brickThickness,
+                                                        borderColorTolerance,
+                                                        safetyOffsetPx,
+                                                        inpaintMode,
+                                                        inpaintRadius,
+                                                        autoMaxBorderDepthFrac,
+                                                        maxBorderDepthsFrac,
+                                                        seedContrastStrictness,
+                                                        seedBrightnessStrictness,
+                                                        textureAllowance,
+                                                        kInterpolation,
+                                                        null);
                                                 break;
 
                                         }
@@ -1358,6 +1470,62 @@ namespace ImgViewer.Models
             return src.Clone();
         }
 
+        private Mat RemoveBorders_Integral(CancellationToken token,
+                                                        bool batchProcessing,
+                                                        Mat src, int brickThickness,
+                                                        double borderColorTolerance,
+                                                        int safetyOffsetPx,
+                                                        BordersRemover.BrickInpaintMode inpaintMode,
+                                                        double inpaintRadius,
+                                                        bool autoMaxBorderDepthFrac,
+                                                        BordersRemover.MaxBorderDepthsFrac maxBorderDepthsFrac,
+                                                        double seedContrastStrictness,
+                                                        double seedBrightnessStrictness,
+                                                        double textureAllowance,
+                                                        int kInterpolation,
+                                                        Scalar? fillColor = null)
+        {
+            
+            try
+            {
+                Mat result = new Mat();
+                result = BordersRemover.RemoveBorders_LabBricks(token, src, brickThickness,
+                                                        borderColorTolerance,
+                                                        safetyOffsetPx,
+                                                        inpaintMode,
+                                                        inpaintRadius,
+                                                        autoMaxBorderDepthFrac,
+                                                        maxBorderDepthsFrac,
+                                                        seedContrastStrictness,
+                                                        seedBrightnessStrictness,
+                                                        textureAllowance,
+                                                        kInterpolation,
+                                                        fillColor);
+                return result;
+            }
+            catch (OperationCanceledException) when (!batchProcessing)
+            {
+#if DEBUG
+                Debug.WriteLine("Document Detection cancelled (UI)!");
+#endif
+                return src.Clone();
+            }
+            catch (OperationCanceledException)
+            {
+#if DEBUG
+                Debug.WriteLine("Integral Border Removal cancelled!");
+#endif      
+                throw;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"Error in ApplyCommand: {ex}");
+#endif
+                return src.Clone();
+            }
+        }
+
         private Scalar GetBgColor(Mat src)
         {
             var bgScalar = Scalar.All(0);
@@ -1477,12 +1645,16 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
+#if DEBUG
                 Debug.WriteLine("Manual Cut cancelled!");
+#endif  
                 return src.Clone();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(ex);
+#if DEBUG
+                Debug.WriteLine($"Despeckle failed: {ex}");
+#endif
                 return src.Clone();
             }
         }

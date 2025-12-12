@@ -16,7 +16,7 @@ namespace ImgViewer.Models
         {
             Fill,           // старое поведение: просто залить цветом страницы
             Telea,          // Cv2.Inpaint(..., InpaintMethod.Telea)
-            NavierStokes    // Cv2.Inpaint(..., InpaintMethod.NavierStokes)
+            NS    // Cv2.Inpaint(..., InpaintMethod.NavierStokes)
         }
 
 
@@ -1219,55 +1219,369 @@ namespace ImgViewer.Models
             return (strongBorder, Lmean, Amean, Bmean, LstdLocal, distToPage);
         }
 
+        private enum BorderSide { Left, Right, Top, Bottom }
+
+        private static bool TryComputeSideBorderReference(CancellationToken token,
+            BorderSide side,
+            Mat L, Mat A, Mat B,
+            int rows, int cols,
+            double pageL, double pageA, double pageB,
+            double colorDistStrongThr,
+            double LDiffStrongThr,
+            double textureThr,
+            int probeBrick,
+            out double refL, out double refA, out double refB, out double baseDiff)
+        {
+            refL = refA = refB = baseDiff = 0;
+
+            int edgeDepth = 3; // small strip at the very edge for reference
+            edgeDepth = Math.Min(edgeDepth, (side == BorderSide.Left || side == BorderSide.Right) ? cols : rows);
+            if (edgeDepth <= 0) return false;
+
+            // weaker seeding than strongBorder (for low-contrast borders)
+            double weakSeedDist = Math.Max(3.5, colorDistStrongThr * 0.45);
+            double weakSeedLDiff = Math.Max(2.0, LDiffStrongThr * 0.35);
+            double texCap = textureThr * 1.25;
+
+            double sumL = 0, sumA = 0, sumB = 0, sumDiff = 0;
+            int accept = 0, total = 0;
+
+            if (side == BorderSide.Left || side == BorderSide.Right)
+            {
+                token.ThrowIfCancellationRequested();
+                int x = (side == BorderSide.Left) ? 0 : Math.Max(0, cols - edgeDepth);
+
+                for (int y0 = 0; y0 < rows; y0 += probeBrick)
+                {
+                    int y1 = Math.Min(rows, y0 + probeBrick);
+                    int bandH = y1 - y0;
+                    if (bandH <= 0) continue;
+
+                    var rect = new Rect(x, y0, edgeDepth, bandH);
+
+                    var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                        EvaluateBrickLab(L, A, B, rect, pageL, pageA, pageB, colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                    total++;
+
+                    bool seedCandidate =
+                        (strongBorder || distToPage >= weakSeedDist || Math.Abs(Lm - pageL) >= weakSeedLDiff) &&
+                        (Lsigma <= texCap);
+
+                    if (seedCandidate)
+                    {
+                        accept++;
+                        sumL += Lm; sumA += Am; sumB += Bm;
+                        sumDiff += distToPage;
+                    }
+                }
+            }
+            else
+            {
+                int y = (side == BorderSide.Top) ? 0 : Math.Max(0, rows - edgeDepth);
+
+                for (int x0 = 0; x0 < cols; x0 += probeBrick)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int x1 = Math.Min(cols, x0 + probeBrick);
+                    int bandW = x1 - x0;
+                    if (bandW <= 0) continue;
+
+                    var rect = new Rect(x0, y, bandW, edgeDepth);
+
+                    var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                        EvaluateBrickLab(L, A, B, rect, pageL, pageA, pageB, colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                    total++;
+
+                    bool seedCandidate =
+                        (strongBorder || distToPage >= weakSeedDist || Math.Abs(Lm - pageL) >= weakSeedLDiff) &&
+                        (Lsigma <= texCap);
+
+                    if (seedCandidate)
+                    {
+                        accept++;
+                        sumL += Lm; sumA += Am; sumB += Bm;
+                        sumDiff += distToPage;
+                    }
+                }
+            }
+
+            // Need enough accepted bricks so a single stamp/text corner doesn't become "the border ref"
+            int minAccept = Math.Max(4, total / 8);
+            if (accept < minAccept) return false;
+
+            refL = sumL / accept;
+            refA = sumA / accept;
+            refB = sumB / accept;
+            baseDiff = Math.Max(4.0, sumDiff / accept);
+            return true;
+        }
+
+        private static int EstimateMaxBorderDepthForSide(CancellationToken token,
+            BorderSide side,
+            Mat L, Mat A, Mat B,
+            int rows, int cols,
+            double pageL, double pageA, double pageB,
+            double colorDistStrongThr,
+            double LDiffStrongThr,
+            double textureThr,
+            double bordersColorTolerance,
+            int brickThickness,
+            int maxDepthCapPx)
+        {
+            // “medium brick thickness” probe (independent from UI precision)
+            int probeBrick = Math.Max(12, Math.Min(48, brickThickness * 3));
+
+            if (maxDepthCapPx <= 0)
+                maxDepthCapPx = (side == BorderSide.Left || side == BorderSide.Right) ? cols / 2 : rows / 2;
+
+            maxDepthCapPx = Math.Max(brickThickness, Math.Min(maxDepthCapPx,
+                (side == BorderSide.Left || side == BorderSide.Right) ? cols / 2 : rows / 2));
+
+            if (!TryComputeSideBorderReference(token,
+                    side, L, A, B, rows, cols,
+                    pageL, pageA, pageB,
+                    colorDistStrongThr, LDiffStrongThr, textureThr,
+                    probeBrick,
+                    out double refL, out double refA, out double refB, out double baseDiff))
+            {
+                // If we cannot even seed a reference safely — keep cap small (prevents “eating” handwriting)
+                return Math.Max(brickThickness, Math.Min(maxDepthCapPx, probeBrick));
+            }
+
+            // tolerance: allow border to drift (gradient / uneven lighting)
+            // IMPORTANT: add a floor, otherwise “gray border” baseDiff is small and tolerance becomes too strict.
+            double allowedDelta = 8.0 + baseDiff * bordersColorTolerance;
+
+            // A weaker “still border-ish” check (in addition to ref distance)
+            double weakStillBorderDist = Math.Max(3.0, baseDiff * 0.35);
+            double texCap = textureThr * 1.25;
+
+            // coverage threshold: how much of the side must look “border-ish” at this depth
+            double coverageThr = 0.20 + (1.0 - bordersColorTolerance) * 0.15; // ~0.20..0.35
+
+            // depth step (coarse) – we only estimate maxDepth, not build mask here
+            int depthStep = Math.Max(1, Math.Min(6, probeBrick / 8));
+
+            int maxGap = (bordersColorTolerance < 0.3) ? 0 : (bordersColorTolerance < 0.6 ? 1 : 2);
+
+            int lastGood = 0;
+            int gapRun = 0;
+
+            if (side == BorderSide.Left || side == BorderSide.Right)
+            {
+                for (int d = 0; d < maxDepthCapPx; d += depthStep)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int borderCnt = 0, totalCnt = 0;
+
+                    int x = (side == BorderSide.Left) ? d : (cols - d - depthStep);
+                    x = Math.Max(0, Math.Min(cols - depthStep, x));
+
+                    for (int y0 = 0; y0 < rows; y0 += probeBrick)
+                    {
+                        int y1 = Math.Min(rows, y0 + probeBrick);
+                        int bandH = y1 - y0;
+                        if (bandH <= 0) continue;
+
+                        var rect = new Rect(x, y0, depthStep, bandH);
+
+                        var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                            EvaluateBrickLab(L, A, B, rect, pageL, pageA, pageB, colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                        totalCnt++;
+
+                        double dLRef = Lm - refL;
+                        double daRef = Am - refA;
+                        double dbRef = Bm - refB;
+                        double distToRef = Math.Sqrt(dLRef * dLRef + daRef * daRef + dbRef * dbRef);
+
+                        bool borderish =
+                            (Lsigma <= texCap) &&
+                            (strongBorder || distToRef <= allowedDelta || distToPage >= weakStillBorderDist);
+
+                        if (borderish) borderCnt++;
+                    }
+
+                    double coverage = (totalCnt > 0) ? (borderCnt / (double)totalCnt) : 0.0;
+
+                    if (coverage >= coverageThr)
+                    {
+                        lastGood = d + depthStep;
+                        gapRun = 0;
+                    }
+                    else if (lastGood > 0)
+                    {
+                        gapRun++;
+                        if (gapRun > maxGap) break;
+                    }
+                }
+            }
+            else
+            {
+                for (int d = 0; d < maxDepthCapPx; d += depthStep)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int borderCnt = 0, totalCnt = 0;
+
+                    int y = (side == BorderSide.Top) ? d : (rows - d - depthStep);
+                    y = Math.Max(0, Math.Min(rows - depthStep, y));
+
+                    for (int x0 = 0; x0 < cols; x0 += probeBrick)
+                    {
+                        int x1 = Math.Min(cols, x0 + probeBrick);
+                        int bandW = x1 - x0;
+                        if (bandW <= 0) continue;
+
+                        var rect = new Rect(x0, y, bandW, depthStep);
+
+                        var (strongBorder, Lm, Am, Bm, Lsigma, distToPage) =
+                            EvaluateBrickLab(L, A, B, rect, pageL, pageA, pageB, colorDistStrongThr, LDiffStrongThr, textureThr);
+
+                        totalCnt++;
+
+                        double dLRef = Lm - refL;
+                        double daRef = Am - refA;
+                        double dbRef = Bm - refB;
+                        double distToRef = Math.Sqrt(dLRef * dLRef + daRef * daRef + dbRef * dbRef);
+
+                        bool borderish =
+                            (Lsigma <= texCap) &&
+                            (strongBorder || distToRef <= allowedDelta || distToPage >= weakStillBorderDist);
+
+                        if (borderish) borderCnt++;
+                    }
+
+                    double coverage = (totalCnt > 0) ? (borderCnt / (double)totalCnt) : 0.0;
+
+                    if (coverage >= coverageThr)
+                    {
+                        lastGood = d + depthStep;
+                        gapRun = 0;
+                    }
+                    else if (lastGood > 0)
+                    {
+                        gapRun++;
+                        if (gapRun > maxGap) break;
+                    }
+                }
+            }
+
+            lastGood = Math.Max(brickThickness, Math.Min(maxDepthCapPx, lastGood));
+            return lastGood;
+        }
+
+        private static void ComputeMaxBorderDepthHorizontal(CancellationToken token,
+            Mat L, Mat A, Mat B,
+            int rows, int cols,
+            double pageL, double pageA, double pageB,
+            double colorDistStrongThr,
+            double LDiffStrongThr,
+            double textureThr,
+            double bordersColorTolerance,
+            int brickThickness,
+            int maxDepthCapX,
+            out int maxLeft,
+            out int maxRight)
+        {
+            maxLeft = EstimateMaxBorderDepthForSide(token,
+                BorderSide.Left, L, A, B, rows, cols,
+                pageL, pageA, pageB,
+                colorDistStrongThr, LDiffStrongThr, textureThr,
+                bordersColorTolerance,
+                brickThickness,
+                maxDepthCapX);
+
+            maxRight = EstimateMaxBorderDepthForSide(token,
+                BorderSide.Right, L, A, B, rows, cols,
+                pageL, pageA, pageB,
+                colorDistStrongThr, LDiffStrongThr, textureThr,
+                bordersColorTolerance,
+                brickThickness,
+                maxDepthCapX);
+        }
+
+        private static void ComputeMaxBorderDepthVertical(CancellationToken token,
+            Mat L, Mat A, Mat B,
+            int rows, int cols,
+            double pageL, double pageA, double pageB,
+            double colorDistStrongThr,
+            double LDiffStrongThr,
+            double textureThr,
+            double bordersColorTolerance,
+            int brickThickness,
+            int maxDepthCapY,
+            out int maxTop,
+            out int maxBottom)
+        {
+            maxTop = EstimateMaxBorderDepthForSide(token,
+                BorderSide.Top, L, A, B, rows, cols,
+                pageL, pageA, pageB,
+                colorDistStrongThr, LDiffStrongThr, textureThr,
+                bordersColorTolerance,
+                brickThickness,
+                maxDepthCapY);
+
+            maxBottom = EstimateMaxBorderDepthForSide(token,
+                BorderSide.Bottom, L, A, B, rows, cols,
+                pageL, pageA, pageB,
+                colorDistStrongThr, LDiffStrongThr, textureThr,
+                bordersColorTolerance,
+                brickThickness,
+                maxDepthCapY);
+        }
+
+
         /// <summary>
         /// Максимальная глубина поиска бордюра слева/справа (по оси X).
         /// Для горизонтальных бордюров используем долю от ширины.
         /// </summary>
-        private static int ComputeMaxBorderDepthHorizontal(int cols, int brickThickness,
-                                                           double maxBorderFraction = 0.40,
-                                                           int maxBricks = 60)
-        {
-            if (brickThickness <= 0)
-                brickThickness = 8;
+        //private static int ComputeMaxBorderDepthHorizontal(int cols, int brickThickness,
+        //                                                   double maxBorderFraction = 0.40,
+        //                                                   int maxBricks = 60)
+        //{
+        //    if (brickThickness <= 0)
+        //        brickThickness = 8;
 
-            // Не лезем глубже, чем maxBorderFraction от ширины
-            int maxDepthBySize = (int)Math.Round(cols * maxBorderFraction);
+        //    // Не лезем глубже, чем maxBorderFraction от ширины
+        //    int maxDepthBySize = (int)Math.Round(cols * maxBorderFraction);
 
-            // И не лезем глубже, чем maxBricks "кирпичей" по глубине
-            int maxDepthByBricks = brickThickness * maxBricks;
+        //    // И не лезем глубже, чем maxBricks "кирпичей" по глубине
+        //    int maxDepthByBricks = brickThickness * maxBricks;
 
-            int maxDepth = Math.Max(
-                brickThickness,                     // минимум: один кирпич
-                Math.Min(maxDepthBySize, maxDepthByBricks)
-            );
+        //    int maxDepth = Math.Max(
+        //        brickThickness,                     // минимум: один кирпич
+        //        Math.Min(maxDepthBySize, maxDepthByBricks)
+        //    );
 
-            return maxDepth;
-        }
+        //    return maxDepth;
+        //}
 
-        /// <summary>
-        /// Максимальная глубина поиска бордюра сверху/снизу (по оси Y).
-        /// Для вертикальных бордюров используем долю от высоты.
-        /// </summary>
-        private static int ComputeMaxBorderDepthVertical(int rows, int brickThickness,
-                                                         double maxBorderFraction = 0.25,
-                                                         int maxBricks = 14)
-        {
-            if (brickThickness <= 0)
-                brickThickness = 8;
+        ///// <summary>
+        ///// Максимальная глубина поиска бордюра сверху/снизу (по оси Y).
+        ///// Для вертикальных бордюров используем долю от высоты.
+        ///// </summary>
+        //private static int ComputeMaxBorderDepthVertical(int rows, int brickThickness,
+        //                                                 double maxBorderFraction = 0.25,
+        //                                                 int maxBricks = 14)
+        //{
+        //    if (brickThickness <= 0)
+        //        brickThickness = 8;
 
-            // Не лезем глубже, чем maxBorderFraction от высоты
-            int maxDepthBySize = (int)Math.Round(rows * maxBorderFraction);
+        //    // Не лезем глубже, чем maxBorderFraction от высоты
+        //    int maxDepthBySize = (int)Math.Round(rows * maxBorderFraction);
 
-            // И не лезем глубже, чем maxBricks "кирпичей" по глубине
-            int maxDepthByBricks = brickThickness * maxBricks;
+        //    // И не лезем глубже, чем maxBricks "кирпичей" по глубине
+        //    int maxDepthByBricks = brickThickness * maxBricks;
 
-            int maxDepth = Math.Max(
-                brickThickness,
-                Math.Min(maxDepthBySize, maxDepthByBricks)
-            );
+        //    int maxDepth = Math.Max(
+        //        brickThickness,
+        //        Math.Min(maxDepthBySize, maxDepthByBricks)
+        //    );
 
-            return maxDepth;
-        }
+        //    return maxDepth;
+        //}
 
         private static void SmoothDepthArray(int[] depth, int length, int kernelRadius)
         {
@@ -1313,14 +1627,31 @@ namespace ImgViewer.Models
             }
         }
 
-        public static Mat RemoveBorders_LabBricks(
-    Mat src,
-    int brickThickness = 4,
-    double bordersColorTolerance = 0.1,
-    Scalar? fillColor = null,
-    BrickInpaintMode inpaintMode = BrickInpaintMode.Fill,
-    double inpaintRadius = 0.0)
+        public struct MaxBorderDepthsFrac
         {
+            public double Left;
+            public double Right;
+            public double Top;
+            public double Bottom;
+        }
+
+        public static Mat RemoveBorders_LabBricks(CancellationToken token,
+    Mat src,
+    int brickThickness,
+    double bordersColorTolerance,
+    int safetyOffsetPx,
+    BrickInpaintMode inpaintMode,
+    double inpaintRadius,
+    bool maxBordersDepthsAutoDetection,
+    MaxBorderDepthsFrac maxBorderDepthsFrac,
+    double seedContrastFactor,
+    double seedBrightnessFactor,
+    double textureAllowanceFactor,
+    int kInterpolation,
+    Scalar? fillColor = null)
+        {
+            Debug.WriteLine($"Bricj thickness: {brickThickness}");
+
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
 
@@ -1382,24 +1713,75 @@ namespace ImgViewer.Models
             Cv2.MeanStdDev(innerL, out var meanL, out var stdL);
             Scalar meanA = Cv2.Mean(innerA);
             Scalar meanB = Cv2.Mean(innerB);
-
+            
             double pageL = meanL.Val0;
             double pageA = meanA.Val0;
             double pageB = meanB.Val0;
             double pageLStd = Math.Max(4.0, stdL.Val0);
 
+            // TODO: MOVE THIS PARAMETRS OUT TO UI!!!!!!!!!!!!!!!!!!!!!
+
             // "сильный" бордюр (seed)
-            double colorDistStrongThr = 8.0 + 0.3 * pageLStd;
-            double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd);
-            double textureThr = pageLStd * 0.7;
+            //double colorDistStrongThr = 8.0 + 0.3 * pageLStd;
+            //double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd);
+            //double textureThr = pageLStd * 0.7;
+
+            seedContrastFactor = Math.Max(0.3, Math.Min(3.0, seedContrastFactor));
+            seedBrightnessFactor = Math.Max(0.3, Math.Min(3.0, seedBrightnessFactor));
+            textureAllowanceFactor = Math.Max(0.3, Math.Min(3.0, textureAllowanceFactor));
+
+            double colorDistStrongThr = (8.0 + 0.3 * pageLStd) * seedContrastFactor;
+            double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd) * seedBrightnessFactor;
+            double textureThr = (pageLStd * 0.7) * textureAllowanceFactor;
 
             //int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
             //maxDepth = Math.Max(brickThickness, maxDepth);
             //int maxDepth = ComputeMaxBorderDepth(rows, cols, brickThickness);
-            int maxDepthX = ComputeMaxBorderDepthHorizontal(cols, brickThickness);
-            int maxDepthY = ComputeMaxBorderDepthVertical(rows, brickThickness);
-            //maxDepthX = 600;
-            //maxDepthY = 600;
+            //int maxDepthX = ComputeMaxBorderDepthHorizontal(cols, brickThickness);
+            //int maxDepthY = ComputeMaxBorderDepthVertical(rows, brickThickness);
+
+            //int maxDepthCapX = ComputeMaxBorderDepthHorizontal(cols, brickThickness); // keep as safety cap
+            //int maxDepthCapY = ComputeMaxBorderDepthVertical(rows, brickThickness);   // keep as safety cap
+            int maxDepthCapX = cols / 2;
+            int maxDepthCapY = rows / 2;
+
+            int maxDepthLeftBorder      =   (int)(cols * maxBorderDepthsFrac.Left);
+            int maxDepthRightBorder     =   (int)(cols * maxBorderDepthsFrac.Right);
+            int maxDepthBottomBorder    =   (int)(rows * maxBorderDepthsFrac.Bottom);
+            int maxDepthTopBorder       =   (int)(rows * maxBorderDepthsFrac.Top);
+
+            if (maxBordersDepthsAutoDetection)
+            {
+                ComputeMaxBorderDepthHorizontal(token,
+                L, A, B, rows, cols,
+                pageL, pageA, pageB,
+                colorDistStrongThr, LDiffStrongThr, textureThr,
+                bordersColorTolerance,
+                8,                                                    // possibly use brickThickness here?
+                maxDepthCapX,
+                out int maxDepthLeft,
+                out int maxDepthRight);
+                
+
+                ComputeMaxBorderDepthVertical(token,
+                    L, A, B, rows, cols,
+                    pageL, pageA, pageB,
+                    colorDistStrongThr, LDiffStrongThr, textureThr,
+                    bordersColorTolerance,
+                    8,                                                  // possibly use brickThickness here?
+                    maxDepthCapY,
+                    out int maxDepthTop,
+                    out int maxDepthBottom);
+
+                maxDepthLeftBorder = maxDepthLeft;
+                maxDepthRightBorder = maxDepthRight;
+                maxDepthTopBorder = maxDepthTop;
+                maxDepthBottomBorder = maxDepthBottom;
+            }
+            
+
+
+            
 
             // Максимальное количество подряд "сомнительных" полос внутри бордюра (для градиента)
             int maxNonBorderRun = (bordersColorTolerance < 0.3)
@@ -1409,16 +1791,18 @@ namespace ImgViewer.Models
             // 3) Маска бордюра
             using var borderMask = new Mat(rows, cols, MatType.CV_8UC1, Scalar.All(0));
 
-            int shrink = Math.Max(5, brickThickness / 5);
-            shrink = 0;
+            int shrink = safetyOffsetPx;
             // =============== 4) LEFT / RIGHT – кирпичи высотой brickThickness ===============
 
             for (int y0 = 0; y0 < rows; y0 += brickThickness)
             {
+                token.ThrowIfCancellationRequested();
                 int y1 = Math.Min(rows, y0 + brickThickness);
                 int bandH = y1 - y0;
 
-                int maxSearchX = Math.Min(cols / 2, maxDepthX);
+                //int maxSearchX = Math.Min(cols / 2, maxDepthX);
+                int maxSearchXLeft = Math.Min(cols / 2, maxDepthLeftBorder);
+                int maxSearchXRight = Math.Min(cols / 2, maxDepthRightBorder);
 
                 // ----- LEFT -----
                 int lastBorderX = -1;
@@ -1428,7 +1812,7 @@ namespace ImgViewer.Models
                 bool hasLeftRef = false;
                 double leftRefL = 0, leftRefA = 0, leftRefB = 0, leftBaseDiff = 0;
 
-                for (int x = 0; x < maxSearchX; x++)
+                for (int x = 0; x < maxSearchXLeft; x++)
                 {
                     var rect = new Rect(x, y0, 1, bandH);
 
@@ -1506,7 +1890,7 @@ namespace ImgViewer.Models
                 double rightRefL = 0, rightRefA = 0, rightRefB = 0, rightBaseDiff = 0;
 
                 int startX = cols - 1;
-                int minX = Math.Max(0, cols - maxSearchX);
+                int minX = Math.Max(0, cols - maxSearchXRight);
 
                 for (int x = startX; x >= minX; x--)
                 {
@@ -1584,10 +1968,13 @@ namespace ImgViewer.Models
 
             for (int x0 = 0; x0 < cols; x0 += brickThickness)
             {
+                token.ThrowIfCancellationRequested();
                 int x1 = Math.Min(cols, x0 + brickThickness);
                 int bandW = x1 - x0;
 
-                int maxSearchY = Math.Min(rows / 2, maxDepthY);
+                //int maxSearchY = Math.Min(rows / 2, maxDepthY);
+                int maxSearchYTop = Math.Min(rows / 2, maxDepthTopBorder);
+                int maxSearchYBottom = Math.Min(rows / 2, maxDepthBottomBorder);
 
                 // ----- TOP -----
                 int lastBorderY = -1;
@@ -1596,7 +1983,7 @@ namespace ImgViewer.Models
                 bool hasTopRef = false;
                 double topRefL = 0, topRefA = 0, topRefB = 0, topBaseDiff = 0;
 
-                for (int y = 0; y < maxSearchY; y++)
+                for (int y = 0; y < maxSearchYTop; y++)
                 {
                     var rect = new Rect(x0, y, bandW, 1);
 
@@ -1672,7 +2059,7 @@ namespace ImgViewer.Models
                 double bottomRefL = 0, bottomRefA = 0, bottomRefB = 0, bottomBaseDiff = 0;
 
                 int startY = rows - 1;
-                int minY = Math.Max(0, rows - maxSearchY);
+                int minY = Math.Max(0, rows - maxSearchYBottom);
 
                 for (int y = startY; y >= minY; y--)
                 {
@@ -1763,82 +2150,77 @@ namespace ImgViewer.Models
             //SmoothDepthByNeighborBricks(topDepth, cols, brickThickness, topkNeighbors);
             //SmoothDepthByNeighborBricks(bottomDepth, cols, brickThickness, bottomkNeighbors);
 
-            bool interpolate = true;
 
-            if (interpolate)
+            int kNeighborsBricks = kInterpolation; // <-- expose to UI
+
+            // 1) downsample per-pixel -> per-brick (max over brick span)
+            var leftBricks = DownsampleMaxByBricks(leftDepth, rows, brickThickness);
+            var rightBricks = DownsampleMaxByBricks(rightDepth, rows, brickThickness);
+            var topBricks = DownsampleMaxByBricks(topDepth, cols, brickThickness);
+            var bottomBricks = DownsampleMaxByBricks(bottomDepth, cols, brickThickness);
+
+            // 2) smooth in brick-space using k neighbors
+            SmoothDepthBricksInPlace(leftBricks, kNeighborsBricks);
+            SmoothDepthBricksInPlace(rightBricks, kNeighborsBricks);
+            SmoothDepthBricksInPlace(topBricks, kNeighborsBricks);
+            SmoothDepthBricksInPlace(bottomBricks, kNeighborsBricks);
+
+            // 3) upsample back to per-pixel arrays (overwrite)
+            UpsampleBricksToPixels(leftBricks, leftDepth, rows, brickThickness);
+            UpsampleBricksToPixels(rightBricks, rightDepth, rows, brickThickness);
+            UpsampleBricksToPixels(topBricks, topDepth, cols, brickThickness);
+            UpsampleBricksToPixels(bottomBricks, bottomDepth, cols, brickThickness);
+
+
+            // 5.2) Строим borderMask по сглаженным глубинам
+            borderMask.SetTo(Scalar.All(0));
+
+            // LEFT / RIGHT по строкам
+            for (int y = 0; y < rows; y++)
             {
-                // k = number of neighbor BRICKS on each side
-                int kNeighborsBricks = 0; // <-- expose to UI
-
-                // 1) downsample per-pixel -> per-brick (max over brick span)
-                var leftBricks = DownsampleMaxByBricks(leftDepth, rows, brickThickness);
-                var rightBricks = DownsampleMaxByBricks(rightDepth, rows, brickThickness);
-                var topBricks = DownsampleMaxByBricks(topDepth, cols, brickThickness);
-                var bottomBricks = DownsampleMaxByBricks(bottomDepth, cols, brickThickness);
-
-                // 2) smooth in brick-space using k neighbors
-                SmoothDepthBricksInPlace(leftBricks, kNeighborsBricks);
-                SmoothDepthBricksInPlace(rightBricks, kNeighborsBricks);
-                SmoothDepthBricksInPlace(topBricks, kNeighborsBricks);
-                SmoothDepthBricksInPlace(bottomBricks, kNeighborsBricks);
-
-                // 3) upsample back to per-pixel arrays (overwrite)
-                UpsampleBricksToPixels(leftBricks, leftDepth, rows, brickThickness);
-                UpsampleBricksToPixels(rightBricks, rightDepth, rows, brickThickness);
-                UpsampleBricksToPixels(topBricks, topDepth, cols, brickThickness);
-                UpsampleBricksToPixels(bottomBricks, bottomDepth, cols, brickThickness);
-
-
-                // 5.2) Строим borderMask по сглаженным глубинам
-                borderMask.SetTo(Scalar.All(0));
-
-                // LEFT / RIGHT по строкам
-                for (int y = 0; y < rows; y++)
+                int wL = leftDepth[y];
+                if (wL > 0)
                 {
-                    int wL = leftDepth[y];
-                    if (wL > 0)
-                    {
-                        int w = Math.Min(wL, cols);
-                        var rectL = new Rect(0, y, w, 1);
-                        using var roiL = new Mat(borderMask, rectL);
-                        roiL.SetTo(255);
-                    }
-
-                    int wR = rightDepth[y];
-                    if (wR > 0)
-                    {
-                        int w = Math.Min(wR, cols);
-                        int xStart = Math.Max(0, cols - w);
-                        var rectR = new Rect(xStart, y, w, 1);
-                        using var roiR = new Mat(borderMask, rectR);
-                        roiR.SetTo(255);
-                    }
+                    int w = Math.Min(wL, cols);
+                    var rectL = new Rect(0, y, w, 1);
+                    using var roiL = new Mat(borderMask, rectL);
+                    roiL.SetTo(255);
                 }
 
-                // TOP / BOTTOM по колонкам
-                for (int x = 0; x < cols; x++)
+                int wR = rightDepth[y];
+                if (wR > 0)
                 {
-                    int hT = topDepth[x];
-                    if (hT > 0)
-                    {
-                        int h = Math.Min(hT, rows);
-                        var rectT = new Rect(x, 0, 1, h);
-                        using var roiT = new Mat(borderMask, rectT);
-                        roiT.SetTo(255);
-                    }
-
-                    int hB = bottomDepth[x];
-                    if (hB > 0)
-                    {
-                        int h = Math.Min(hB, rows);
-                        int yStart = Math.Max(0, rows - h);
-                        var rectB = new Rect(x, yStart, 1, h);
-                        using var roiB = new Mat(borderMask, rectB);
-                        roiB.SetTo(255);
-                    }
+                    int w = Math.Min(wR, cols);
+                    int xStart = Math.Max(0, cols - w);
+                    var rectR = new Rect(xStart, y, w, 1);
+                    using var roiR = new Mat(borderMask, rectR);
+                    roiR.SetTo(255);
                 }
             }
-            
+
+            // TOP / BOTTOM по колонкам
+            for (int x = 0; x < cols; x++)
+            {
+                int hT = topDepth[x];
+                if (hT > 0)
+                {
+                    int h = Math.Min(hT, rows);
+                    var rectT = new Rect(x, 0, 1, h);
+                    using var roiT = new Mat(borderMask, rectT);
+                    roiT.SetTo(255);
+                }
+
+                int hB = bottomDepth[x];
+                if (hB > 0)
+                {
+                    int h = Math.Min(hB, rows);
+                    int yStart = Math.Max(0, rows - h);
+                    var rectB = new Rect(x, yStart, 1, h);
+                    using var roiB = new Mat(borderMask, rectB);
+                    roiB.SetTo(255);
+                }
+            }
+
 
 
 
@@ -1874,7 +2256,6 @@ namespace ImgViewer.Models
             }
 
             Mat dst;
-
             // --- режим 1: старый Fill (просто залить бордюр цветом страницы) ---
             if (inpaintMode == BrickInpaintMode.Fill)
             {
@@ -1884,7 +2265,10 @@ namespace ImgViewer.Models
 
                 // 2) Небольшое размытие только в области бордюра,
                 //    чтобы сделать переход к странице мягким
+
                 double sigma = Math.Max(0.5, inpaintRadius); // можно подправить при желании
+                sigma = Math.Min(10.0, sigma);
+
                 if (sigma > 0.0)
                 {
                     using var blurred = dst.Clone();

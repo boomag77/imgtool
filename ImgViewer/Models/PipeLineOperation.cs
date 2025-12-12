@@ -279,6 +279,14 @@ namespace ImgViewer.Models
                     autoThreshFlagImmediate.PropertyChanged += AutoThreshFlag_PropertyChanged;
                 }
 
+                var autoMaxBorderDepthFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "autoMaxBorderDepthFrac");
+                if (autoMaxBorderDepthFlagImmediate != null)
+                {
+                    //ApplyAutoMaxBorderDepthVisibility(autoMaxBorderDepthFlagImmediate.BoolValue);
+                    autoMaxBorderDepthFlagImmediate.PropertyChanged -= AutoMaxBorderDepthFlag_PropertyChanged;
+                    autoMaxBorderDepthFlagImmediate.PropertyChanged += AutoMaxBorderDepthFlag_PropertyChanged;
+                }
+
                 var applyToLeftPageFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "applyToLeftPage");
                 if (applyToLeftPageFlagImmediate != null)
                 {
@@ -406,6 +414,7 @@ namespace ImgViewer.Models
                 }
             }
         }
+
 
         private void ApplyDeskewVisibility(string? selectedOption)
         {
@@ -574,8 +583,12 @@ namespace ImgViewer.Models
             var bordersAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
             bool isAuto = false;
             bool isManual = false;
+            bool isIntegral = false;
+            bool isByContrast = false;
             var autoThreshFlag = _parameters.FirstOrDefault(x => x.Key == "autoThresh");
             bool autoThresh = autoThreshFlag != null && autoThreshFlag.IsBool && autoThreshFlag.BoolValue;
+            var autoMaxBorderDepthFracFlag = _parameters.FirstOrDefault(x => x.Key == "autoMaxBorderDepthFrac");
+            bool autoMaxBorderDepthFrac = autoMaxBorderDepthFracFlag != null && autoMaxBorderDepthFracFlag.IsBool && autoMaxBorderDepthFracFlag.BoolValue;
             if (bordersAlgo != null)
             {
                 var opt = (bordersAlgo.SelectedOption ?? string.Empty).Trim();
@@ -583,6 +596,8 @@ namespace ImgViewer.Models
                 {
                     isAuto = opt.Equals("Auto", StringComparison.OrdinalIgnoreCase);
                     isManual = opt.Equals("Manual", StringComparison.OrdinalIgnoreCase);
+                    isIntegral = opt.Equals("Integral", StringComparison.OrdinalIgnoreCase);
+                    isByContrast = opt.Equals("By Contrast", StringComparison.OrdinalIgnoreCase);
                 }
                     
                 else
@@ -616,10 +631,7 @@ namespace ImgViewer.Models
                     case "contrastThr":
                     case "centralSample":
                     case "maxRemoveFrac":
-                        p.IsVisible = bordersAlgo != null
-                            ? (bordersAlgo.SelectedOption ?? "").Equals("By Contrast", StringComparison.OrdinalIgnoreCase)
-                                || bordersAlgo.SelectedIndex == 1
-                            : (selectedOption ?? "").Trim().Equals("By Contrast", StringComparison.OrdinalIgnoreCase);
+                        p.IsVisible = isByContrast;
                         break;
                     case "bgColor":
                     case "darkThreshold":
@@ -643,6 +655,25 @@ namespace ImgViewer.Models
                     case "applyToRightPage":
                         p.IsVisible = isManual;
                         break;
+                    case "seedContrastStrictness":
+                    case "seedBrightnessStrictness":
+                    case "textureAllowance":
+                    case "scanStepPx":
+                    case "inpaintRadius":
+                    case "inpaintMode":
+                    case "borderColorVariation":
+                    case "borderSafetyOffsetPx":
+                    case "autoMaxBorderDepthFrac":
+                    case "kInterpolation":
+                        p.IsVisible = isIntegral;
+                        break;
+                    case "maxBorderDepthFracLeft":
+                    case "maxBorderDepthFracRight":
+                    case "maxBorderDepthFracTop":
+                    case "maxBorderDepthFracBottom":
+                        p.IsVisible = isIntegral && !autoMaxBorderDepthFrac;
+                        break;
+
                     default:
                         p.IsVisible = true;
                         break;
@@ -771,6 +802,34 @@ namespace ImgViewer.Models
                 if (q.Key == "darkThreshold" || q.Key == "bgColor")
                 {
                     q.IsVisible = isAuto && !autoThresh;
+                }
+            }
+        }
+
+        private void AutoMaxBorderDepthFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            if (sender is not PipeLineParameter autoMaxBorderDepthFracParam) return;
+            // compute current algorithm -> isIntegral (same logic as ApplyBorderRemovalVisibility)
+            var bordersRemoveAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
+            bool isIntegral = false;
+            if (bordersRemoveAlgo != null)
+            {
+                var opt = (bordersRemoveAlgo.SelectedOption ?? string.Empty).Trim();
+                if (!string.IsNullOrEmpty(opt))
+                    isIntegral = opt.Equals("Integral", StringComparison.OrdinalIgnoreCase);
+                else
+                    isIntegral = bordersRemoveAlgo.SelectedIndex == 2;
+            }
+            bool autoMaxBorderDepthFrac = autoMaxBorderDepthFracParam.BoolValue;
+            foreach (var q in _parameters)
+            {
+                if (q.Key == "maxBorderDepthFracLeft" ||
+                    q.Key == "maxBorderDepthFracRight" ||
+                    q.Key == "maxBorderDepthFracTop" ||
+                    q.Key == "maxBorderDepthFracBottom")
+                {
+                    q.IsVisible = isIntegral && !autoMaxBorderDepthFrac;
                 }
             }
         }
