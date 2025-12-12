@@ -1269,12 +1269,54 @@ namespace ImgViewer.Models
             return maxDepth;
         }
 
+        private static void SmoothDepthArray(int[] depth, int length, int kernelRadius)
+        {
+            if (depth == null || length <= 0 || kernelRadius <= 0)
+                return;
 
+            var tmp = new double[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                int di = depth[i];
+                if (di <= 0)
+                {
+                    tmp[i] = 0;
+                    continue;
+                }
+
+                int start = Math.Max(0, i - kernelRadius);
+                int end = Math.Min(length - 1, i + kernelRadius);
+
+                double sum = 0;
+                int count = 0;
+
+                for (int j = start; j <= end; j++)
+                {
+                    int dj = depth[j];
+                    if (dj > 0)
+                    {
+                        sum += dj;
+                        count++;
+                    }
+                }
+
+                if (count > 0)
+                    tmp[i] = sum / count;
+                else
+                    tmp[i] = di;
+            }
+
+            for (int i = 0; i < length; i++)
+            {
+                depth[i] = (int)Math.Round(tmp[i]);
+            }
+        }
 
         public static Mat RemoveBorders_LabBricks(
     Mat src,
-    int brickThickness = 64,
-    double bordersColorTolerance = 0.9,
+    int brickThickness = 4,
+    double bordersColorTolerance = 0.1,
     Scalar? fillColor = null,
     BrickInpaintMode inpaintMode = BrickInpaintMode.Fill,
     double inpaintRadius = 0.0)
@@ -1303,6 +1345,13 @@ namespace ImgViewer.Models
             int cols = bgr.Cols;
             if (rows < 40 || cols < 40)
                 return bgr.Clone();
+
+            // interpolation arrays
+            int[] leftDepth = new int[rows];
+            int[] rightDepth = new int[rows];
+            int[] topDepth = new int[cols];
+            int[] bottomDepth = new int[cols];
+
 
             brickThickness = Math.Max(1, brickThickness);
 
@@ -1437,9 +1486,16 @@ namespace ImgViewer.Models
                 int wLeft = Math.Max(0, lastBorderX + 1 - shrink);
                 if (wLeft > 0)
                 {
-                    var rect = new Rect(0, y0, wLeft, bandH);
-                    using var roi = new Mat(borderMask, rect);
-                    roi.SetTo(255);
+                    //var rect = new Rect(0, y0, wLeft, bandH);
+                    //using var roi = new Mat(borderMask, rect);
+                    //roi.SetTo(255);
+                    // interate leftDepth array for later smoothing
+                    for (int y = y0; y < y1; y++)
+                    {
+                        if (y >= 0 && y < rows)
+                            leftDepth[y] = Math.Max(leftDepth[y], wLeft);
+                    }
+
                 }
 
                 // ----- RIGHT -----
@@ -1512,9 +1568,15 @@ namespace ImgViewer.Models
                 }
                 if (wRight > 0)
                 {
-                    var rect = new Rect(cols - wRight, y0, wRight, bandH);
-                    using var roi = new Mat(borderMask, rect);
-                    roi.SetTo(255);
+                    //var rect = new Rect(cols - wRight, y0, wRight, bandH);
+                    //using var roi = new Mat(borderMask, rect);
+                    //roi.SetTo(255);
+                    // interate rightDepth array for later smoothing
+                    for (int y = y0; y < y1; y++)
+                    {
+                        if (y >= 0 && y < rows)
+                            rightDepth[y] = Math.Max(rightDepth[y], wRight);
+                    }
                 }
             }
 
@@ -1590,9 +1652,16 @@ namespace ImgViewer.Models
                 int hTop = Math.Max(0, lastBorderY + 1 - shrink);
                 if (hTop > 0)
                 {
-                    var rect = new Rect(x0, 0, bandW, hTop);
-                    using var roi = new Mat(borderMask, rect);
-                    roi.SetTo(255);
+                    //var rect = new Rect(x0, 0, bandW, hTop);
+                    //using var roi = new Mat(borderMask, rect);
+                    //roi.SetTo(255);
+
+                    // interate topDepth array for later smoothing
+                    for (int x = x0; x < x1; x++)
+                    {
+                        if (x >= 0 && x < cols)
+                            topDepth[x] = Math.Max(topDepth[x], hTop);
+                    }
                 }
 
                 // ----- BOTTOM -----
@@ -1665,11 +1734,113 @@ namespace ImgViewer.Models
                 }
                 if (hBottom > 0)
                 {
-                    var rect = new Rect(x0, rows - hBottom, bandW, hBottom);
-                    using var roi = new Mat(borderMask, rect);
-                    roi.SetTo(255);
+                    //var rect = new Rect(x0, rows - hBottom, bandW, hBottom);
+                    //using var roi = new Mat(borderMask, rect);
+                    //roi.SetTo(255);
+                    // interate bottomDepth array for later smoothing
+                    for (int x = x0; x < x1; x++)
+                    {
+                        if (x >= 0 && x < cols)
+                            bottomDepth[x] = Math.Max(bottomDepth[x], hBottom);
+                    }
                 }
             }
+
+            // 5.1) Сглаживаем профили глубины (integral k-interpolation)
+            //int smoothK = Math.Max(1, brickThickness / 5); // можно вынести в параметр
+
+            //SmoothDepthArray(leftDepth, rows, smoothK);
+            //SmoothDepthArray(rightDepth, rows, smoothK);
+            //SmoothDepthArray(topDepth, cols, smoothK);
+            //SmoothDepthArray(bottomDepth, cols, smoothK);
+
+            //int leftkNeighbors = 3; // <-- in BRICKS (UI parameter)
+            //int rightkNeighbors = 3;
+            //int topkNeighbors = 3;
+            //int bottomkNeighbors = 3;
+            //SmoothDepthByNeighborBricks(leftDepth, rows, brickThickness, leftkNeighbors);
+            //SmoothDepthByNeighborBricks(rightDepth, rows, brickThickness, rightkNeighbors);
+            //SmoothDepthByNeighborBricks(topDepth, cols, brickThickness, topkNeighbors);
+            //SmoothDepthByNeighborBricks(bottomDepth, cols, brickThickness, bottomkNeighbors);
+
+            bool interpolate = true;
+
+            if (interpolate)
+            {
+                // k = number of neighbor BRICKS on each side
+                int kNeighborsBricks = 0; // <-- expose to UI
+
+                // 1) downsample per-pixel -> per-brick (max over brick span)
+                var leftBricks = DownsampleMaxByBricks(leftDepth, rows, brickThickness);
+                var rightBricks = DownsampleMaxByBricks(rightDepth, rows, brickThickness);
+                var topBricks = DownsampleMaxByBricks(topDepth, cols, brickThickness);
+                var bottomBricks = DownsampleMaxByBricks(bottomDepth, cols, brickThickness);
+
+                // 2) smooth in brick-space using k neighbors
+                SmoothDepthBricksInPlace(leftBricks, kNeighborsBricks);
+                SmoothDepthBricksInPlace(rightBricks, kNeighborsBricks);
+                SmoothDepthBricksInPlace(topBricks, kNeighborsBricks);
+                SmoothDepthBricksInPlace(bottomBricks, kNeighborsBricks);
+
+                // 3) upsample back to per-pixel arrays (overwrite)
+                UpsampleBricksToPixels(leftBricks, leftDepth, rows, brickThickness);
+                UpsampleBricksToPixels(rightBricks, rightDepth, rows, brickThickness);
+                UpsampleBricksToPixels(topBricks, topDepth, cols, brickThickness);
+                UpsampleBricksToPixels(bottomBricks, bottomDepth, cols, brickThickness);
+
+
+                // 5.2) Строим borderMask по сглаженным глубинам
+                borderMask.SetTo(Scalar.All(0));
+
+                // LEFT / RIGHT по строкам
+                for (int y = 0; y < rows; y++)
+                {
+                    int wL = leftDepth[y];
+                    if (wL > 0)
+                    {
+                        int w = Math.Min(wL, cols);
+                        var rectL = new Rect(0, y, w, 1);
+                        using var roiL = new Mat(borderMask, rectL);
+                        roiL.SetTo(255);
+                    }
+
+                    int wR = rightDepth[y];
+                    if (wR > 0)
+                    {
+                        int w = Math.Min(wR, cols);
+                        int xStart = Math.Max(0, cols - w);
+                        var rectR = new Rect(xStart, y, w, 1);
+                        using var roiR = new Mat(borderMask, rectR);
+                        roiR.SetTo(255);
+                    }
+                }
+
+                // TOP / BOTTOM по колонкам
+                for (int x = 0; x < cols; x++)
+                {
+                    int hT = topDepth[x];
+                    if (hT > 0)
+                    {
+                        int h = Math.Min(hT, rows);
+                        var rectT = new Rect(x, 0, 1, h);
+                        using var roiT = new Mat(borderMask, rectT);
+                        roiT.SetTo(255);
+                    }
+
+                    int hB = bottomDepth[x];
+                    if (hB > 0)
+                    {
+                        int h = Math.Min(hB, rows);
+                        int yStart = Math.Max(0, rows - h);
+                        var rectB = new Rect(x, yStart, 1, h);
+                        using var roiB = new Mat(borderMask, rectB);
+                        roiB.SetTo(255);
+                    }
+                }
+            }
+            
+
+
 
             // 6) Заливка
             //Scalar fill;
@@ -1770,6 +1941,112 @@ namespace ImgViewer.Models
             return dst;
 
 
+        }
+
+        /// <summary>
+        /// Smooth depth profile using neighbor BRICKS count.
+        /// depth[] is per-pixel-row (rows) or per-pixel-col (cols).
+        /// brickThickness = brick size in pixels along this axis.
+        /// kNeighborsBricks = how many neighbor bricks to include on each side.
+        /// </summary>
+        private static void SmoothDepthByNeighborBricks(int[] depth, int length, int brickThickness, int kNeighborsBricks)
+        {
+            if (depth == null || length <= 0) return;
+            if (brickThickness <= 0) brickThickness = 8;
+            if (kNeighborsBricks <= 0) return;
+
+            int radius = kNeighborsBricks * brickThickness; // <-- key conversion
+
+            var tmp = new double[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                int di = depth[i];
+                if (di <= 0) { tmp[i] = 0; continue; }
+
+                int start = Math.Max(0, i - radius);
+                int end = Math.Min(length - 1, i + radius);
+
+                double sum = 0;
+                int count = 0;
+
+                for (int j = start; j <= end; j++)
+                {
+                    int dj = depth[j];
+                    if (dj > 0) { sum += dj; count++; }
+                }
+
+                tmp[i] = (count > 0) ? (sum / count) : di;
+            }
+
+            for (int i = 0; i < length; i++)
+                depth[i] = (int)Math.Round(tmp[i]);
+        }
+
+        private static int[] DownsampleMaxByBricks(int[] perPixelDepth, int lengthPx, int brickThickness)
+        {
+            brickThickness = Math.Max(1, brickThickness);
+            int nBricks = (lengthPx + brickThickness - 1) / brickThickness;
+
+            var perBrick = new int[nBricks];
+            for (int b = 0; b < nBricks; b++)
+            {
+                int start = b * brickThickness;
+                int end = Math.Min(lengthPx, start + brickThickness);
+
+                int m = 0;
+                for (int i = start; i < end; i++)
+                    m = Math.Max(m, perPixelDepth[i]);
+
+                perBrick[b] = m;
+            }
+            return perBrick;
+        }
+
+        private static void SmoothDepthBricksInPlace(int[] depthBricks, int kNeighborsBricks)
+        {
+            if (depthBricks == null || depthBricks.Length == 0) return;
+            if (kNeighborsBricks <= 0) return;
+
+            int n = depthBricks.Length;
+            var tmp = new double[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                int di = depthBricks[i];
+                if (di <= 0) { tmp[i] = 0; continue; }
+
+                int start = Math.Max(0, i - kNeighborsBricks);
+                int end = Math.Min(n - 1, i + kNeighborsBricks);
+
+                double sum = 0;
+                int count = 0;
+                for (int j = start; j <= end; j++)
+                {
+                    int dj = depthBricks[j];
+                    if (dj > 0) { sum += dj; count++; }
+                }
+                tmp[i] = (count > 0) ? (sum / count) : di;
+            }
+
+            for (int i = 0; i < n; i++)
+                depthBricks[i] = (int)Math.Round(tmp[i]);
+        }
+
+        private static void UpsampleBricksToPixels(int[] perBrickDepth, int[] perPixelDepth, int lengthPx, int brickThickness)
+        {
+            brickThickness = Math.Max(1, brickThickness);
+            int nBricks = perBrickDepth.Length;
+
+            for (int b = 0; b < nBricks; b++)
+            {
+                int start = b * brickThickness;
+                int end = Math.Min(lengthPx, start + brickThickness);
+
+                int v = perBrickDepth[b];
+                for (int i = start; i < end; i++)
+                    perPixelDepth[i] = v;
+            }
         }
 
 
