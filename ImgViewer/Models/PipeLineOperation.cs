@@ -155,6 +155,18 @@ namespace ImgViewer.Models
             }
         }
 
+        public string? DocumentationSectionId => Type switch
+        {
+            PipelineOperationType.Deskew => "deskew",
+            PipelineOperationType.BordersRemove => "borders",
+            PipelineOperationType.Binarize => "binarize",
+            PipelineOperationType.PunchHolesRemove => "punchholes",
+            PipelineOperationType.Despeckle => "despeckle",
+            PipelineOperationType.LinesRemove => "lines",
+            PipelineOperationType.SmartCrop => "smartcrop",
+            _ => null
+        };
+
         private void HookParameterChanges()
         {
             foreach (var p in _parameters)

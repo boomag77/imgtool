@@ -202,6 +202,41 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="PipelineHelpButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#3D8BFF"/>
+            <Setter Property="BorderBrush" Value="#2F6ADB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="HelpBorder"
+                                CornerRadius="16"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HelpBorder" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="HelpBorder" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Pipeline-styled ComboBox (paste inside Window.Resources) -->
         <Style x:Key="PipelineComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}" />
@@ -621,9 +656,14 @@
                                                 Padding="12"
                                                 SnapsToDevicePixels="True">
                                             <StackPanel>
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
 
-
-                                                <ItemsControl ItemsSource="{Binding Parameters}">
+                                                    <ItemsControl Grid.Row="0"
+                                                                  ItemsSource="{Binding Parameters}">
                                                     <ItemsControl.Style>
                                                         <Style TargetType="ItemsControl">
                                                             <Setter Property="Margin" Value="0,0,0,4"/>
@@ -789,7 +829,28 @@
                                                             </StackPanel>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                                                    </ItemsControl>
+                                                    <Button Grid.Row="1"
+                                                            Margin="0,12,0,0"
+                                                            Content="?"
+                                                            ToolTip="Open help for this operation"
+                                                            Tag="{Binding DocumentationSectionId}"
+                                                            Click="OperationHelpButton_Click">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource PipelineHelpButtonStyle}">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <Trigger Property="Tag" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </Trigger>
+                                                                    <Trigger Property="Tag" Value="">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </Trigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                </Grid>
                                                 <!--
                                                 <Button Content="Get from selection"
                                                         Margin="0,8,0,0"

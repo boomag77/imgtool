@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Windows;
 using ImgViewer.Models;
 
@@ -6,6 +8,7 @@ namespace ImgViewer.Views
     public partial class DocumentationWindow : Window
     {
         private readonly Documentation _documentation;
+        private string? _pendingSectionId;
 
         public DocumentationWindow()
         {
@@ -17,10 +20,7 @@ namespace ImgViewer.Views
 
         private void DocumentationWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            if (TocList.Items.Count > 0 && TocList.SelectedIndex == -1)
-            {
-                TocList.SelectedIndex = 0;
-            }
+            NavigateToRequestedSection();
         }
 
         private void AddNoteButton_Click(object sender, RoutedEventArgs e)
@@ -37,6 +37,36 @@ namespace ImgViewer.Views
                 var section = fe.Tag as DocSection;
                 _documentation.RemoveNote(section, note);
             }
+        }
+
+        public void ShowSection(string? sectionId)
+        {
+            _pendingSectionId = sectionId;
+            if (IsLoaded)
+                NavigateToRequestedSection();
+        }
+
+        private void NavigateToRequestedSection()
+        {
+            DocSection? section = null;
+            if (!string.IsNullOrWhiteSpace(_pendingSectionId))
+            {
+                section = _documentation.Sections
+                    .FirstOrDefault(s => string.Equals(s.Id, _pendingSectionId, StringComparison.OrdinalIgnoreCase))
+                    ?? _documentation.Sections
+                        .FirstOrDefault(s => string.Equals(s.Title, _pendingSectionId, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (section == null && _documentation.Sections.Count > 0)
+                section = _documentation.Sections[0];
+
+            if (section != null)
+            {
+                TocList.SelectedItem = section;
+                TocList.ScrollIntoView(section);
+            }
+
+            _pendingSectionId = null;
         }
     }
 }

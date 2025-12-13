@@ -1016,6 +1016,19 @@ namespace ImgViewer.Views
 
         private void DocumentationMenu_Click(object sender, RoutedEventArgs e)
         {
+            OpenDocumentationWindow(sectionId: null);
+        }
+
+        private void OperationHelpButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is PipelineOperation operation)
+            {
+                OpenDocumentationWindow(operation.DocumentationSectionId);
+            }
+        }
+
+        private void OpenDocumentationWindow(string? sectionId)
+        {
             if (_documentationWindow == null || !_documentationWindow.IsLoaded)
             {
                 _documentationWindow = new DocumentationWindow
@@ -1027,8 +1040,12 @@ namespace ImgViewer.Views
             }
             else
             {
+                if (_documentationWindow.WindowState == WindowState.Minimized)
+                    _documentationWindow.WindowState = WindowState.Normal;
                 _documentationWindow.Activate();
             }
+
+            _documentationWindow?.ShowSection(sectionId);
         }
 
         private async void LoadPipelinePreset_Click(object sender, RoutedEventArgs e)
