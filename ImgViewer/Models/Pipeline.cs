@@ -182,10 +182,10 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Border color variation", "borderColorVariation", 0.5, 0.05, 1.0, 0.05),
                                 new PipeLineParameter("Border safety offset px", "borderSafetyOffsetPx", 5, -30, 30, 1),
                                 new PipeLineParameter("Auto max border width fraction", "autoMaxBorderDepthFrac", true),
-                                new PipeLineParameter("Max border depth Left (frac)", "maxBorderDepthFracLeft", 0.25, 0, 1, 0.05),
-                                new PipeLineParameter("Max border depth Right (frac)", "maxBorderDepthFracRight", 0.25, 0, 1, 0.05),
-                                new PipeLineParameter("Max border depth Top (frac)", "maxBorderDepthFracTop", 0.25, 0, 1, 0.05),
-                                new PipeLineParameter("Max border depth Bottom (frac)", "maxBorderDepthFracBottom", 0.25, 0, 1, 0.05),
+                                new PipeLineParameter("Max border depth Left (frac)", "maxBorderDepthFracLeft", 0.25, 0, 1, 0.01),
+                                new PipeLineParameter("Max border depth Right (frac)", "maxBorderDepthFracRight", 0.25, 0, 1, 0.01),
+                                new PipeLineParameter("Max border depth Top (frac)", "maxBorderDepthFracTop", 0.25, 0, 1, 0.01),
+                                new PipeLineParameter("Max border depth Bottom (frac)", "maxBorderDepthFracBottom", 0.25, 0, 1, 0.01),
                                 new PipeLineParameter("K-interpolation", "kInterpolation", 0, 0, 50, 1)
 
                             },

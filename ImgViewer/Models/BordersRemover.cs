@@ -1757,7 +1757,7 @@ namespace ImgViewer.Models
                 pageL, pageA, pageB,
                 colorDistStrongThr, LDiffStrongThr, textureThr,
                 bordersColorTolerance,
-                8,                                                    // possibly use brickThickness here?
+                brickThickness,                                                    // possibly use brickThickness here?
                 maxDepthCapX,
                 out int maxDepthLeft,
                 out int maxDepthRight);
@@ -1768,7 +1768,7 @@ namespace ImgViewer.Models
                     pageL, pageA, pageB,
                     colorDistStrongThr, LDiffStrongThr, textureThr,
                     bordersColorTolerance,
-                    8,                                                  // possibly use brickThickness here?
+                    brickThickness,                                                  // possibly use brickThickness here?
                     maxDepthCapY,
                     out int maxDepthTop,
                     out int maxDepthBottom);
@@ -1778,10 +1778,9 @@ namespace ImgViewer.Models
                 maxDepthTopBorder = maxDepthTop;
                 maxDepthBottomBorder = maxDepthBottom;
             }
-            
 
 
-            
+
 
             // Максимальное количество подряд "сомнительных" полос внутри бордюра (для градиента)
             int maxNonBorderRun = (bordersColorTolerance < 0.3)
@@ -2159,6 +2158,42 @@ namespace ImgViewer.Models
             var topBricks = DownsampleMaxByBricks(topDepth, cols, brickThickness);
             var bottomBricks = DownsampleMaxByBricks(bottomDepth, cols, brickThickness);
 
+            //int gapBricks = 3; // <-- in BRICKS (UI parameter)
+
+            //BridgeShortZeroGapsInPlace(leftBricks, gapBricks, maxDepthLeftBorder);
+
+            //BridgeShortZeroGapsInPlace(rightBricks, gapBricks, maxDepthRightBorder);
+
+            //BridgeShortZeroGapsInPlace(topBricks, gapBricks, maxDepthTopBorder);
+
+            //BridgeShortZeroGapsInPlace(bottomBricks, gapBricks, maxDepthBottomBorder);
+
+            // --- NEW knobs: this controls what "weak" means (=> will be bridged) ---
+            int absWeakPx = Math.Max(1, brickThickness / 4); // X px
+            double weakFrac = 0.40;                          // Y% of median (0..1)
+
+            // if you want, you can also keep gap small as safety:
+            int gapBricks = (kNeighborsBricks > 0) ? Math.Min(3, Math.Max(1, kNeighborsBricks / 2)) : 6;
+
+            // compute per-side weak threshold = max(absWeakPx, round(medianNonZero * weakFrac))
+            int weakLeft = ComputeWeakThresholdPx(leftBricks, absWeakPx, weakFrac);
+            int weakRight = ComputeWeakThresholdPx(rightBricks, absWeakPx, weakFrac);
+            int weakTop = ComputeWeakThresholdPx(topBricks, absWeakPx, weakFrac);
+            int weakBottom = ComputeWeakThresholdPx(bottomBricks, absWeakPx, weakFrac);
+
+            // convert "too short" into zeros => BridgeShortZeroGapsInPlace can fill them
+            ZeroWeakBricksInPlace(leftBricks, weakLeft);
+            ZeroWeakBricksInPlace(rightBricks, weakRight);
+            ZeroWeakBricksInPlace(topBricks, weakTop);
+            ZeroWeakBricksInPlace(bottomBricks, weakBottom);
+
+            // bridge short gaps (now includes "missing" AND "too short")
+            BridgeShortZeroGapsInPlace(leftBricks, gapBricks, maxDepthLeftBorder);
+            BridgeShortZeroGapsInPlace(rightBricks, gapBricks, maxDepthRightBorder);
+            BridgeShortZeroGapsInPlace(topBricks, gapBricks, maxDepthTopBorder);
+            BridgeShortZeroGapsInPlace(bottomBricks, gapBricks, maxDepthBottomBorder);
+
+
             // 2) smooth in brick-space using k neighbors
             SmoothDepthBricksInPlace(leftBricks, kNeighborsBricks);
             SmoothDepthBricksInPlace(rightBricks, kNeighborsBricks);
@@ -2326,6 +2361,88 @@ namespace ImgViewer.Models
 
 
         }
+
+        private static int ComputeWeakThresholdPx(int[] bricks, int absWeakPx, double weakFrac)
+        {
+            absWeakPx = Math.Max(0, absWeakPx);
+            weakFrac = Math.Max(0.0, Math.Min(1.0, weakFrac));
+
+            int med = MedianNonZero(bricks);
+            int rel = (med > 0) ? (int)Math.Round(med * weakFrac) : 0;
+
+            // THIS is the "absolute OR % of median" rule:
+            // treat as weak if <= max(absWeakPx, rel)
+            return Math.Max(absWeakPx, rel);
+        }
+
+        private static int MedianNonZero(int[] values)
+        {
+            if (values == null || values.Length == 0) return 0;
+            var tmp = new List<int>(values.Length);
+            for (int i = 0; i < values.Length; i++)
+                if (values[i] > 0) tmp.Add(values[i]);
+
+            if (tmp.Count == 0) return 0;
+            tmp.Sort();
+            return tmp[tmp.Count / 2];
+        }
+
+
+        // Converts "too short" bricks into zeros so BridgeShortZeroGapsInPlace can fill them.
+        private static void ZeroWeakBricksInPlace(int[] bricks, int weakThrPx)
+        {
+            if (bricks == null || bricks.Length == 0) return;
+            weakThrPx = Math.Max(0, weakThrPx);
+            if (weakThrPx == 0) return;
+
+            for (int i = 0; i < bricks.Length; i++)
+            {
+                int d = bricks[i];
+                if (d > 0 && d <= weakThrPx) bricks[i] = 0;
+            }
+        }
+
+
+        private static void BridgeShortZeroGapsInPlace(int[] depthBricks, int gapBricks, int maxDepthPx)
+        {
+            if (depthBricks == null || depthBricks.Length == 0) return;
+
+            gapBricks = Math.Max(0, gapBricks);
+            maxDepthPx = Math.Max(0, maxDepthPx);
+
+            // clamp на всякий
+            for (int i = 0; i < depthBricks.Length; i++)
+                depthBricks[i] = Math.Min(depthBricks[i], maxDepthPx);
+
+            if (gapBricks == 0) return;
+
+            int n = depthBricks.Length;
+            int i0 = 0;
+
+            while (i0 < n)
+            {
+                if (depthBricks[i0] > 0) { i0++; continue; }
+
+                int start = i0;
+                while (i0 < n && depthBricks[i0] == 0) i0++;
+                int end = i0 - 1;
+
+                int len = end - start + 1;
+                int left = (start - 1 >= 0) ? depthBricks[start - 1] : 0;
+                int right = (i0 < n) ? depthBricks[i0] : 0;
+
+                // Заполняем ТОЛЬКО "дыру внутри бордюра"
+                if (len <= gapBricks && left > 0 && right > 0)
+                {
+                    int fill = (left + right) / 2;
+                    fill = Math.Min(fill, maxDepthPx);
+
+                    for (int k = start; k <= end; k++)
+                        depthBricks[k] = fill;
+                }
+            }
+        }
+
 
         /// <summary>
         /// Smooth depth profile using neighbor BRICKS count.
