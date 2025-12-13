@@ -1,0 +1,122 @@
+<Window x:Class="ImgViewer.Views.DocumentationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:models="clr-namespace:ImgViewer.Models"
+        mc:Ignorable="d"
+        Title="Image Genie Help"
+        Width="980"
+        Height="720"
+        MinWidth="820"
+        MinHeight="600"
+        Background="#1F1F23">
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Table of contents -->
+        <Border Grid.Column="0"
+                Background="#2C2F36"
+                CornerRadius="8"
+                Padding="16"
+                Margin="0,0,12,0">
+            <StackPanel>
+                <TextBlock Text="Table of contents"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="White"
+                           Margin="0,0,0,12"/>
+                <ListBox x:Name="TocList"
+                         ItemsSource="{Binding Sections}"
+                         DisplayMemberPath="Title"
+                         SelectionChanged="TocList_SelectionChanged"
+                         Background="Transparent"
+                         BorderBrush="Transparent"
+                         Foreground="#DADDE4"
+                         FontSize="13"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Margin" Value="0,2,0,2"/>
+                            <Setter Property="Padding" Value="6"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Border"
+                                                Background="Transparent"
+                                                CornerRadius="4">
+                                            <ContentPresenter VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="#3D59FF33"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="#33FFFFFF"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </StackPanel>
+        </Border>
+
+        <!-- Content -->
+        <Border Grid.Column="1"
+                Background="#2C2F36"
+                CornerRadius="8"
+                Padding="20">
+            <ScrollViewer x:Name="ContentScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="ContentItemsControl"
+                              ItemsSource="{Binding Sections}"
+                              VirtualizingStackPanel.IsVirtualizing="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:DocSection}">
+                            <StackPanel Margin="0,0,0,24">
+                                <TextBlock Text="{Binding Title}"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Foreground="White"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding Summary}"
+                                           FontSize="13"
+                                           Foreground="#C8CBD6"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,12"/>
+                                <ItemsControl ItemsSource="{Binding Paragraphs}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type models:DocParagraph}">
+                                            <StackPanel Margin="0,0,0,12">
+                                                <TextBlock Text="{Binding Heading}"
+                                                           FontSize="14"
+                                                           FontWeight="Bold"
+                                                           Foreground="#96E6FF"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Body}"
+                                                           FontSize="13"
+                                                           Foreground="#ECEFF4"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Rectangle Height="1" Fill="#3B3F4A" Margin="0,12,0,12"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>

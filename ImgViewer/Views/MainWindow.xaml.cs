@@ -71,6 +71,8 @@ namespace ImgViewer.Views
 
         private Point _magnifierNormalizedPos = new Point(0.5, 0.5);
 
+        private DocumentationWindow? _documentationWindow;
+
         private double _eraseOffset;   // пикселей от левого/правого края
         private bool _eraseModeActive;
         private bool _operationErased;
@@ -1009,6 +1011,23 @@ namespace ImgViewer.Views
                         MessageBoxImage.Error
                     );
                 }
+            }
+        }
+
+        private void DocumentationMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (_documentationWindow == null || !_documentationWindow.IsLoaded)
+            {
+                _documentationWindow = new DocumentationWindow
+                {
+                    Owner = this
+                };
+                _documentationWindow.Closed += (_, __) => _documentationWindow = null;
+                _documentationWindow.Show();
+            }
+            else
+            {
+                _documentationWindow.Activate();
             }
         }
 

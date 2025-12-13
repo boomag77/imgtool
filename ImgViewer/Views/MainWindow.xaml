@@ -439,8 +439,9 @@
               Margin="6,0,0,0"/>
                     </Grid>
                 </MenuItem>
-            <MenuItem Header="Help">
-                
+            <MenuItem Header="_Help">
+                <MenuItem Header="_Documentation"
+                          Click="DocumentationMenu_Click"/>
             </MenuItem>
         </Menu>
         
