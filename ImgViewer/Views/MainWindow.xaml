@@ -439,10 +439,8 @@
               Margin="6,0,0,0"/>
                     </Grid>
                 </MenuItem>
-            <MenuItem Header="_Help">
-                <MenuItem Header="_Documentation"
-                          Click="DocumentationMenu_Click"/>
-            </MenuItem>
+            <MenuItem Header="_Help"
+                      Click="DocumentationMenu_Click"/>
         </Menu>
         
         <!-- Status bar -->
