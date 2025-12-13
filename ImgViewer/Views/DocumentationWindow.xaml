@@ -4,13 +4,41 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="clr-namespace:ImgViewer.Models"
+        xmlns:helpers="clr-namespace:ImgViewer.Helpers"
         mc:Ignorable="d"
-        Title="Image Genie Help"
-        Width="980"
-        Height="720"
-        MinWidth="820"
-        MinHeight="600"
+        Title="Help"
+        Width="1000"
+        Height="760"
+        MinWidth="860"
+        MinHeight="640"
         Background="#1F1F23">
+    <Window.Resources>
+        <Style x:Key="DocTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="#1F1F23"/>
+            <Setter Property="Foreground" Value="#ECEFF4"/>
+            <Setter Property="BorderBrush" Value="#3F4451"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Margin" Value="0,4,0,8"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+        </Style>
+        <Style x:Key="DocHeadingTextBoxStyle" BasedOn="{StaticResource DocTextBoxStyle}" TargetType="TextBox">
+            <Setter Property="AcceptsReturn" Value="False"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="NoteTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#ECEFF4"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+    </Window.Resources>
     <Grid Margin="16">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="260"/>
@@ -32,7 +60,6 @@
                 <ListBox x:Name="TocList"
                          ItemsSource="{Binding Sections}"
                          DisplayMemberPath="Title"
-                         SelectionChanged="TocList_SelectionChanged"
                          Background="Transparent"
                          BorderBrush="Transparent"
                          Foreground="#DADDE4"
@@ -74,49 +101,141 @@
                 Background="#2C2F36"
                 CornerRadius="8"
                 Padding="20">
-            <ScrollViewer x:Name="ContentScrollViewer"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl x:Name="ContentItemsControl"
-                              ItemsSource="{Binding Sections}"
-                              VirtualizingStackPanel.IsVirtualizing="False">
-                    <ItemsControl.ItemTemplate>
+            <Grid>
+                <ContentControl Content="{Binding SelectedItem, ElementName=TocList}">
+                    <ContentControl.ContentTemplate>
                         <DataTemplate DataType="{x:Type models:DocSection}">
-                            <StackPanel Margin="0,0,0,24">
-                                <TextBlock Text="{Binding Title}"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
-                                           Foreground="White"
-                                           Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding Summary}"
-                                           FontSize="13"
-                                           Foreground="#C8CBD6"
-                                           TextWrapping="Wrap"
-                                           Margin="0,0,0,12"/>
-                                <ItemsControl ItemsSource="{Binding Paragraphs}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:DocParagraph}">
-                                            <StackPanel Margin="0,0,0,12">
-                                                <TextBlock Text="{Binding Heading}"
-                                                           FontSize="14"
-                                                           FontWeight="Bold"
-                                                           Foreground="#96E6FF"
-                                                           TextWrapping="Wrap"/>
-                                                <TextBlock Text="{Binding Body}"
-                                                           FontSize="13"
-                                                           Foreground="#ECEFF4"
-                                                           TextWrapping="Wrap"
-                                                           Margin="0,2,0,0"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Rectangle Height="1" Fill="#3B3F4A" Margin="0,12,0,12"/>
-                            </StackPanel>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}"
+                                               FontSize="22"
+                                               FontWeight="SemiBold"
+                                               Foreground="White"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding Summary}"
+                                               FontSize="13"
+                                               Foreground="#C8CBD6"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,12"/>
+                                    <ItemsControl ItemsSource="{Binding Paragraphs}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type models:DocParagraph}">
+                                                <StackPanel Margin="0,0,0,12">
+                                                    <TextBlock Text="{Binding Heading}"
+                                                               FontSize="14"
+                                                               FontWeight="Bold"
+                                                               Foreground="#96E6FF"
+                                                               TextWrapping="Wrap"/>
+                                                    <helpers:HighlightedTextBlock FormattedText="{Binding Body}"
+                                                                                  FontSize="13"
+                                                                                  Foreground="#ECEFF4"
+                                                                                  TextWrapping="Wrap"
+                                                                                  Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <Border Background="#1F1F23"
+                                            CornerRadius="8"
+                                            Padding="12"
+                                            Margin="0,16,0,0">
+                                        <StackPanel>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Your notes"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="White"
+                                                           FontWeight="SemiBold"/>
+                                                <Button Grid.Column="1"
+                                                        Content="Add note"
+                                                        Width="85"
+                                                        Height="28"
+                                                        Background="#3D8BFF"
+                                                        Foreground="White"
+                                                        BorderBrush="#2F6ADB"
+                                                        BorderThickness="1"
+                                                        Tag="{Binding}"
+                                                        HorizontalAlignment="Right"
+                                                        Click="AddNoteButton_Click"/>
+                                            </Grid>
+
+                                            <ItemsControl ItemsSource="{Binding Notes}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type models:DocNote}">
+                                                        <Border Background="#2B2F38"
+                                                                CornerRadius="6"
+                                                                Padding="10"
+                                                                Margin="0,0,0,8">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBox Grid.Column="0"
+                                                                         Text="{Binding Body, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                         Style="{StaticResource NoteTextBoxStyle}"
+                                                                         MinHeight="40"/>
+                                                                <Button Grid.Column="1"
+                                                                        Content="✕"
+                                                                        Width="24"
+                                                                        Height="24"
+                                                                        Margin="8,0,0,0"
+                                                                        Background="#4A4E58"
+                                                                        Foreground="White"
+                                                                        BorderBrush="#4A4E58"
+                                                                        HorizontalAlignment="Right"
+                                                                        Tag="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext}"
+                                                                        Click="DeleteNoteButton_Click"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <TextBlock Text="No notes added yet."
+                                                       Foreground="#8A8E99"
+                                                       FontStyle="Italic"
+                                                       Margin="0,6,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Notes.Count}" Value="0">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+
+                <TextBlock Text="Select a topic from the table of contents."
+                           Foreground="#8A8E99"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedItem, ElementName=TocList}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
         </Border>
     </Grid>
 </Window>

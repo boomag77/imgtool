@@ -66,6 +66,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <EmbeddedResource Include="documentation.json" />
+	  <Content Include="documentation.json">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Page Update="Views\MainWindow.xaml">
 	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 	  </Page>
@@ -88,4 +95,3 @@
 	</ItemGroup>
 
 </Project>
-

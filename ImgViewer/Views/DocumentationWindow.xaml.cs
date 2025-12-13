@@ -1,15 +1,17 @@
-using ImgViewer.Models;
 using System.Windows;
-using System.Windows.Controls;
+using ImgViewer.Models;
 
 namespace ImgViewer.Views
 {
     public partial class DocumentationWindow : Window
     {
+        private readonly Documentation _documentation;
+
         public DocumentationWindow()
         {
             InitializeComponent();
-            DataContext = Documentation.CreateDefault();
+            _documentation = Documentation.LoadOrCreate();
+            DataContext = _documentation;
             Loaded += DocumentationWindow_Loaded;
         }
 
@@ -21,18 +23,20 @@ namespace ImgViewer.Views
             }
         }
 
-        private void TocList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void AddNoteButton_Click(object sender, RoutedEventArgs e)
         {
-            if (TocList.SelectedItem is DocSection section)
-            {
-                ScrollToSection(section);
-            }
+            if ((sender as FrameworkElement)?.Tag is DocSection section)
+                _documentation.AddNote(section);
         }
 
-        private void ScrollToSection(DocSection section)
+        private void DeleteNoteButton_Click(object sender, RoutedEventArgs e)
         {
-            var container = ContentItemsControl.ItemContainerGenerator.ContainerFromItem(section) as FrameworkElement;
-            container?.BringIntoView();
+            if (sender is FrameworkElement fe)
+            {
+                var note = fe.DataContext as DocNote;
+                var section = fe.Tag as DocSection;
+                _documentation.RemoveNote(section, note);
+            }
         }
     }
 }

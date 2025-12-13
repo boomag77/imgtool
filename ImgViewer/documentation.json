@@ -1,0 +1,181 @@
+[
+  {
+    "id": "overview",
+    "title": "Getting Started",
+    "summary": "Quick orientation before tuning operations.",
+    "paragraphs": [
+      {
+        "heading": "Workspace overview",
+        "body": "- Left pane shows the original image; it never changes.\n- Right pane shows the working preview; every preview button updates this image.\n- Status text under the preview mirrors what the pipeline is doing (loading, deskewing, standby)."
+      },
+      {
+        "heading": "Recommended workflow",
+        "body": "1. Load a page or folder.\n2. Preview each pipeline operation from top to bottom.\n3. Adjust parameters based on what you see.\n4. Decide whether to save only the current page or process the whole batch.\n\nTip: use Reset Image to revert the preview to the original if you want to start from scratch without reloading the file."
+      },
+      {
+        "heading": "Preview tips",
+        "body": "- Parameter sliders are debounced: Image Genie waits a short moment (configured in Settings) before re-rendering, which makes dragging smoother.\n- If an operation seems stuck, press Cancel Processing to recreate the worker token.\n- Keep keyboard focus in a number box and use arrow keys for fine adjustments."
+      }
+    ]
+  },
+  {
+    "id": "deskew",
+    "title": "Deskew",
+    "summary": "Straighten scanned pages so everything else works on aligned text.",
+    "paragraphs": [
+      {
+        "heading": "When to use",
+        "body": "Always run Deskew before touching borders, binarization, or cropping. A straight baseline drastically improves every border detector and reduces Smart Crop errors."
+      },
+      {
+        "heading": "Parameters",
+        "body": "- `Algorithm`: Auto handles most pages, ByBorders hunts for strong outer edges, Hough locks onto long rulers, and Projection/PCA follow text baselines. Choose the method first because each one shows different sliders.\n- `Canny Threshold 1/2` (ByBorders): lower the first value (30‑60) to pick up faint edges, keep the second higher (120‑200) so background noise is ignored.\n- `Morph Kernel` (ByBorders): widen this (5‑9) when border shadows are broken; smaller values protect delicate margins.\n- `Min Line Length` (Hough): start around 60% of page width for blueprints or engineering scans; reduce it for letter-size pages with shorter rulers.\n- `Hough Threshold`: raise it if the preview shows random skew lines, lower it when the page barely contains any straight edges."
+      },
+      {
+        "heading": "Use cases",
+        "body": "- Auto handles mixed page layouts; try it first.\n- ByBorders works well when scanner shadows create distinct edges.\n- Hough excels on engineering prints with long straight rulers.\n- Projection or PCA are simple fallbacks when text baselines dominate the page."
+      }
+    ]
+  },
+  {
+    "id": "borders",
+    "title": "Borders Remove",
+    "summary": "Trim scanner borders and fill the outside area without touching content.",
+    "paragraphs": [
+      {
+        "heading": "Mode overview",
+        "body": "Auto, Integral, By Contrast, and Manual are the four ways the app trims edges. Auto is the safe \"detect and fill\" option for most scans, Integral is a slower high-accuracy flood-fill that measures paper texture, By Contrast works best on bold frame lines, and Manual simply obeys the offsets you type. Only the controls tied to the chosen algorithm matter, so switch algorithms before adjusting sliders."
+      },
+      {
+        "heading": "Auto mode parameters",
+        "body": "- `Auto Threshold`: keep this on unless you have extremely dark paper; turning it off exposes the `Dark Threshold` slider so you can force what counts as black.\n- `Margin %`: add 5‑15% when drawings have notes in the gutter; drop it toward 0 when you want a tight crop.\n- `Shift factor`: higher values let the detector push further into the page when the text hugs the edge; start at 0.2 and nudge up if shadows remain.\n- `Min Area Px` / `Span fraction` / `Solidity`: raise these when the detector mistakes logos for borders. For magazines, try 5000 px, 0.7 span, and 0.7 solidity so only long, thin strips qualify.\n- `Penetration depth fraction`: how far into the page the cut can travel (percent of the shorter side). Use 0.15 for notebooks, 0.25 for thick black frames.\n- `Feather` adds a blur to the cut edge; 4‑8 px hides gradients.\n- `Telea Hybrid`: leave on when you want missing pixels filled with nearby colors; turn off to simply crop."
+      },
+      {
+        "heading": "By Contrast mode parameters",
+        "body": "- `Threshold Fraction`: 0.35‑0.45 is a good starting point; raise it if the preview ignores obvious black frames, lower it for faint pencil borders.\n- `Contrast Threshold`: the minimum difference between the frame and the page. Try 40‑60 for office paper; go higher when the background is very bright.\n- `Central Sample`: increases the protected band in the middle of the page. Set it around 0.15 for books so the gutter never gets cropped.\n- `Max remove fraction`: caps how much width/height can disappear per side. Leave it near 0.45 for full-page frames, drop to 0.25 for postcards."
+      },
+      {
+        "heading": "Manual mode parameters",
+        "body": "Manual offsets are read directly from the pipeline parameters.\n- Left/Right/Top/Bottom: pixels shaved off each edge. Increase while watching the preview; the numbers persist so you can reuse the same trim later.\n- Cut: when on, the preview shows the final cropped image; when off, you just see a guide overlay.\n- Preview cut: adds a translucent mask to confirm what will go away.\n- Apply to Left/Right Page: perfect for book spreads—disable the side you want to keep untouched."
+      },
+      {
+        "heading": "Integral mode (Lab bricks)",
+        "body": "Integral scans the border in Lab color space using bricks of `scanStepPx` height/width and compares them to an inner sampling window. Use it when Auto can’t tell the difference between a photo edge and the paper itself.\n- `Seed Contrast Strictness` / `Seed Brightness Strictness`: increase toward 1.5 when border shadows are only slightly darker than the page; lower toward 0.8 if nothing is detected.\n- `Texture allowance`: raise to 1.3‑1.6 for textured paper so the detector doesn’t skip grainy margins.\n- `Scan step px`: smaller steps (8‑12) trace wavy borders precisely; larger steps (18‑24) shorten processing time on clean scans.\n- `Inpaint radius` and `Inpaint mode`: choose Fill for solid backgrounds, or Telea/NS with a radius of 3‑5 when you need a more organic blend.\n- `Border color variation`: widen this (0.6‑0.8) when the border color changes along the edge; tighten to 0.4 for consistent frames.\n- `Border safety offset px`: add 2‑6 px to leave a guard band between content and the cut.\n- `Auto max border depth fraction`: leave on to let the app measure the maximum cut per side. Turn it off if you want to limit a side manually—set Left/Right/Top/Bottom to 0.10‑0.20 for moderate trims.\n- `K-interpolation`: smooths noisy detections. Values between 2 and 5 fill small gaps; use 0 to disable smoothing if the preview overreaches."
+      },
+      {
+        "heading": "Tips",
+        "body": "- Run Borders Remove immediately after Deskew so the coordinate system stays square.\n- If large shadows remain, raise Min Depth Fraction and Feather; this copies a little content inward to hide the gap.\n- When Telea leaves halos, try turning it off and rerun the operation, then use Smart Crop to chop the border instead.\n- For Integral mode specifically, start with Scan step 8-12px for books, lower Border color variation if the detector jumps into the page, and cap Max border depth to ~0.15 on sides that contain hole punches."
+      }
+    ]
+  },
+  {
+    "id": "binarize",
+    "title": "Binarize",
+    "summary": "Convert to black/white using Threshold, Adaptive, Sauvola, or Majority modes.",
+    "paragraphs": [
+      {
+        "heading": "Threshold mode",
+        "body": "- `Threshold`: 0‑255 brightness cut. Raise it (130‑160) to throw away light stains, lower it (90‑110) so faint pencil and fax ink stay black. Use the histogram preview to find the sweet spot where the background is mostly white without erasing detail."
+      },
+      {
+        "heading": "Adaptive mode",
+        "body": "- `BlockSize`: odd numbers that define how big a neighborhood influences each pixel. 25‑45 keeps text intact on magazine pages; go smaller (11‑19) for notebooks with tight handwriting.\n- `Mean C`: subtracts from the local average. Lower values (-5 to -15) darken ink; higher values brighten the background.\n- `Use Gaussian`: smooths the neighborhood weighting. Turn it on for noisy scans, off for crisp laser printouts.\n- `Apply Morphology`: connect broken strokes. Start with kernel 2‑3 and 1 iteration; increase only if characters still look dotted."
+      },
+      {
+        "heading": "Sauvola mode",
+        "body": "- `Window size`: odd-numbered box the algorithm uses to judge local contrast. 25‑35 works for most book pages; stretch to 51+ for newspapers with noisy halftones.\n- `K`: contrast sensitivity. Raise it above 0.35 to protect faint pencil and fountain ink; drop toward 0.2 when stains keep turning black.\n- `R`: expected dynamic range. Leave near 128 for typical 8-bit scans; lower it if the paper is extremely gray so Sauvola doesn’t overreact.\n- `Pencil stroke boost`: adds a gentle darkening pass to hairline strokes. Set 0.1‑0.2 to make marginalia stand out.\n- `CLAHE Clip` / `Grid size`: optional contrast equalization before Sauvola. Use Clip 2‑4 and Grid 8‑12 on uneven lighting to brighten dull corners.\n- `Morph radius`: smooths the binary result. Use 0 when you want exact output, increase to 1‑2 only if letters look speckled.\nTip: combine Sauvola with a light blur in Pre-Binarize when dealing with newsprint to avoid pepper noise."
+      },
+      {
+        "heading": "Majority mode",
+        "body": "- `Majority Offset`: shifts the voting result. Positive numbers (5‑15) darken the whole image, negative numbers lighten it. Use this when the preview is close but not quite white/black enough."
+      }
+    ]
+  },
+  {
+    "id": "punchholes",
+    "title": "Punch Holes Remove",
+    "summary": "Detect and inpaint binder holes using both circular and rectangular heuristics.",
+    "paragraphs": [
+      {
+        "heading": "Parameters",
+        "body": "- `Punch Shape`: Circle for classic binder holes, Rect for comb bindings, Both when you want every detector active.\n- `Diameter` / `Roundness`: match these to the physical hole. Roundness 0.8‑0.9 focuses on perfect circles; drop toward 0.6 for torn edges.\n- `Width` / `Height` / `Fill ratio`: used for rectangular punches. Fill ratio close to 1 only accepts solid holes; lower it if the hole contains leftover paper.\n- `Density`: how dark a hole must be. Raise it when logos share the same size but are lighter.\n- `Size tolerance`: broaden it (0.4‑0.6) if your scanner stretches shapes.\n- `Offsets`: limit removal to the margins so page numbers and logos remain untouched."
+      },
+      {
+        "heading": "Use cases",
+        "body": "- Circle shape for standard binder holes.\n- Rect shape for comb bindings.\n- Run after Borders Remove so the inpaint color matches the trimmed background."
+      }
+    ]
+  },
+  {
+    "id": "despeckle",
+    "title": "Despeckle",
+    "summary": "Remove dust or toner specks without destroying actual strokes.",
+    "paragraphs": [
+      {
+        "heading": "Parameters",
+        "body": "- `Small area relative`: when on, the tool sizes specks based on page area; ideal for mixed-size batches. Turn it off and use `Small area absolute` when every scan is the same resolution.\n- `Small area multiplier`: how aggressive the cleanup becomes. 0.3‑0.5 scrubs flyers, 0.6+ erases larger dust clumps.\n- `Small area absolute px`: direct pixel limit used when the relative flag is off—enter the largest speck you want removed.\n- `Max dot height fraction` / `Proximity radius fraction` / `Squareness tolerance`: tighten these to limit removal to round toner dots. Relax them if you need to catch streaks.\n- `Keep clusters`: leave on to preserve dotted shading; turn off when you want spotless margins.\n- `Use dilate before CC` (plus kernel/iterations): helps merge broken specks so the cleanup is more decisive. A kernel of 2 and one iteration is often enough.\n- `Size tolerance`: widen it if specks vary wildly in size, narrow it to focus on one class of dust.\n- `Show candidates`: overlay the detected specks so you can tweak the numbers with confidence."
+      },
+      {
+        "heading": "Tips",
+        "body": "- Run Despeckle after Binarize so it works on two colors only.\n- When thin strokes disappear, raise Max dot height fraction or enable Keep clusters.\n- For pencil drawings that keep grain, disable dilate before CC and lower Small area multiplier."
+      }
+    ]
+  },
+  {
+    "id": "lines",
+    "title": "Lines Remove",
+    "summary": "Remove pre-printed ruling or grid lines without harming handwriting.",
+    "paragraphs": [
+      {
+        "heading": "Parameters",
+        "body": "- `Orientation`: Horizontal for ruled notebooks, Vertical for ledgers, Both for grids.\n- `Line width`: set this close to the printed line thickness (usually 2‑4 px). Wider widths lift watercolor wash along with lines.\n- `Min length fraction`: 0.6 keeps only long ruling; drop to 0.3 when forms use shorter tick marks.\n- `Offset start`: leave >0 to protect headings at the top of the page.\n- `Line color R/G/B`: enter the printed color. Leave all values at -1 to let the app auto-detect the darkest strokes.\n- `Color tolerance`: higher values grab a wider range of shades; increase it for faint colored paper."
+      },
+      {
+        "heading": "Use cases",
+        "body": "- Horizontal orientation for lined paper.\n- Vertical orientation for column guides.\n- Both for ledger/grid forms."
+      }
+    ]
+  },
+  {
+    "id": "smartcrop",
+    "title": "Smart Crop",
+    "summary": "Automatically crop to content using U-net or EAST text detection.",
+    "paragraphs": [
+      {
+        "heading": "U-net mode parameters",
+        "body": "- Crop level (0-100): threshold on the U-net heatmap; higher = tighter crops.\n- Preset: Fast, Balance, Quality (controls downscale choices before running the network)."
+      },
+      {
+        "heading": "EAST mode parameters",
+        "body": "- EAST input width / height: resolution for the network; 1280 is a good balance, 1600 for accuracy.\n- Score threshold / NMS threshold: control detection confidence and overlap merging.\n- Tesseract min confidence: filter text regions to keep only significant ones.\n- Padding px: extra margin around the detected bounding box.\n- Downscale max width: pre-shrinks huge images before inference.\n- Include handwritten / Handwritten sensitivity: widen detection to include cursive text.\n- Include stamps: keep stamps or logos.\n- East debug: overlays detection boxes for troubleshooting."
+      },
+      {
+        "heading": "Workflow",
+        "body": "Run Smart Crop after Deskew and Borders Remove. When using EAST, run it before Binarize so the model still sees grayscale input; U-net can run before or after Binarize depending on preference."
+      }
+    ]
+  },
+  {
+    "id": "playbooks",
+    "title": "Combining Operations",
+    "summary": "Sample sequences for repeatable results.",
+    "paragraphs": [
+      {
+        "heading": "Typical office scan",
+        "body": "Deskew (Auto) -> Borders Remove (Auto + Telea) -> Binarize (Adaptive, small BlockSize, Morphology on) -> Despeckle (relative 0.4) -> Lines Remove (Horizontal) -> Smart Crop (U-net, level 60). Save as CCITT G4 TIFF for tiny files."
+      },
+      {
+        "heading": "Old book page",
+        "body": "Deskew (ByBorders, low Canny thresholds) -> Borders Remove (Manual, protect marginalia) -> Smart Crop (U-net, level 55) -> Punch Holes Remove (Circle, diameter 40) -> Binarize (Sauvola + CLAHE) -> Despeckle (absolute 80 px)."
+      },
+      {
+        "heading": "Forms with colored grids",
+        "body": "Deskew -> Binarize (Threshold to preserve colors) -> Lines Remove (set RGB to grid color, orientation Both) -> Borders Remove (By Contrast) -> Despeckle (relative 0.3). Lower Min length fraction if grid lines overlap text."
+      },
+      {
+        "heading": "Adjustment interplay",
+        "body": "- Increasing Binarize > BlockSize makes Adaptive less sensitive; lower Mean C to keep text dark.\n- Raising Borders Remove > Feather softens cuts but can reintroduce border noise; pair with higher Despeckle tolerance.\n- Preview each step in order to see how tweaks cascade."
+      }
+    ]
+  }
+]
