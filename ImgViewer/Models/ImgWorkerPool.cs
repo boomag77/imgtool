@@ -80,8 +80,8 @@ namespace ImgViewer.Models
                 }
                 else
                 {
-                    dispatcher.InvokeAsync(
-                        () => result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question),
+                    dispatcher.Invoke(() =>
+                        result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question),
                         System.Windows.Threading.DispatcherPriority.Background);
                 }
                 if (result == MessageBoxResult.Yes)
