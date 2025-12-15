@@ -2,6 +2,7 @@
 using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -286,17 +287,30 @@ namespace ImgViewer.Models
                 ErrorOccured?.Invoke($"Cannot determine parent directory for: {folderPath}");
                 return null;
             }
+            string[] files;
+            try
+            {
+                files = Directory.EnumerateFiles(folderPath)
+                                 .Where(file =>
+                                            file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                                 .ToArray();
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
+            {
+                var msg = $"Cannot enumerate files in '{folderPath}'.\n{ex.Message}";
+                System.Windows.MessageBox.Show(msg, "Folder Access Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+
             var sourceFolder = new SourceImageFolder
             {
                 Path = folderPath,
                 ParentPath = parentPath,
-                Files = Directory.EnumerateFiles(folderPath)
-                                        .Where(file =>
-                                                    file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                                                file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                                                file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||   // если хочешь PNG тоже
-                                                file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-                                                file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                Files = files
                                         .Select(f => new SourceImageFile
                                         {
                                             Path = f,
@@ -307,6 +321,7 @@ namespace ImgViewer.Models
                                         })
                                         .ToArray()
             };
+
 
 
             return sourceFolder;
