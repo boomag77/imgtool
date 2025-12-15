@@ -1204,7 +1204,7 @@ namespace ImgViewer.Views
         //    return pl;
         //}
 
-        private void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
+        private async void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
         {
             if (Pipeline == null) return;
             if (Pipeline.Operations.Count == 0)
@@ -1233,7 +1233,7 @@ namespace ImgViewer.Views
 
             try
             {
-                _manager.ProcessRootFolder(rootFolder, Pipeline, true);
+                await _manager.ProcessRootFolder(rootFolder, Pipeline, true);
             }
             catch (Exception ex)
             {
@@ -1245,7 +1245,7 @@ namespace ImgViewer.Views
 
         }
 
-        private void ApplyCurrentPipelineToCurrentFolder_Click(object sender, RoutedEventArgs e)
+        private async void ApplyCurrentPipelineToCurrentFolder_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1289,7 +1289,7 @@ namespace ImgViewer.Views
 
 
                 // вызываем менеджер, передавая команды
-                _manager.ProcessFolder(folder, Pipeline);
+                await _manager.ProcessFolder(folder, Pipeline);
 
 
                 //_manager.ProcessFolder(folder);

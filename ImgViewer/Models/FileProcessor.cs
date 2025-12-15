@@ -259,9 +259,21 @@ namespace ImgViewer.Models
                 ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
                 return null;
             }
+
+            IEnumerable<string> subFolderPaths;
+            try
+            {
+                subFolderPaths = Directory.EnumerateDirectories(rootFolderPath);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
+            {
+                var msg = $"Cannot enumerate sub-folders in '{rootFolderPath}'.{Environment.NewLine}{ex.Message}";
+                System.Windows.MessageBox.Show(msg, "Folder Access Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+
             var subFolders = new List<SourceImageFolder>();
-            IEnumerable<string> subFolderPath = Directory.EnumerateDirectories(rootFolderPath);
-            foreach (string subFolder in subFolderPath)
+            foreach (string subFolder in subFolderPaths)
             {
                 var sub = GetImageFilesPaths(subFolder);
                 if (sub == null || sub.Files.Length == 0) continue;

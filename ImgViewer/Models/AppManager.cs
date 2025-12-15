@@ -387,10 +387,17 @@ namespace ImgViewer.Models
                 }
                 var plOps = pipeline.Operations.Count > 0 ? string.Join(Environment.NewLine, opsLog) : "No operations were performed.";
                 var plJson = pipeline.BuildPipelineForSave();
-                File.WriteAllLines(
-                    Path.Combine(rootFolder, "_processing_log.txt"),
-                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", plJson }
-                );
+                try
+                {
+                    File.WriteAllLines(
+                        Path.Combine(rootFolder, "_processing_log.txt"),
+                        new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", plJson }
+                    );
+                }
+                catch (Exception ex)
+                {
+                    ReportError($"Failed to write processing log to {rootFolder}", ex, "Logging Error");
+                }
 
             }
             finally
