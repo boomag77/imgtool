@@ -203,12 +203,12 @@ namespace ImgViewer.Models
 
                     using var profileImg = new Mat();
                     Cv2.Resize(profileNorm, profileImg, new Size(rows, 100), 0, 0, InterpolationFlags.Nearest);
-                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_hstripes_profile.png"), profileImg);
+                    //Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_hstripes_profile.png"), profileImg);
 
                     // Overlay: полосы подсвечены красным
                     using var overlay = bgr.Clone();
                     overlay.SetTo(new Scalar(0, 0, 255), stripesMask);
-                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_hstripes_overlay.png"), overlay);
+                    //Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_hstripes_overlay.png"), overlay);
                 }
                 catch (Exception ex)
                 {
@@ -404,12 +404,12 @@ namespace ImgViewer.Models
 
                     using var profileImg = new Mat();
                     Cv2.Resize(profileNorm, profileImg, new Size(cols, 100), 0, 0, InterpolationFlags.Nearest);
-                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_stripes_profile.png"), profileImg);
+                    //Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_stripes_profile.png"), profileImg);
 
                     // Overlay: полосы подсвечены красным
                     using var overlay = bgr.Clone();
                     overlay.SetTo(new Scalar(0, 0, 255), stripesMask);
-                    Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_stripes_overlay.png"), overlay);
+                    //Cv2.ImWrite(Path.Combine(debugOutputPath, "scanner_stripes_overlay.png"), overlay);
                 }
                 catch (Exception ex)
                 {

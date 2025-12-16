@@ -978,15 +978,17 @@ namespace ImgViewer.Models
                     using var pageMask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(0));
                     Cv2.Rectangle(pageMask, roi, Scalar.All(255), thickness: -1);
 
-                    Scalar fillColor = EstimatePageFillColor(src, pageMask);
+                    //Scalar fillColor = EstimatePageFillColor(src, pageMask);
 
                     using var borderMask = new Mat(src.Size(), MatType.CV_8UC1, Scalar.All(255));
                     // 0 внутри ROI → маска = бордюры
                     Cv2.Rectangle(borderMask, roi, Scalar.All(0), thickness: -1);
 
-                    Scalar fill;
+                    Scalar fill = new Scalar();
                     using var innerBgr = new Mat(srcBgr, roi);
                     fill = Cv2.Mean(innerBgr);
+                    
+                    
 
                     // add light blur to filled area to reduce sharp edges
                     Cv2.GaussianBlur(borderMask, borderMask, new OpenCvSharp.Size(5, 5), 0);
