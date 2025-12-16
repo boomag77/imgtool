@@ -984,8 +984,15 @@ namespace ImgViewer.Models
                     // 0 внутри ROI → маска = бордюры
                     Cv2.Rectangle(borderMask, roi, Scalar.All(0), thickness: -1);
 
+                    Scalar fill;
+                    using var innerBgr = new Mat(srcBgr, roi);
+                    fill = Cv2.Mean(innerBgr);
 
-                    result.SetTo(fillColor, borderMask);
+                    // add light blur to filled area to reduce sharp edges
+                    Cv2.GaussianBlur(borderMask, borderMask, new OpenCvSharp.Size(5, 5), 0);
+
+                    result.SetTo(fill, borderMask);
+                    
                     // результат: ROI как был, всё снаружи залито fillColor
                 }
                 else // BordersRemovalMode.Cut (или любой другой не-Fill)

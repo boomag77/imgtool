@@ -185,8 +185,9 @@ namespace ImgViewer.Models
         {
             try
             {
-                _mainViewModel.CurrentImagePath = imagePath;
+                
                 var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
+                _mainViewModel.CurrentImagePath = imagePath;
                 await SetBmpImageAsOriginal(bmpImage);
                 await SetBmpImageOnPreview(bmpImage);
                 await SetImageForProcessing(bmpImage);
@@ -201,6 +202,7 @@ namespace ImgViewer.Models
             {
                 string msg = $"Error loading image: {ex.Message}.";
                 ReportError(msg, ex, "Error");
+                _mainViewModel.CurrentImagePath = string.Empty;
             }
         }
 
@@ -256,23 +258,24 @@ namespace ImgViewer.Models
         {
             try
             {
-                var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
-                //Debug.WriteLine($"Stream length: {stream.Length}");
-
+                using var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
+                if (stream.CanSeek)
+                    stream.Position = 0;
 
                 string json = IsSavePipelineToMd ? _pipeline.BuildPipelineForSave() : null;
+
 
                 _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
             }
             catch (OperationCanceledException)
             {
-                #if DEBUG
+#if DEBUG
                 Debug.WriteLine("Saving image was canceled by user.");
-                #endif
+#endif
             }
             catch (Exception ex)
             {
-                string msg = $"EError while saving processed image to: {outputPath}";
+                string msg = $"Error while saving processed image to: {outputPath}";
                 ReportError(msg, ex, "Error");
             }
         }
