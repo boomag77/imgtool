@@ -11,7 +11,7 @@ namespace ImgViewer.Models
     public class Pipeline
     {
 
-
+        public event Action<string>? ErrorOccured;
 
         private sealed class PipelineSaveItem
         {
@@ -344,7 +344,7 @@ namespace ImgViewer.Models
                     throw new ArgumentOutOfRangeException(
                                      nameof(type),
                                      type,
-                                     "Unsupported pipeline operation type in CreateDeskewOperation");
+                                     "Unsupported pipeline operation type in CreatePipelineOperation");
             }
 
 

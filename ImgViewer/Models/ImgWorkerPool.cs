@@ -52,6 +52,7 @@ namespace ImgViewer.Models
         public event Action<int, int>? ProgressChanged;
 
         private string _batchErrorsPath = string.Empty;
+        private readonly object _errorFileLock = new();
 
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
@@ -139,10 +140,32 @@ namespace ImgViewer.Models
         {
             var msg = $"[{filePath}] {message}" + (ex != null ? $" :: {ex.Message}" : "");
             _fileErrors.Add(msg);
-            if (!string.IsNullOrEmpty(_batchErrorsPath))
+
+            if (string.IsNullOrEmpty(_batchErrorsPath))
+                return;
+
+            try
             {
-                File.AppendAllText(_batchErrorsPath, msg + Environment.NewLine);
+                lock (_errorFileLock)
+                {
+                    File.AppendAllText(_batchErrorsPath, msg + Environment.NewLine);
+                }
             }
+            catch (IOException ioEx)
+            {
+                Debug.WriteLine($"Failed to append batch error log: {ioEx.Message}");
+                _fileErrors.Add($"[REGISTERING ERRORS] Failed to append batch error log: {ioEx.Message}");
+            }
+            catch (UnauthorizedAccessException uaEx)
+            {
+                Debug.WriteLine($"Cannot write batch error log: {uaEx.Message}");
+                _fileErrors.Add($"[REGISTERING ERRORS] Cannot write batch error log: {uaEx.Message}");
+            }
+
+            //if (!string.IsNullOrEmpty(_batchErrorsPath))
+            //{
+            //    File.AppendAllText(_batchErrorsPath, msg + Environment.NewLine);
+            //}
         }
 
         private static HashSet<string> LoadExistingOutputNamesAndCleanupTmp(string outputFolder)
