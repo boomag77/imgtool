@@ -32,7 +32,8 @@ namespace ImgViewer.Interfaces
 
         public Task SetImageForProcessing(ImageSource bmp);
         public Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters);
-        public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDesvription = null);
+        public Task SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDesvription = null);
+        public Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken);
         public Task ProcessFolder(string srcFolder, Pipeline pipeline);
 
         public Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree);

@@ -2,6 +2,7 @@
 using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -25,30 +26,30 @@ namespace ImgViewer.Models
             // Dispose of unmanaged resources here if needed
         }
 
-        public byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null)
-        {
-            try
-            {
-                if (_token.IsCancellationRequested)
-                {
-                    return Array.Empty<byte>();
-                }
-                MagickReadSettings settings = new MagickReadSettings();
-                if (decodePixelWidth.HasValue)
-                    settings.Width = decodePixelWidth.Value;
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan))
-                using (var image = new MagickImage(fs, settings))
-                {
-                    image.AutoOrient();
-                    return image.ToByteArray(MagickFormat.Bmp);
-                }
-            }
-            catch (Exception ex)
-            {
-                ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
-                return Array.Empty<byte>();
-            }
-        }
+        //public byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null)
+        //{
+        //    try
+        //    {
+        //        if (_token.IsCancellationRequested)
+        //        {
+        //            return Array.Empty<byte>();
+        //        }
+        //        MagickReadSettings settings = new MagickReadSettings();
+        //        if (decodePixelWidth.HasValue)
+        //            settings.Width = decodePixelWidth.Value;
+        //        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan))
+        //        using (var image = new MagickImage(fs, settings))
+        //        {
+        //            image.AutoOrient();
+        //            return image.ToByteArray(MagickFormat.Bmp);
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
+        //        return Array.Empty<byte>();
+        //    }
+        //}
 
         //public BitmapSource? LoadTemp(string path)
         //{
@@ -180,9 +181,9 @@ namespace ImgViewer.Models
                 }
                 catch (Exception ex2)
                 {
-                    //ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
-                    throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
-                    //return (null, Array.Empty<byte>());
+                    ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
+                    //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
+                    return (new BitmapImage(), Array.Empty<byte>());
                 }
             }
 
@@ -216,11 +217,17 @@ namespace ImgViewer.Models
                 using var tiffSaver = new TiffWriter();
                 tiffSaver.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
             }
-            
+            catch (OperationCanceledException)
+            {
+                // forward cancellation
+                throw;
+            }
             catch (Exception ex)
             {
                 // forward exception
-                throw new Exception($"Error saving TIFF to {path}: {ex.Message}", ex);
+
+                throw;
+
             }
         }
 
@@ -248,43 +255,58 @@ namespace ImgViewer.Models
             return File.ReadAllBytes(path);
         }
 
-        public SourceImageFolder[]? GetSubFoldersWithImagesPaths(string rootFolderPath)
+        public SourceImageFolder[] GetSubFoldersWithImagesPaths(string rootFolderPath, CancellationToken token)
         {
-            if (_token.IsCancellationRequested) return null;
+            if (token.IsCancellationRequested) return Array.Empty<SourceImageFolder>();
             if (!Directory.Exists(rootFolderPath))
             {
                 ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
-                return null;
+                return Array.Empty<SourceImageFolder>();
             }
 
             IEnumerable<string> subFolderPaths;
+            // ignore Inaccessible folders
+
+            var subFolders = new List<SourceImageFolder>();
             try
             {
                 subFolderPaths = Directory.EnumerateDirectories(rootFolderPath);
+                foreach (string subFolder in subFolderPaths)
+                {
+                    if (token.IsCancellationRequested) return Array.Empty<SourceImageFolder>();
+                    try
+                    {
+                        var sub = GetImageFilesPaths(subFolder, token);
+                        if (sub == null || sub.Files.Length == 0) continue;
+                        subFolders.Add(sub);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        var msg = $"Cannot process sub-folder '{subFolder}'.{Environment.NewLine}{ex.Message}";
+                        ErrorOccured?.Invoke(msg);
+                    }
+                }
+
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
             {
                 var msg = $"Cannot enumerate sub-folders in '{rootFolderPath}'.{Environment.NewLine}{ex.Message}";
-                System.Windows.MessageBox.Show(msg, "Folder Access Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return null;
+                ErrorOccured?.Invoke(msg);
+                return Array.Empty<SourceImageFolder>();
             }
 
-            var subFolders = new List<SourceImageFolder>();
-            foreach (string subFolder in subFolderPaths)
-            {
-                var sub = GetImageFilesPaths(subFolder);
-                if (sub == null || sub.Files.Length == 0) continue;
-                subFolders.Add(sub);
-            }
+            
+            
             return subFolders.ToArray();
         }
 
-        public SourceImageFolder? GetImageFilesPaths(string folderPath)
+        public SourceImageFolder? GetImageFilesPaths(string folderPath, CancellationToken token)
         {
-            if (_token.IsCancellationRequested)
-            {
-                return null;
-            }
+            if (token.IsCancellationRequested) return null;
             if (!Directory.Exists(folderPath))
             {
                 ErrorOccured?.Invoke($"Directory does not exist: {folderPath}");
@@ -308,10 +330,14 @@ namespace ImgViewer.Models
                                             file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
                                  .ToArray();
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
             {
                 var msg = $"Cannot enumerate files in '{folderPath}'.\n{ex.Message}";
-                System.Windows.MessageBox.Show(msg, "Folder Access Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ErrorOccured?.Invoke(msg);
                 return null;
             }
 
@@ -327,12 +353,8 @@ namespace ImgViewer.Models
                                             Layout = GetLayoutFromFileName(f)
 
 
-                                        })
-                                        .ToArray()
+                                        }).ToArray()
             };
-
-
-
             return sourceFolder;
         }
 
@@ -361,7 +383,7 @@ namespace ImgViewer.Models
             return null;
         }
 
-        public SourceImageFolder[]? GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath)
+        public SourceImageFolder[] GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath, CancellationToken token)
         {
             if (string.IsNullOrWhiteSpace(rootFolderPath) || !Directory.Exists(rootFolderPath))
             {
@@ -374,7 +396,12 @@ namespace ImgViewer.Models
             try
             {
                 foreach (var d in Directory.EnumerateDirectories(rootFolderPath))
+                {
+                    if (token.IsCancellationRequested)
+                        return Array.Empty<SourceImageFolder>();
                     stack.Push(d);
+                }
+                    
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
             {
@@ -384,6 +411,8 @@ namespace ImgViewer.Models
 
             while (stack.Count > 0)
             {
+                if (token.IsCancellationRequested)
+                    return Array.Empty<SourceImageFolder>();
                 var dir = stack.Pop();
 
                 // skip names that contain "processed" (case-insensitive)
@@ -392,14 +421,19 @@ namespace ImgViewer.Models
                     continue;
 
                 // get files (your method), handle nulls
-                var sf = GetImageFilesPaths(dir);
+                var sf = GetImageFilesPaths(dir, token);
                 if (sf != null && sf.Files?.Length > 0) result.Add(sf);
 
                 // push children, ignoring inaccessible ones
                 try
                 {
                     foreach (var child in Directory.EnumerateDirectories(dir))
+                    {
+                        if (token.IsCancellationRequested)
+                            return Array.Empty<SourceImageFolder>();
                         stack.Push(child);
+                    }
+                        
                 }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
                 {

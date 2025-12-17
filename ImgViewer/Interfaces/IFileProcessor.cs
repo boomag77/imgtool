@@ -8,12 +8,12 @@ namespace ImgViewer.Interfaces
     {
         (ImageSource, byte[]) LoadImageSource(string path, uint? decodePixelWidth = null);
         //BitmapSource? LoadTemp(string path);
-        byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null);
-        SourceImageFolder? GetImageFilesPaths(string folderPath);
+        //byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null);
+        SourceImageFolder? GetImageFilesPaths(string folderPath, CancellationToken token);
 
-        SourceImageFolder[]? GetSubFoldersWithImagesPaths(string rootFolderPath);
+        SourceImageFolder[] GetSubFoldersWithImagesPaths(string rootFolderPath, CancellationToken token);
 
-        SourceImageFolder[]? GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath);
+        SourceImageFolder[] GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath, CancellationToken token);
 
         void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite, string? metadataJson = null);
         void Save(Stream stream, string path);

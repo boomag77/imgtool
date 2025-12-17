@@ -41,9 +41,12 @@ namespace ImgViewer.Models
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
 
+            _fileProcessor.ErrorOccured += (msg) => ReportError(msg, null, "File Processor Error");
+
             _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token);
 
+            _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
         }
 
         //public DocBoundaryModel DocBoundaryModel => _docBoundaryModel;
@@ -254,7 +257,7 @@ namespace ImgViewer.Models
 
         }
 
-        public void SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
+        public async Task SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
         {
             try
             {
@@ -265,7 +268,7 @@ namespace ImgViewer.Models
                 string json = IsSavePipelineToMd ? _pipeline.BuildPipelineForSave() : null;
 
 
-                _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json);
+                await Task.Run(() => _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json));
             }
             catch (OperationCanceledException)
             {
@@ -302,6 +305,12 @@ namespace ImgViewer.Models
 
         public async Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree = true)
         {
+            _rootFolderCts?.Cancel();
+            _rootFolderCts?.Dispose();
+
+            _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            var batchToken = _rootFolderCts.Token;
+
             var debug = false;
             if (pipeline == null) return;
 
@@ -310,11 +319,11 @@ namespace ImgViewer.Models
             UpdateStatus($"Processing folders in " + rootFolder);
             //_mainViewModel.Status = $"Processing folders in " + rootFolder;
 
-            SourceImageFolder[] sourceFolders = [];
+            SourceImageFolder[] sourceFolders = Array.Empty<SourceImageFolder>();
 
             if (fullTree)
             {
-                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths_FullTree(rootFolder);
+                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths_FullTree(rootFolder, batchToken);
                 if (debug)
                 {
                     Debug.WriteLine("Folders to process (FULL):");
@@ -329,7 +338,7 @@ namespace ImgViewer.Models
             }
             else
             {
-                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths(rootFolder);
+                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths(rootFolder, batchToken);
                 if (debug)
                 {
                     Debug.WriteLine("Folders to process:");
@@ -343,26 +352,20 @@ namespace ImgViewer.Models
 
             }
 
-            if (sourceFolders == null || sourceFolders.Length == 0) return;
+            if (sourceFolders.Length == 0) return;
 
             var processedCount = 0;
 
 
-            if (_rootFolderCts != null)
-            {
-                try { _rootFolderCts.Cancel(); } catch { }
-                try { _rootFolderCts.Dispose(); } catch { }
-                _rootFolderCts = null;
-            }
-            _rootFolderCts = new CancellationTokenSource();
+            //_rootFolderCts = new CancellationTokenSource();
             try
             {
                 foreach (var sourceFolder in sourceFolders)
                 {
-                    _rootFolderCts.Token.ThrowIfCancellationRequested();
+                    if (batchToken.IsCancellationRequested) break;
                     try
                     {
-                        await Task.Run(() => ProcessFolder(sourceFolder.Path, pipeline));
+                        await Task.Run(() => ProcessFolder(sourceFolder.Path, pipeline, batchToken), batchToken);
                         processedCount++;
                     }
                     catch (OperationCanceledException)
@@ -372,7 +375,8 @@ namespace ImgViewer.Models
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"Error while processing sub-Folder in root Folder {rootFolder}: {ex.Message}");
+                        //Debug.WriteLine($"Error while processing sub-Folder in root Folder {rootFolder}: {ex.Message}");
+                        ReportError($"Error while processing sub-Folder in root Folder {rootFolder}.", ex, "Processing Error");
                     }
                 }
 
@@ -411,27 +415,32 @@ namespace ImgViewer.Models
             }
         }
 
-        public async Task ProcessFolder(string srcFolder, Pipeline pipeline)
+        public Task ProcessFolder(string srcFolder, Pipeline pipeline)
+        {
+            _rootFolderCts?.Cancel();
+            _rootFolderCts?.Dispose();
+            _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+
+            return ProcessFolder(srcFolder, pipeline, _rootFolderCts.Token);
+        }
+
+
+        public async Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken)
         {
             bool debug = false;
             if (pipeline == null) return;
 
             UpdateStatus($"Processing folder " + srcFolder);
 
-            //await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-            //{
-            //    _mainViewModel.Status = $"Processing folder " + srcFolder;
-            //}, System.Windows.Threading.DispatcherPriority.Background);
-
             
-            var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder);
-            //if (debug)
-            //{
-            //    string pipeLineForSave = BuildPipelineForSave(pipelineToUse);
-            //    Debug.WriteLine("Pipeline JSON for save:");
-            //    Debug.WriteLine(pipeLineForSave);
-            //    return;
-            //}
+            var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
+            if (sourceFolder == null || sourceFolder.Files == null || sourceFolder.Files.Length == 0) return;
+
+
+            _poolCts?.Cancel();
+            _poolCts?.Dispose();
+            _poolCts = CancellationTokenSource.CreateLinkedTokenSource(batchToken);
+
             if (debug)
             {
                 foreach (var imagePath in sourceFolder.Files)
@@ -440,13 +449,7 @@ namespace ImgViewer.Models
                 }
             }
 
-            if (_poolCts != null)
-            {
-                try { _poolCts.Cancel(); } catch { }
-                try { _poolCts.Dispose(); } catch { }
-                _poolCts = null;
-            }
-            _poolCts = new CancellationTokenSource();
+            //_poolCts = new CancellationTokenSource();
 
             var startTime = DateTime.Now;
 
@@ -475,10 +478,6 @@ namespace ImgViewer.Models
             {
                 
                 UpdateStatus("Standby");
-                //await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                //{
-                //    _mainViewModel.Status = $"Standby";
-                //}, System.Windows.Threading.DispatcherPriority.Background);
 
                 
                 try
@@ -526,18 +525,9 @@ namespace ImgViewer.Models
             {
                 _rootFolderCts?.Cancel();
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-
-            }
-
-            try
-            {
-                _poolCts?.Cancel();
-            }
-            catch (Exception e)
-            {
-
+                ReportError($"Failed to cancel BatchProcessing. {ex}");
             }
         }
 

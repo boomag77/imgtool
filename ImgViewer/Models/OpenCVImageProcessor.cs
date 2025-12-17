@@ -65,9 +65,14 @@ namespace ImgViewer.Models
                     if (mat == null || mat.Empty()) return;
                     WorkingImage = mat.Clone();
                 }
+                
                 catch (OperationCanceledException)
                 {
 
+                }
+                catch (Exception ex)
+                {
+                    ErrorOccured?.Invoke($"Failed to set Current Image");
                 }
             }
         }
@@ -99,7 +104,9 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[DocBoundaryModel] Failed to initialize: {ex}");
+                var msg = $"[DocBoundaryModel] Failed to initialize: {ex}";
+                ErrorOccured?. Invoke(msg);
+                Debug.WriteLine(msg);
                 _docBoundaryModel = null;
             }
 
@@ -159,6 +166,11 @@ namespace ImgViewer.Models
 
                 return result;
             }
+            catch
+            {
+                ErrorOccured?.Invoke("Failed while converting Bitmap Source to Mat");
+                return new Mat();
+            }
             finally
             {
                 if (handle.HasValue && handle.Value.IsAllocated) handle.Value.Free();
@@ -168,46 +180,66 @@ namespace ImgViewer.Models
 
         private Mat CreateMatFromBuffer(byte[] buffer, int width, int height, int srcStride, PixelFormat copyFormat)
         {
-            if (copyFormat == PixelFormats.Bgr24)
+            _token.ThrowIfCancellationRequested();
+            var bufferCopy = buffer.Clone();
+            try
             {
-                var mat = new Mat(height, width, MatType.CV_8UC3);
-                IntPtr dstPtr = mat.Data;
-                int dstStride = (int)mat.Step();
-                int copyRowBytes = Math.Min(width * 3, srcStride);
-                for (int r = 0; r < height; r++)
-                    Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
-                return mat;
-            }
+                if (copyFormat == PixelFormats.Bgr24)
+                {
+                    var mat = new Mat(height, width, MatType.CV_8UC3);
+                    IntPtr dstPtr = mat.Data;
+                    int dstStride = (int)mat.Step();
+                    int copyRowBytes = Math.Min(width * 3, srcStride);
+                    for (int r = 0; r < height; r++)
+                    {
+                        _token.ThrowIfCancellationRequested();
+                        Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
+                    }
+                    return mat;
+                }
 
-            if (copyFormat == PixelFormats.Bgra32)
+                if (copyFormat == PixelFormats.Bgra32)
+                {
+                    using var mat4 = new Mat(height, width, MatType.CV_8UC4);
+                    IntPtr dstPtr = mat4.Data;
+                    int dstStride = (int)mat4.Step();
+                    int copyRowBytes = Math.Min(width * 4, srcStride);
+                    for (int r = 0; r < height; r++)
+                    {
+                        _token.ThrowIfCancellationRequested();
+                        Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
+                    }
+                    var result = new Mat();
+                    Cv2.CvtColor(mat4, result, ColorConversionCodes.BGRA2BGR);
+                    return result;
+                }
+
+                if (copyFormat == PixelFormats.Gray8)
+                {
+                    using var mat1 = new Mat(height, width, MatType.CV_8UC1);
+                    IntPtr dstPtr = mat1.Data;
+                    int dstStride = (int)mat1.Step();
+                    int copyRowBytes = Math.Min(width, srcStride);
+                    for (int r = 0; r < height; r++)
+                    {
+                        _token.ThrowIfCancellationRequested();
+                        Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
+                    }
+                    var result = new Mat();
+                    Cv2.CvtColor(mat1, result, ColorConversionCodes.GRAY2BGR);
+                    return result;
+                }
+            }
+            catch (OperationCanceledException)
             {
-                using var mat4 = new Mat(height, width, MatType.CV_8UC4);
-                IntPtr dstPtr = mat4.Data;
-                int dstStride = (int)mat4.Step();
-                int copyRowBytes = Math.Min(width * 4, srcStride);
-                for (int r = 0; r < height; r++)
-                    Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
-
-                var result = new Mat();
-                Cv2.CvtColor(mat4, result, ColorConversionCodes.BGRA2BGR);
-                return result;
+                throw;
             }
-
-            if (copyFormat == PixelFormats.Gray8)
+            catch (Exception ex)
             {
-                using var mat1 = new Mat(height, width, MatType.CV_8UC1);
-                IntPtr dstPtr = mat1.Data;
-                int dstStride = (int)mat1.Step();
-                int copyRowBytes = Math.Min(width, srcStride);
-                for (int r = 0; r < height; r++)
-                    Marshal.Copy(buffer, r * srcStride, IntPtr.Add(dstPtr, r * dstStride), copyRowBytes);
-
-                var result = new Mat();
-                Cv2.CvtColor(mat1, result, ColorConversionCodes.GRAY2BGR);
-                return result;
+                ErrorOccured?.Invoke($"Error creating Mat from buffer: {ex.Message}");
+                return new Mat();
             }
-
-            throw new NotSupportedException("Unsupported PixelFormat");
+            return new Mat();
         }
 
 
@@ -254,7 +286,7 @@ namespace ImgViewer.Models
         {
             using var img = WorkingImage; // clone for thread safety
             if (img == null || img.Empty())
-                throw new InvalidOperationException("WorkingImage is null or empty");
+                throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
             if (format == ImageFormat.Tiff)
             {
                 var paramsList = new List<int>();
@@ -307,8 +339,10 @@ namespace ImgViewer.Models
                         break;
                 }
                 //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
-                byte[] pngData = img.ImEncode(".png");
-                return new MemoryStream(pngData);
+                //byte[] pngData = img.ImEncode(".png");
+                //return new MemoryStream(pngData);
+                byte[] bmpData = img.ImEncode(".bmp");
+                return new MemoryStream(bmpData);
             }
             else
             {
