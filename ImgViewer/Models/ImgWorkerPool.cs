@@ -522,6 +522,7 @@ namespace ImgViewer.Models
             {
 #if DEBUG
                 Debug.WriteLine("Batch processing cancelled!");
+                
 #endif
             }
             catch (Exception ex)

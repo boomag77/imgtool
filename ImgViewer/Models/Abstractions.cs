@@ -17,7 +17,7 @@ namespace ImgViewer.Models
 
     public class TiffInfo
     {
-        public byte[] pixels { get; set; }
+        public byte[] Pixels { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public int BitsPerPixel { get; set; }
@@ -25,6 +25,8 @@ namespace ImgViewer.Models
         public TiffCompression Compression { get; set; }
         public bool IsMultiPage { get; set; }
         // add more properties as needed
+
+        
     }
 
     public enum SourceFileLayout

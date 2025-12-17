@@ -17,6 +17,8 @@ namespace ImgViewer.Models
 {
     public class OpenCvImageProcessor : IImageProcessor, IDisposable
     {
+        private byte[]? _binaryBuffer;
+
         private Mat _currentImage;
         //private Scalar _pageColor;
         //private Scalar _borderColor;
@@ -85,7 +87,7 @@ namespace ImgViewer.Models
             _appManager = appManager;
             _token = token;
             //_onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            Cv2.SetNumThreads(2);
+            Cv2.SetNumThreads(1);
             try
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -111,6 +113,13 @@ namespace ImgViewer.Models
             }
 
             //_docBoundaryModel = new DocBoundaryModel(_onnxCts.Token, "Models/ML/model.onnx");
+        }
+
+        private byte[] RentBinaryBuffer(int size)
+        {
+            if (_binaryBuffer == null || _binaryBuffer.Length < size)
+                _binaryBuffer = new byte[size];
+            return _binaryBuffer;
         }
 
         private Mat BitmapSourceToMat(BitmapSource src)
@@ -371,7 +380,7 @@ namespace ImgViewer.Models
                 case TiffCompression.CCITTG4:
                     // for CCITTG3/G4 we need binary image
                     var (binPixels, width, height) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: false);
-                    tiffInfo.pixels = binPixels;
+                    tiffInfo.Pixels = binPixels;
                     tiffInfo.Width = width;
                     tiffInfo.Height = height;
                     tiffInfo.Dpi = dpi;
@@ -381,7 +390,7 @@ namespace ImgViewer.Models
                     break;
                 case TiffCompression.LZW:
                     var (lzwPixels, lzwWidth, lzwHeight) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: true);
-                    tiffInfo.pixels = lzwPixels;
+                    tiffInfo.Pixels = lzwPixels;
                     tiffInfo.Width = lzwWidth;
                     tiffInfo.Height = lzwHeight;
                     tiffInfo.Dpi = dpi;
@@ -419,8 +428,10 @@ namespace ImgViewer.Models
 
             int width = bin.Cols;
             int height = bin.Rows;
+            var bufferSize = width * height;
+            var binPixels = RentBinaryBuffer(bufferSize);
 
-            var binPixels = new byte[width * height];
+            //var binPixels = new byte[width * height];
 
             // важно: копируем ровно width байт на строку, игнорируя bin.Step()
             for (int y = 0; y < height; y++)

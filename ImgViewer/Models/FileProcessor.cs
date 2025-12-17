@@ -218,7 +218,7 @@ namespace ImgViewer.Models
             {
                 //using var tiffSaver = new TiffWriter();
                 _tiffWriter.SaveBinaryBytesAsCcitt(
-                    tiffInfo.pixels,
+                    tiffInfo.Pixels,
                     tiffInfo.Width,
                     tiffInfo.Height,
                     path,
