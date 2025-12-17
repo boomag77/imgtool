@@ -15,7 +15,7 @@ using static ImgViewer.Models.BordersRemover;
 
 namespace ImgViewer.Models
 {
-    public class OpenCVImageProcessor : IImageProcessor, IDisposable
+    public class OpenCvImageProcessor : IImageProcessor, IDisposable
     {
         private Mat _currentImage;
         //private Scalar _pageColor;
@@ -75,7 +75,7 @@ namespace ImgViewer.Models
 
 
 
-        public OpenCVImageProcessor(IAppManager appManager, CancellationToken token)
+        public OpenCvImageProcessor(IAppManager appManager, CancellationToken token)
         {
             _appManager = appManager;
             _token = token;

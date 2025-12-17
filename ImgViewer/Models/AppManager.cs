@@ -42,7 +42,7 @@ namespace ImgViewer.Models
             _fileProcessor = new FileProcessor(_cts.Token);
 
             _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
-            _imageProcessor = new OpenCVImageProcessor(this, _imgProcCts.Token);
+            _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token);
 
         }
 
@@ -186,7 +186,7 @@ namespace ImgViewer.Models
             try
             {
                 
-                var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.Load<ImageSource>(imagePath));
+                var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.LoadImageSource(imagePath));
                 _mainViewModel.CurrentImagePath = imagePath;
                 await SetBmpImageAsOriginal(bmpImage);
                 await SetBmpImageOnPreview(bmpImage);

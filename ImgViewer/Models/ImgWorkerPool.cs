@@ -12,8 +12,9 @@ namespace ImgViewer.Models
 
         private sealed class SaveTaskInfo
         {
-            public MemoryStream ImageStream { get; set; }
-            public string OutputFilePath;
+            public Stream ImageStream { get; set; }
+            public string OutputFilePath { get; set; }
+            public bool DisposeStream { get; set; }
         }
 
         private bool _disposed;
@@ -261,20 +262,35 @@ namespace ImgViewer.Models
                 foreach (var saveTask in _saveQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
-                    currentOutputFile = saveTask.OutputFilePath;
-                    using (var ms = saveTask.ImageStream)
+                    using (var stream = saveTask.ImageStream)
                     {
-                        ms.Position = 0;
+                        if (stream.CanSeek) stream.Position = 0;
                         var finalPath = saveTask.OutputFilePath;
                         var tempPath = finalPath + ".tmp";
-                        fileProc.SaveTiff(ms, tempPath, TiffCompression.CCITTG4, 300, true, _plJson);
 
-                        // Если старый финальный файл уже есть – удаляем
+                        fileProc.SaveTiff(stream, tempPath, TiffCompression.CCITTG4, 300, true, _plJson);
                         if (File.Exists(finalPath))
                             File.Delete(finalPath);
                         File.Move(tempPath, finalPath);
-
                     }
+
+
+
+
+                    //currentOutputFile = saveTask.OutputFilePath;
+                    //using (var ms = saveTask.ImageStream)
+                    //{
+                    //    ms.Position = 0;
+                    //    var finalPath = saveTask.OutputFilePath;
+                    //    var tempPath = finalPath + ".tmp";
+                    //    fileProc.SaveTiff(ms, tempPath, TiffCompression.CCITTG4, 300, true, _plJson);
+
+                    //    // Если старый финальный файл уже есть – удаляем
+                    //    if (File.Exists(finalPath))
+                    //        File.Delete(finalPath);
+                    //    File.Move(tempPath, finalPath);
+
+                    //}
                 }
             }
             catch (OperationCanceledException)
@@ -296,15 +312,27 @@ namespace ImgViewer.Models
         {
             var token = _token;
                
-            using var imgProc = new OpenCVImageProcessor(null, token);
+            using var imgProc = new OpenCvImageProcessor(null, token);
             using var fileProc = new FileProcessor(token);
             try
             {
                 foreach (var file in _filesQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
-
-                    var loaded = fileProc.Load<ImageSource>(file.Path);
+                    (ImageSource, byte[]) loaded;
+                    try
+                    {
+                        loaded = fileProc.LoadImageSource(file.Path);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        RegisterFileError(file.Path, $"Error loading image: {file.Path}", ex);
+                        continue;
+                    }
 
                     if (loaded.Item1 == null)
                     {
@@ -331,7 +359,7 @@ namespace ImgViewer.Models
                                 continue;
                             }
                             //var parameters = op.CreateParameterDictionary();
-                            // if commant is Border remove and border removal algo is Manual, check if the file layout left or right
+                            // if command is Border remove and border removal algo is Manual, check if the file layout left or right
                             if (op.Command == ProcessorCommand.BordersRemove &&
                                 op.Params.ContainsKey("borderRemovalAlgorithm") &&
                                 op.Params["borderRemovalAlgorithm"] is string algo &&
@@ -389,21 +417,30 @@ namespace ImgViewer.Models
                     //proc.SaveCurrentImage(outputFilePath);
                     try
                     {
-                        using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
-                        {
-                            var saveTask = new SaveTaskInfo
-                            {
-                                ImageStream = new MemoryStream(),
-                                OutputFilePath = outputFilePath
-                            };
-                            if (outStream.CanSeek) outStream.Position = 0;
-                            outStream.CopyTo(saveTask.ImageStream);
-                            _saveQueue.Add(saveTask, token);
-                            if (_saveQueue.Count >= 2)
-                            {
-                                StartSavingWorkerIfNeeded();
-                            }
+                        //using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
+                        //{
+                            
+                        //    if (outStream.CanSeek) outStream.Position = 0;
+                        //    outStream.CopyTo(saveTask.ImageStream);
+                        //    _saveQueue.Add(saveTask, token);
+                        //    if (_saveQueue.Count >= 2)
+                        //    {
+                        //        StartSavingWorkerIfNeeded();
+                        //    }
 
+                        //}
+                        var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4);
+                        if (outStream.CanSeek) outStream.Position = 0;
+                        var saveTask = new SaveTaskInfo
+                        {
+                            ImageStream = outStream,
+                            OutputFilePath = outputFilePath,
+                            DisposeStream = true
+                        };
+                        _saveQueue.Add(saveTask, token);
+                        if (_saveQueue.Count >= 2)
+                        {
+                            StartSavingWorkerIfNeeded();
                         }
                     }
                     catch (OperationCanceledException) { throw; }

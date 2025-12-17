@@ -1,13 +1,13 @@
 ﻿using ImgViewer.Models;
 using System.IO;
-using System.Windows.Media.Imaging;
+using System.Windows.Media;
 
 namespace ImgViewer.Interfaces
 {
     public interface IFileProcessor
     {
-        (T?, byte[]) Load<T>(string path, uint? decodePixelWidth = null) where T : class;
-        BitmapSource? LoadTemp(string path);
+        (ImageSource, byte[]) LoadImageSource(string path, uint? decodePixelWidth = null);
+        //BitmapSource? LoadTemp(string path);
         byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null);
         SourceImageFolder? GetImageFilesPaths(string folderPath);
 
