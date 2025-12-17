@@ -51,6 +51,8 @@ namespace ImgViewer.Models
         public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
 
+        private string _batchErrorsPath = string.Empty;
+
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
                              int maxWorkersCount,
@@ -65,6 +67,7 @@ namespace ImgViewer.Models
             string sourceFolderName = Path.GetFileName(_sourceFolder.Path);
             _outputFolder = Path.Combine(_sourceFolder.ParentPath, sourceFolderName + "_processed");
             Directory.CreateDirectory(_outputFolder);
+            _batchErrorsPath = Path.Combine(_outputFolder, "_batch_errors.txt");
 
             _existingOutputNames = LoadExistingOutputNamesAndCleanupTmp(_outputFolder);
 
@@ -136,6 +139,10 @@ namespace ImgViewer.Models
         {
             var msg = $"[{filePath}] {message}" + (ex != null ? $" :: {ex.Message}" : "");
             _fileErrors.Add(msg);
+            if (!string.IsNullOrEmpty(_batchErrorsPath))
+            {
+                File.AppendAllText(_batchErrorsPath, msg + Environment.NewLine);
+            }
         }
 
         private static HashSet<string> LoadExistingOutputNamesAndCleanupTmp(string outputFolder)
@@ -506,7 +513,10 @@ namespace ImgViewer.Models
                     Path.Combine(_outputFolder, "_processing_log.txt"),
                     new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", "Errors:", "\n", errors, "\n", _plJson ?? "Error get PL json" }
                 );
-
+                if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
+                {
+                    File.Delete(_batchErrorsPath);
+                }
             }
             catch (OperationCanceledException)
             {
