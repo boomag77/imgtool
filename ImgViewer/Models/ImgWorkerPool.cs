@@ -12,9 +12,11 @@ namespace ImgViewer.Models
 
         private sealed class SaveTaskInfo
         {
-            public Stream ImageStream { get; set; }
-            public string OutputFilePath { get; set; }
-            public bool DisposeStream { get; set; }
+            public Stream? ImageStream { get; set; }
+            public string OutputFilePath { get; set; } = string.Empty;
+            public bool DisposeStream { get; set; } = false;
+
+            public TiffInfo? TiffInfo { get; set; }
         }
 
         private bool _disposed;
@@ -262,35 +264,39 @@ namespace ImgViewer.Models
                 foreach (var saveTask in _saveQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
-                    using (var stream = saveTask.ImageStream)
-                    {
-                        if (stream.CanSeek) stream.Position = 0;
-                        var finalPath = saveTask.OutputFilePath;
-                        var tempPath = finalPath + ".tmp";
-
-                        await Task.Run(() => fileProc.SaveTiff(stream, tempPath, TiffCompression.CCITTG4, 300, true, _plJson), token);
-                        if (File.Exists(finalPath))
-                            File.Delete(finalPath);
-                        File.Move(tempPath, finalPath);
-                    }
-
-
-
-
-                    //currentOutputFile = saveTask.OutputFilePath;
-                    //using (var ms = saveTask.ImageStream)
+                    //using (var stream = saveTask.ImageStream)
                     //{
-                    //    ms.Position = 0;
+                    //    if (stream.CanSeek) stream.Position = 0;
                     //    var finalPath = saveTask.OutputFilePath;
                     //    var tempPath = finalPath + ".tmp";
-                    //    fileProc.SaveTiff(ms, tempPath, TiffCompression.CCITTG4, 300, true, _plJson);
 
-                    //    // Если старый финальный файл уже есть – удаляем
+                    //    await Task.Run(() => fileProc.SaveTiff(stream, tempPath, TiffCompression.CCITTG4, 300, true, _plJson), token);
                     //    if (File.Exists(finalPath))
                     //        File.Delete(finalPath);
                     //    File.Move(tempPath, finalPath);
-
                     //}
+
+
+
+
+                    var tiffInfo = saveTask.TiffInfo;
+                    await Task.Run(() =>
+                    {
+                        var finalPath = saveTask.OutputFilePath;
+                        var tempPath = finalPath + ".tmp";
+                        currentOutputFile = finalPath;
+                        if (tiffInfo != null)
+                        {
+                            fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
+                        }
+                        if (File.Exists(finalPath))
+                            File.Delete(finalPath);
+                        File.Move(tempPath, finalPath);
+                    }, token);
                 }
             }
             catch (OperationCanceledException)
@@ -429,12 +435,14 @@ namespace ImgViewer.Models
                         //    }
 
                         //}
-                        var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4);
-                        if (outStream.CanSeek) outStream.Position = 0;
+                        //var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4);
+                        var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
+                        //if (outStream.CanSeek) outStream.Position = 0;
                         var saveTask = new SaveTaskInfo
                         {
-                            ImageStream = outStream,
+                            //ImageStream = outStream,
                             OutputFilePath = outputFilePath,
+                            TiffInfo = tiffInfo,
                             DisposeStream = true
                         };
                         _saveQueue.Add(saveTask, token);

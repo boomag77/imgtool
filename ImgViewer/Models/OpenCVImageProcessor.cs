@@ -370,7 +370,7 @@ namespace ImgViewer.Models
                 case TiffCompression.CCITTG3:
                 case TiffCompression.CCITTG4:
                     // for CCITTG3/G4 we need binary image
-                    var (binPixels, width, height) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: true);
+                    var (binPixels, width, height) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: false);
                     tiffInfo.pixels = binPixels;
                     tiffInfo.Width = width;
                     tiffInfo.Height = height;

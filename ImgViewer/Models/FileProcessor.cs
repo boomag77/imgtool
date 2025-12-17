@@ -13,6 +13,7 @@ namespace ImgViewer.Models
     internal class FileProcessor : IFileProcessor, IDisposable
     {
         private CancellationToken _token;
+        private readonly TiffWriter _tiffWriter;
 
 
         public event Action<string> ErrorOccured;
@@ -20,6 +21,7 @@ namespace ImgViewer.Models
         public FileProcessor(CancellationToken token)
         {
             _token = token;
+            _tiffWriter = new TiffWriter();
         }
 
         public void Dispose()
@@ -213,8 +215,8 @@ namespace ImgViewer.Models
             }
             try
             {
-                using var tiffSaver = new TiffWriter();
-                tiffSaver.SaveBinaryBytesAsCcitt(
+                //using var tiffSaver = new TiffWriter();
+                _tiffWriter.SaveBinaryBytesAsCcitt(
                     tiffInfo.pixels,
                     tiffInfo.Width,
                     tiffInfo.Height,
