@@ -26,6 +26,7 @@ namespace ImgViewer.Models
 
         public void Dispose()
         {
+            _tiffWriter?.Dispose();
             // Dispose of unmanaged resources here if needed
         }
 

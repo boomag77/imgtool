@@ -238,23 +238,14 @@ namespace ImgViewer.Models
 
                 _currentSavingWorkers++;
 
-                var task = Task.Run(() =>
-                {
-                    try
-                    {
-                        ImageSavingWorker(); 
-                    }
-                    finally
-                    {
-                        Interlocked.Decrement(ref _currentSavingWorkers);
-                    }
-                }, _token);
+                var workerTask = Task.Run(() => ImageSavingWorkerAsync(), _token)
+                             .ContinueWith(t => Interlocked.Decrement(ref _currentSavingWorkers));
 
-                _savingTasks.Add(task);
+                _savingTasks.Add(workerTask);
             }
         }
 
-        private async void ImageSavingWorker()
+        private async Task ImageSavingWorkerAsync()
         {
             var token = _token;
             using var fileProc = new FileProcessor(token);
@@ -275,24 +266,17 @@ namespace ImgViewer.Models
                     //        File.Delete(finalPath);
                     //    File.Move(tempPath, finalPath);
                     //}
-
-
-
-
                     var tiffInfo = saveTask.TiffInfo;
+                    if (tiffInfo == null)
+                        throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
+
+
                     await Task.Run(() =>
                     {
                         var finalPath = saveTask.OutputFilePath;
                         var tempPath = finalPath + ".tmp";
                         currentOutputFile = finalPath;
-                        if (tiffInfo != null)
-                        {
-                            fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
-                        }
+                        fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
                         if (File.Exists(finalPath))
                             File.Delete(finalPath);
                         File.Move(tempPath, finalPath);

@@ -1,6 +1,5 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -19,13 +18,14 @@ public enum TiffCompression
 
 namespace ImgViewer.Models
 {
-    public class TiffWriter :IDisposable
+    public class TiffWriter : IDisposable
     {
 
 
         public void Dispose()
         {
             // nothing to dispose
+
         }
         // public entry point
         public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true, string? metadataJson = null)
@@ -65,7 +65,7 @@ namespace ImgViewer.Models
                     // decode stream to System.Drawing.Bitmap
                     using var bmp = (Bitmap)Image.FromStream(ms);
 
-                    
+
 
                     // convert to binary 0/255 bytes (grayscale + Otsu)
                     var binPixels = ConvertBitmapToBinary(bmp, out int width, out int height);
@@ -168,7 +168,7 @@ namespace ImgViewer.Models
             }
         }
 
-        
+
 
         // Otsu implementation
         private static byte ComputeOtsuThreshold(byte[] gray)

@@ -85,7 +85,7 @@ namespace ImgViewer.Models
             _appManager = appManager;
             _token = token;
             //_onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-
+            Cv2.SetNumThreads(2);
             try
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory;
