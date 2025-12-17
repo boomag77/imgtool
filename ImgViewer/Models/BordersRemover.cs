@@ -909,7 +909,7 @@ namespace ImgViewer.Models
                                     BordersRemovalMode mode = BordersRemovalMode.Fill,
                                     bool debug = true)
         {
-            Debug.WriteLine("Manual cut");
+            //Debug.WriteLine("Manual cut");
 
             token.ThrowIfCancellationRequested();
             if (src == null || src.Empty())

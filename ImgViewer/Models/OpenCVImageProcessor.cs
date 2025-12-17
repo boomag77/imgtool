@@ -74,7 +74,7 @@ namespace ImgViewer.Models
                 }
                 catch (Exception ex)
                 {
-                    ErrorOccured?.Invoke($"Failed to set Current Image");
+                    ErrorOccured?.Invoke($"Failed to set Current Image: {ex.Message}");
                 }
             }
         }
@@ -175,9 +175,13 @@ namespace ImgViewer.Models
 
                 return result;
             }
-            catch
+            catch (OperationCanceledException)
             {
-                ErrorOccured?.Invoke("Failed while converting Bitmap Source to Mat");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Failed while converting Bitmap Source to Mat: {ex.Message}");
                 return new Mat();
             }
             finally

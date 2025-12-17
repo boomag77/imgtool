@@ -3,8 +3,6 @@ using ImageMagick;
 using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -14,6 +12,9 @@ namespace ImgViewer.Models
     {
         private CancellationToken _token;
         private readonly TiffWriter _tiffWriter;
+
+        private static int _magickConfigured = 0;
+        private static readonly SemaphoreSlim _magickGate = new(1, 1);
 
 
         public event Action<string> ErrorOccured;
@@ -30,165 +31,268 @@ namespace ImgViewer.Models
             // Dispose of unmanaged resources here if needed
         }
 
-        //public byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null)
-        //{
-        //    try
-        //    {
-        //        if (_token.IsCancellationRequested)
-        //        {
-        //            return Array.Empty<byte>();
-        //        }
-        //        MagickReadSettings settings = new MagickReadSettings();
-        //        if (decodePixelWidth.HasValue)
-        //            settings.Width = decodePixelWidth.Value;
-        //        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan))
-        //        using (var image = new MagickImage(fs, settings))
-        //        {
-        //            image.AutoOrient();
-        //            return image.ToByteArray(MagickFormat.Bmp);
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
-        //        return Array.Empty<byte>();
-        //    }
-        //}
+        private void ConfigureMagickOnce()
+        {
+            if (Interlocked.Exchange(ref _magickConfigured, 1) != 0)
+                return;
 
-        //public BitmapSource? LoadTemp(string path)
-        //{
-        //    try
-        //    {
-        //        if (_token.IsCancellationRequested)
-        //        {
-        //            return null;
-        //        }
-        //        var bitmap = new BitmapImage();
-        //        bitmap.BeginInit();
-        //        bitmap.UriSource = new Uri(path, UriKind.Absolute);
-        //        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            ResourceLimits.Thread = 1; // снижает шанс race/AV в batch
+        }
 
-        //        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        private (ImageSource, byte[]) LoadWithMagickFallback(string path, uint? decodePixelWidth)
+        {
+            ConfigureMagickOnce();
 
-        //        bitmap.EndInit();
-        //        bitmap.Freeze();
+            _magickGate.Wait(_token); // сериализуем fallback
+
+            try
+            {
+                _token.ThrowIfCancellationRequested();
+
+                using var fs = OpenReadShared(path);
+                using var image = new MagickImage(fs);
+
+                image.AutoOrient();
+
+                // decodePixelWidth: делаем resize после чтения (самый надёжный путь)
+                if (decodePixelWidth.HasValue && decodePixelWidth.Value > 0 && image.Width > decodePixelWidth.Value)
+                {
+                    image.Resize((uint)decodePixelWidth.Value, 0); // aspect preserved
+                }
+
+                uint width = image.Width;
+                uint height = image.Height;
+                uint bpp = image.ChannelCount; // 3 или 4
+                uint stride = width * bpp;
+
+                var map = (bpp == 4) ? PixelMapping.BGRA : PixelMapping.BGR;
+
+                using var pixels = image.GetPixels();
+                byte[] pixelData = pixels.ToByteArray(0, 0, width, height, map);
+
+                var bmpSource = BitmapSource.Create(
+                    (int)width, (int)height, 96, 96,
+                    bpp == 4 ? PixelFormats.Bgra32 : PixelFormats.Bgr24,
+                    null, pixelData, (int)stride);
+
+                bmpSource.Freeze();
+
+                // для совместимости оставим BMP bytes
+                byte[] bytes = EncodeToBmpBytes(bmpSource);
+
+                return (bmpSource, bytes);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Magick.NET failed to load {path}: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                _magickGate.Release();
+            }
+        }
 
 
-        //        return bitmap;
-        //    }
-        //    catch (Exception ex2)
-        //    {
-        //        ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
-        //        return null;
-        //    }
-        //}
+        private FileStream OpenReadShared(string path) =>
+                                    new FileStream(
+                                                    path,
+                                                    FileMode.Open,
+                                                    FileAccess.Read,
+                                                    FileShare.ReadWrite | FileShare.Delete,   // важно для batch
+                                                    4096,
+                                                    FileOptions.SequentialScan);
+
+        private bool TryLoadWithWic(string path, uint? decodePixelWidth,
+                                  out BitmapSource? bmp, out byte[] bytes, out string? fail)
+        {
+            bmp = null;
+            bytes = Array.Empty<byte>();
+            fail = null;
+
+            try
+            {
+                _token.ThrowIfCancellationRequested();
+                using var fs = OpenReadShared(path);
+
+                // Важно: OnLoad, чтобы не держать файл
+                var decoder = BitmapDecoder.Create(
+                    fs,
+                    BitmapCreateOptions.PreservePixelFormat | BitmapCreateOptions.IgnoreColorProfile,
+                    BitmapCacheOption.OnLoad);
+
+                var frame = decoder.Frames[0];
+                BitmapSource src = frame;
+
+                // 1) AutoOrient через EXIF Orientation
+                int orientation = ReadExifOrientation(frame.Metadata as BitmapMetadata);
+                src = ApplyExifOrientation(src, orientation);
+
+                // 2) Downscale по ширине (если нужно)
+                src = ApplyDecodeWidth(src, decodePixelWidth);
+
+                // 3) Приводим к удобному формату для WPF (и чтобы PNG alpha не потерять)
+                src = EnsureBgra32(src);
+
+                src.Freeze();
+                bmp = src;
+
+                // Если тебе реально нужен byte[] (как сейчас): оставим BMP-энкодинг для совместимости
+                bytes = EncodeToBmpBytes(src);
+
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                fail = ex.GetType().Name + ": " + ex.Message;
+                return false;
+            }
+        }
+
+        private static int ReadExifOrientation(BitmapMetadata? meta)
+        {
+            if (meta == null) return 1;
+
+            object? v = null;
+
+            // JPEG query
+            try { v = meta.GetQuery("/app1/ifd/{ushort=274}"); } catch { }
+
+            // TIFF query (на всякий случай)
+            if (v == null)
+                try { v = meta.GetQuery("/ifd/{ushort=274}"); } catch { }
+
+            // Обычно ushort
+            if (v is ushort u) return u;
+            if (v is short s) return s;
+
+            return 1;
+        }
+
+        private BitmapSource ApplyExifOrientation(BitmapSource src, int orientation)
+        {
+            // Нормальный кейс
+            if (orientation <= 1 || orientation > 8) return src;
+
+            BitmapSource r = src;
+
+            // Операции (простые и читаемые): цепочкой
+            BitmapSource Rot90(BitmapSource s) => new TransformedBitmap(s, new RotateTransform(90));
+            BitmapSource Rot180(BitmapSource s) => new TransformedBitmap(s, new RotateTransform(180));
+            BitmapSource Rot270(BitmapSource s) => new TransformedBitmap(s, new RotateTransform(270));
+            BitmapSource FlipH(BitmapSource s) => new TransformedBitmap(s, new ScaleTransform(-1, 1));
+            BitmapSource FlipV(BitmapSource s) => new TransformedBitmap(s, new ScaleTransform(1, -1));
+
+            // Маппинг на основе стандартных операций:
+            // 2 flip horizontally, 3 rotate 180, 4 flip vertically,
+            // 5 rotate 90 CW + flip horizontally,
+            // 6 rotate 90 CW,
+            // 7 rotate 90 CW + flip vertically,
+            // 8 rotate 270 CW
+            // (такая таблица часто используется как “de-facto” для auto-orient)
+            // :contentReference[oaicite:4]{index=4}
+            switch (orientation)
+            {
+                case 2: r = FlipH(r); break;
+                case 3: r = Rot180(r); break;
+                case 4: r = FlipV(r); break;
+                case 5: r = FlipH(Rot90(r)); break;
+                case 6: r = Rot90(r); break;
+                case 7: r = FlipV(Rot90(r)); break;
+                case 8: r = Rot270(r); break;
+            }
+
+            return r;
+        }
+
+        private BitmapSource ApplyDecodeWidth(BitmapSource src, uint? decodePixelWidth)
+        {
+            if (!decodePixelWidth.HasValue || decodePixelWidth.Value == 0)
+                return src;
+
+            int w = src.PixelWidth;
+            if (w <= 0) return src;
+
+            double target = decodePixelWidth.Value;
+            double scale = target / w;
+
+            // не апскейлим (обычно это бессмысленно)
+            if (scale <= 0 || scale >= 1.0) return src;
+
+            return new TransformedBitmap(src, new ScaleTransform(scale, scale));
+        }
+
+        private BitmapSource EnsureBgra32(BitmapSource src)
+        {
+            if (src.Format == PixelFormats.Bgra32)
+                return src;
+
+            var conv = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            conv.Freeze();
+            return conv;
+        }
+
+        private byte[] EncodeToBmpBytes(BitmapSource src)
+        {
+            using var ms = new MemoryStream();
+            var enc = new BmpBitmapEncoder();
+            enc.Frames.Add(BitmapFrame.Create(src));
+            enc.Save(ms);
+            return ms.ToArray();
+        }
+
 
 
         public (ImageSource, byte[]) LoadImageSource(string path, uint? decodePixelWidth = null)
         {
 
-            //_magickSemaphore.Wait(_token);
-            //return ((T)(object)TiffReader.LoadImageSourceFromTiff(path), null);
-            
+
+            _token.ThrowIfCancellationRequested();
+            string extension = Path.GetExtension(path).ToLowerInvariant();
+            if (extension == ".tif" || extension == ".tiff")
+            {
+                // Try to load TIFF via LibTiff
+                var bmp = TiffReader.LoadImageSourceFromTiff(path).GetAwaiter().GetResult();
+                if (bmp != null)
+                {
+                    return (bmp, Array.Empty<byte>());
+                }
+                // If failed, fallback to Magick.NET
+            }
+
+            if (TryLoadWithWic(path, decodePixelWidth, out var wicBmp, out var wicBytes, out var wicFail))
+            {
+#if DEBUG
+                Debug.WriteLine($"Loaded {path} via WIC.");
+#endif
+                return (wicBmp!, wicBytes);
+            }
+                
 
             try
             {
-                _token.ThrowIfCancellationRequested();
-                string extension = Path.GetExtension(path).ToLowerInvariant();
-                if (extension == ".tif" || extension == ".tiff")
-                {
-                    // Try to load TIFF via LibTiff
-                    var bmp = TiffReader.LoadImageSourceFromTiff(path).GetAwaiter().GetResult();
-                    if (bmp != null)
-                    {
-                        return (bmp, Array.Empty<byte>());
-                    }
-                    // If failed, fallback to Magick.NET
-                }
+                Debug.WriteLine($"WIC failed to load {path}: {wicFail}. Falling back to Magick.NET.");
+                return LoadWithMagickFallback(path, decodePixelWidth);
 
-                //throw new Exception();
-                //return (null, null);
-                MagickReadSettings settings = new MagickReadSettings();
-
-                if (decodePixelWidth.HasValue)
-                    settings.Width = decodePixelWidth.Value;
-
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
-                using (var image = new MagickImage(fs, settings))
-                {
-                    image.AutoOrient();
-                    uint width = image.Width;
-                    uint height = image.Height;
-                    uint bytesPerPixel = image.ChannelCount; // 3 for RGB, 4 for RGBA
-                    uint stride = width * bytesPerPixel;
-
-                    PixelMapping pixelMapping = bytesPerPixel == 4 ? PixelMapping.BGRA : PixelMapping.BGR;
-                    using (var pixels = image.GetPixels())
-                    {
-                        byte[]? pixelData = pixels.ToByteArray(0, 0, width, height, pixelMapping);
-
-
-
-                        var bmpSource = BitmapSource.Create((int)width, (int)height, 96, 96,
-                            bytesPerPixel == 4 ? System.Windows.Media.PixelFormats.Bgra32 : System.Windows.Media.PixelFormats.Bgr24,
-                            null, pixelData, (int)stride);
-
-
-                        bmpSource.Freeze();
-
-                        byte[] bmpBytes;
-                        using (var ms = new MemoryStream())
-                        {
-                            BitmapEncoder encoder = new BmpBitmapEncoder();
-                            encoder.Frames.Add(BitmapFrame.Create(bmpSource));
-                            encoder.Save(ms);
-                            bmpBytes = ms.ToArray();
-                        }
-
-                        return (bmpSource, bmpBytes);
-                    }
-                }
             }
             catch (OperationCanceledException)
             {
                 // Operation was cancelled
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex2)
             {
-                // === Fallback через WIC ===
-
-                try
-                {
-                    _token.ThrowIfCancellationRequested();
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(path, UriKind.Absolute);
-                    if (decodePixelWidth.HasValue)
-                    {
-                        bitmap.DecodePixelWidth = (int)decodePixelWidth.Value;
-                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-                    }
-
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-
-
-                    return (bitmap, []);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Operation was cancelled
-                    throw;
-                }
-                catch (Exception ex2)
-                {
-                    ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
-                    //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
-                    return (new BitmapImage(), Array.Empty<byte>());
-                }
+                ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
+                //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
+                return (new BitmapImage(), Array.Empty<byte>());
             }
 
         }
@@ -333,8 +437,8 @@ namespace ImgViewer.Models
                 return Array.Empty<SourceImageFolder>();
             }
 
-            
-            
+
+
             return subFolders.ToArray();
         }
 
@@ -435,7 +539,7 @@ namespace ImgViewer.Models
                         return Array.Empty<SourceImageFolder>();
                     stack.Push(d);
                 }
-                    
+
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
             {
@@ -467,7 +571,7 @@ namespace ImgViewer.Models
                             return Array.Empty<SourceImageFolder>();
                         stack.Push(child);
                     }
-                        
+
                 }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
                 {

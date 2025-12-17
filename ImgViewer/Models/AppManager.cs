@@ -1,12 +1,13 @@
-﻿using ImgViewer.Interfaces;
+﻿using BitMiracle.LibTiff.Classic;
+using ImgViewer.Interfaces;
+using ImgViewer.Models.Onnx;
+using OpenCvSharp;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
-using System.IO;
-using OpenCvSharp;
-using ImgViewer.Models.Onnx;
-using BitMiracle.LibTiff.Classic;
+using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
@@ -22,7 +23,8 @@ namespace ImgViewer.Models
         private readonly List<string> _uiErrors = new();
         private readonly object _uiErrorsLock = new();
 
-
+        private readonly SemaphoreSlim _currentImageLock = new(1, 1);
+        private readonly SemaphoreSlim _imageLoadLock = new(1, 1);
 
         private readonly CancellationTokenSource _cts;
         private CancellationTokenSource? _poolCts;
@@ -161,8 +163,16 @@ namespace ImgViewer.Models
 
         public async Task SetImageForProcessing(ImageSource bmp)
         {
-            await Task.Run(() => _imageProcessor.CurrentImage = bmp);
-           
+            //await Task.Run(() => _imageProcessor.CurrentImage = bmp);
+            await _currentImageLock.WaitAsync();
+            try
+            {
+                await Task.Run(() => _imageProcessor.CurrentImage = bmp);
+            }
+            finally
+            {
+                _currentImageLock.Release();
+            }
         }
 
         public async Task SetBmpImageOnPreview(ImageSource bmp)
@@ -187,10 +197,14 @@ namespace ImgViewer.Models
 
         public async Task SetImageOnPreview(string imagePath)
         {
+            await _imageLoadLock.WaitAsync();
             try
             {
                 
                 var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.LoadImageSource(imagePath));
+                if (bmpImage is BitmapSource bmpSource && !bmpSource.IsFrozen)
+                    bmpSource.Freeze(); 
+                
                 _mainViewModel.CurrentImagePath = imagePath;
                 await SetBmpImageAsOriginal(bmpImage);
                 await SetBmpImageOnPreview(bmpImage);
@@ -207,6 +221,10 @@ namespace ImgViewer.Models
                 string msg = $"Error loading image: {ex.Message}.";
                 ReportError(msg, ex, "Error");
                 _mainViewModel.CurrentImagePath = string.Empty;
+            }
+            finally
+            {
+                _imageLoadLock.Release();
             }
         }
 
