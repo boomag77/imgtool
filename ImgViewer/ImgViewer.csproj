@@ -13,6 +13,10 @@
 		<PlatformTarget>x64</PlatformTarget>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 	</PropertyGroup>
+	<PropertyGroup>
+		<ApplicationIcon>Views\Assets\IgAppIcon.ico</ApplicationIcon>
+	</PropertyGroup>
+
 
 	<ItemGroup>
 	  <PackageReference Include="BitMiracle.LibTiff.NET" Version="2.4.660" />
@@ -50,6 +54,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <None Remove="Views\Assets\IgAppIcon.ico" />
 	  <None Remove="D:\Users\boomag\.nuget\packages\magick.net-q8-x64\14.8.2\buildTransitive\netstandard20\..\..\runtimes\win-x64\native\Magick.Native-Q8-x64.dll" />
 	</ItemGroup>
 
@@ -80,6 +85,12 @@
 
 	<ItemGroup>
 	  <Folder Include="Models\ML\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="Views\Assets\IgAppIcon.ico">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Resource>
 	</ItemGroup>
 
 	<ItemGroup>

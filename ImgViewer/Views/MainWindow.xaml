@@ -10,6 +10,7 @@
         xmlns:models="clr-namespace:ImgViewer.Models"
         mc:Ignorable="d"
         Title="Image Genie" Width="1024" Height="768"
+        Icon="Assets/IgAppIcon.ico"
         Background="LightGray"
         PreviewKeyDown="Window_PreviewKeyDown"
         MinHeight="600" MinWidth="800">

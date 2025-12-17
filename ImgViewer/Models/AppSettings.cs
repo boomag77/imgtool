@@ -13,7 +13,7 @@ namespace ImgViewer.Models
         private TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
         private double _eraseOperationModeOffset = 100;
 
-        private bool _savePipelineToMd;
+        private bool _savePipelineToMd = true;
 
         // cancellation for scheduled save
         private CancellationTokenSource? _saveCts;
