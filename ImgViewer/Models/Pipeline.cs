@@ -387,7 +387,17 @@ namespace ImgViewer.Models
                 foreach (var item in snapshot)
                 {
                     // 1. Создаём операцию по enum-типу
-                    var op = CreatePipelineOperation(item.Type);
+                    PipelineOperation op;
+                    try
+                    {
+                        op = CreatePipelineOperation(item.Type);
+                    }
+                    catch (ArgumentOutOfRangeException ex)
+                    {
+                        // TODO : логгирование
+                        Debug.WriteLine($"Skipping unsupported pipeline operation type '{item.Type}': {ex.Message}");
+                        continue; // move on to the next operation instead of crashing
+                    }
 
                     // 2. Восстанавливаем значения параметров
                     if (item.Parameters != null)

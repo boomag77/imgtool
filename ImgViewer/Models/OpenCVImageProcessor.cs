@@ -428,8 +428,8 @@ namespace ImgViewer.Models
 
             int width = bin.Cols;
             int height = bin.Rows;
-            var bufferSize = width * height;
-            var binPixels = RentBinaryBuffer(bufferSize);
+            int bufferSize = width * height;
+            var binPixels = new byte[bufferSize];
 
             //var binPixels = new byte[width * height];
 
