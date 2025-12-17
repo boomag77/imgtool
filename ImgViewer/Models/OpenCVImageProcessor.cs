@@ -285,6 +285,16 @@ namespace ImgViewer.Models
         public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
             using var img = WorkingImage; // clone for thread safety
+            using var bin = new Mat();
+            if (img.Type() != MatType.CV_8UC1)
+            {
+                // convert to binary for TIFF saving
+                using var gray = new Mat();
+                Cv2.CvtColor(img, gray, ColorConversionCodes.BGR2GRAY);
+                Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                // make stream from bin
+
+            }
             if (img == null || img.Empty())
                 throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
             if (format == ImageFormat.Tiff)
@@ -341,16 +351,106 @@ namespace ImgViewer.Models
                 //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
                 //byte[] pngData = img.ImEncode(".png");
                 //return new MemoryStream(pngData);
-                byte[] bmpData = img.ImEncode(".bmp");
+                byte[] bmpData = bin.ImEncode(".bmp");
                 return new MemoryStream(bmpData);
             }
             else
             {
                 // для других форматов просто PNG
-                return MatToStream(img);
+                return MatToStream(bin);
             }
         }
 
+
+        public TiffInfo GetTiffInfo(TiffCompression compression, int dpi)
+        {
+            var tiffInfo = new TiffInfo();
+            switch (compression)
+            {
+                case TiffCompression.CCITTG3:
+                case TiffCompression.CCITTG4:
+                    // for CCITTG3/G4 we need binary image
+                    var (binPixels, width, height) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: true);
+                    tiffInfo.pixels = binPixels;
+                    tiffInfo.Width = width;
+                    tiffInfo.Height = height;
+                    tiffInfo.Dpi = dpi;
+                    tiffInfo.BitsPerPixel = 1; // binary
+                    tiffInfo.Compression = compression;
+                    tiffInfo.IsMultiPage = false;
+                    break;
+                case TiffCompression.LZW:
+                    var (lzwPixels, lzwWidth, lzwHeight) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: true);
+                    tiffInfo.pixels = lzwPixels;
+                    tiffInfo.Width = lzwWidth;
+                    tiffInfo.Height = lzwHeight;
+                    tiffInfo.Dpi = dpi;
+                    tiffInfo.BitsPerPixel = 8;
+                    tiffInfo.Compression = compression; // added line to set compression for LZW
+                    tiffInfo.IsMultiPage = false;
+                    break;
+                default:
+                    // for other compressions we can use grayscale or color
+                    tiffInfo.Compression = compression; // added line to set compression for default case
+                    break;
+            }
+            return tiffInfo;
+        }
+
+        private (byte[] binPixels, int width, int height) GetBinPixelsFromMat(bool photometricMinIsWhite = false,
+                                                                             bool useOtsu = true,
+                                                                             double manualThreshold = 128)
+        {
+            using var src = WorkingImage; // cloned
+            if (src == null || src.Empty())
+                throw new InvalidOperationException("src Mat is null or empty");
+
+            using var gray = ToGray8u(src);
+
+            using var bin = new Mat();
+            var thrType = photometricMinIsWhite
+                ? ThresholdTypes.BinaryInv   // white bg -> 0, black ink -> 255
+                : ThresholdTypes.Binary;     // black ink -> 0, white bg -> 255
+
+            if (useOtsu)
+                thrType |= ThresholdTypes.Otsu;
+
+            Cv2.Threshold(gray, bin, useOtsu ? 0 : manualThreshold, 255, thrType);
+
+            int width = bin.Cols;
+            int height = bin.Rows;
+
+            var binPixels = new byte[width * height];
+
+            // важно: копируем ровно width байт на строку, игнорируя bin.Step()
+            for (int y = 0; y < height; y++)
+            {
+                Marshal.Copy(bin.Ptr(y), binPixels, y * width, width);
+            }
+
+            return (binPixels, width, height);
+        }
+
+        private Mat ToGray8u(Mat src)
+        {
+            // вернём новый Mat (caller Dispose через using выше)
+            if (src.Type() == MatType.CV_8UC1)
+                return src.Clone();
+
+            var gray = new Mat();
+
+            if (src.Channels() == 3)
+                Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+            else if (src.Channels() == 4)
+                Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
+            else
+                throw new NotSupportedException($"Unsupported channels: {src.Channels()}");
+
+            if (gray.Type() != MatType.CV_8UC1)
+                gray.ConvertTo(gray, MatType.CV_8UC1);
+
+            return gray;
+        }
 
 
         public (Vec3d pageColorNorm, Vec3d borderColorNorm) AnalyzePageAndBorderColorsSimple(

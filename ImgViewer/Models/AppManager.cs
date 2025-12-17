@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.IO;
 using OpenCvSharp;
 using ImgViewer.Models.Onnx;
+using BitMiracle.LibTiff.Classic;
 
 namespace ImgViewer.Models
 {
@@ -256,6 +257,26 @@ namespace ImgViewer.Models
             
 
         }
+
+        public async Task SaveProcessedImageToTiff(string outputPath, ImageFormat format)
+        {
+            var tiffInfo = new TiffInfo();
+            try
+            {
+                tiffInfo = await Task.Run(() => _imageProcessor.GetTiffInfo(TiffCompression.CCITTG4, 300));
+                _fileProcessor.SaveTiff(
+                    tiffInfo,
+                    outputPath,
+                    overwrite: true,
+                    metadataJson: null);
+            }
+            catch (Exception ex)
+            {
+
+                ReportError($"Error getting Tiff info: {ex.Message}", ex, "Tiff Info Error");
+            }
+        }
+
 
         public async Task SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
         {

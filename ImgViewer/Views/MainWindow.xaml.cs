@@ -1343,7 +1343,17 @@ namespace ImgViewer.Views
                 //        return;
                 //    }
                 //}
-                _manager.SaveProcessedImage(path,
+                //_manager.SaveProcessedImage(path,
+                //    ext switch
+                //    {
+                //        ".tif" or ".tiff" => ImageFormat.Tiff,
+                //        ".png" => ImageFormat.Png,
+                //        ".jpg" or ".jpeg" => ImageFormat.Jpeg,
+                //        ".bmp" => ImageFormat.Bmp,
+                //        _ => ImageFormat.Png
+                //    },
+                //    compression);
+                _manager.SaveProcessedImageToTiff(path,
                     ext switch
                     {
                         ".tif" or ".tiff" => ImageFormat.Tiff,
@@ -1351,8 +1361,7 @@ namespace ImgViewer.Views
                         ".jpg" or ".jpeg" => ImageFormat.Jpeg,
                         ".bmp" => ImageFormat.Bmp,
                         _ => ImageFormat.Png
-                    },
-                    compression);
+                    });
             }
 
         }

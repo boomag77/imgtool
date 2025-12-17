@@ -1,6 +1,9 @@
 ﻿using OpenCvSharp;
 using System.IO;
+using System.Security.Policy;
 using System.Windows.Media;
+using static ImgViewer.Models.OpenCvImageProcessor;
+using ImgViewer.Models;
 
 namespace ImgViewer.Interfaces
 {
@@ -8,8 +11,8 @@ namespace ImgViewer.Interfaces
     {
         
         public ImageSource CurrentImage { set; }
-        
 
+        
 
 
         void Load(string path);
@@ -19,6 +22,14 @@ namespace ImgViewer.Interfaces
         Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
+
+        //public (byte[] binPixels, int width, int height) GetBinPixelsFromMat(bool photometricMinIsWhite = false,
+        //                                                                     bool useOtsu = true,
+        //                                                                     double manualThreshold = 128);
+        public TiffInfo GetTiffInfo(TiffCompression compression, int dpi);
+
+        
+
 
         Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
 

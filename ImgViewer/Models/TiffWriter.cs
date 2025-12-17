@@ -257,7 +257,7 @@ namespace ImgViewer.Models
         }
 
         // Save binary via LibTiff.NET with chosen compression (CCITT G3/G4)
-        private static void SaveBinaryBytesAsCcitt(
+        public void SaveBinaryBytesAsCcitt(
             byte[] binPixels,
             int width, int height,
             string outPath,

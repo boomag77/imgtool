@@ -252,7 +252,7 @@ namespace ImgViewer.Models
             }
         }
 
-        private void ImageSavingWorker()
+        private async void ImageSavingWorker()
         {
             var token = _token;
             using var fileProc = new FileProcessor(token);
@@ -268,7 +268,7 @@ namespace ImgViewer.Models
                         var finalPath = saveTask.OutputFilePath;
                         var tempPath = finalPath + ".tmp";
 
-                        fileProc.SaveTiff(stream, tempPath, TiffCompression.CCITTG4, 300, true, _plJson);
+                        await Task.Run(() => fileProc.SaveTiff(stream, tempPath, TiffCompression.CCITTG4, 300, true, _plJson), token);
                         if (File.Exists(finalPath))
                             File.Delete(finalPath);
                         File.Move(tempPath, finalPath);

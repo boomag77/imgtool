@@ -15,6 +15,18 @@ namespace ImgViewer.Models
         SmartCrop
     }
 
+    public class TiffInfo
+    {
+        public byte[] pixels { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int BitsPerPixel { get; set; }
+        public int Dpi { get; set; }
+        public TiffCompression Compression { get; set; }
+        public bool IsMultiPage { get; set; }
+        // add more properties as needed
+    }
+
     public enum SourceFileLayout
     {
         Left,

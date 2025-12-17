@@ -1,4 +1,5 @@
-﻿using ImageMagick;
+﻿using BitMiracle.LibTiff.Classic;
+using ImageMagick;
 using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.IO;
@@ -203,7 +204,37 @@ namespace ImgViewer.Models
             return true;
         }
 
-
+        public void SaveTiff(TiffInfo tiffInfo, string path, bool overwrite = true, string? metadataJson = null)
+        {
+            if (!IsValidPath(path))
+            {
+                //return;
+                throw new ArgumentException("Invalid file path.", nameof(path));
+            }
+            try
+            {
+                using var tiffSaver = new TiffWriter();
+                tiffSaver.SaveBinaryBytesAsCcitt(
+                    tiffInfo.pixels,
+                    tiffInfo.Width,
+                    tiffInfo.Height,
+                    path,
+                    tiffInfo.Dpi,
+                    tiffInfo.Compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
+                    photometricMinIsWhite: false,
+                    metadataJson);
+            }
+            catch (OperationCanceledException)
+            {
+                // forward cancellation
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // forward exception
+                throw;
+            }
+        }
 
         public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true, string? metadataJson = null)
         {
