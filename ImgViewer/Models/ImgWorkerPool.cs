@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 
+
 namespace ImgViewer.Models
 {
     internal class ImgWorkerPool : IDisposable
@@ -82,7 +83,7 @@ namespace ImgViewer.Models
                 MessageBoxResult result = MessageBoxResult.Cancel;
                 if (dispatcher == null || dispatcher.CheckAccess())
                 {
-                    
+
                     result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
                 }
                 else
@@ -115,18 +116,18 @@ namespace ImgViewer.Models
             _plJson = savePipelineToMd ? pipeline.BuildPipelineForSave() : null;
 
             int cpuCount = Environment.ProcessorCount;
-            _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount-1) : maxWorkersCount;
+            _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount - 1) : maxWorkersCount;
 
             _filesQueue = new BlockingCollection<SourceImageFile>(
                 maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
             );
-            _saveQueue = new BlockingCollection<SaveTaskInfo>( _workersCount );
-            _maxSavingWorkers = Math.Max(1, cpuCount/2);
-
+            _saveQueue = new BlockingCollection<SaveTaskInfo>(_workersCount);
+            //_maxSavingWorkers = Math.Max(1, cpuCount/2);
+            _maxSavingWorkers = 1;
             _tokenRegistration = _token.Register(() =>
             {
                 try { _filesQueue.CompleteAdding(); } catch { }
-                try { _saveQueue.CompleteAdding(); } catch { }
+                //try { _saveQueue.CompleteAdding(); } catch { } gracefull cancel
             });
             _processedCount = 0;
             _totalCount = sourceFolder.Files.Length;
@@ -204,7 +205,7 @@ namespace ImgViewer.Models
 
         public void Dispose()
         {
-            
+
             if (_disposed) return;
             _disposed = true;
 
@@ -280,8 +281,8 @@ namespace ImgViewer.Models
                     {
                         Interlocked.Decrement(ref _currentSavingWorkers);
                     }
-                }, _token);
-                
+                }, CancellationToken.None);
+
                 _savingTasks.Add(workerTask);
 
                 workerTask.ContinueWith(t =>
@@ -296,13 +297,13 @@ namespace ImgViewer.Models
         private async Task ImageSavingWorkerAsync()
         {
             var token = _token;
-            using var fileProc = new FileProcessor(token);
+            using var fileProc = new FileProcessor(CancellationToken.None);
             string currentOutputFile = null;
             try
             {
-                foreach (var saveTask in _saveQueue.GetConsumingEnumerable(token))
+                foreach (var saveTask in _saveQueue.GetConsumingEnumerable())
                 {
-                    token.ThrowIfCancellationRequested();
+                    //token.ThrowIfCancellationRequested();
                     //using (var stream = saveTask.ImageStream)
                     //{
                     //    if (stream.CanSeek) stream.Position = 0;
@@ -333,7 +334,7 @@ namespace ImgViewer.Models
 #if DEBUG
                 Debug.WriteLine("ImageSaverWorker cancelled!");
 #endif
-                return;
+                throw;
 
             }
             catch (Exception ex)
@@ -346,7 +347,7 @@ namespace ImgViewer.Models
         private void ImageProcessingWorker()
         {
             var token = _token;
-               
+
             using var imgProc = new OpenCvImageProcessor(null, token);
             using var fileProc = new FileProcessor(token);
             try
@@ -374,7 +375,7 @@ namespace ImgViewer.Models
                         // если здесь токен отменён — просто выходим/продолжаем без ошибки
                         if (token.IsCancellationRequested) throw new OperationCanceledException(token);
                         RegisterFileError(file.Path, "Load failed: FileProcessor.Load returned null.");
-                        continue; 
+                        continue;
                     }
 
                     imgProc.CurrentImage = loaded.Item1;
@@ -401,8 +402,8 @@ namespace ImgViewer.Models
                                 algo == "Manual")
                             {
 
-                                bool applyToLeftPage = (op.Params.ContainsKey("applyToLeftPage") && 
-                                                        op.Params["applyToLeftPage"] is bool applyLeft && 
+                                bool applyToLeftPage = (op.Params.ContainsKey("applyToLeftPage") &&
+                                                        op.Params["applyToLeftPage"] is bool applyLeft &&
                                                         applyLeft);
                                 bool applyToRightPage = (op.Params.ContainsKey("applyToRightPage") &&
                                                         op.Params["applyToRightPage"] is bool applyRight &&
@@ -454,7 +455,7 @@ namespace ImgViewer.Models
                     {
                         //using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
                         //{
-                            
+
                         //    if (outStream.CanSeek) outStream.Position = 0;
                         //    outStream.CopyTo(saveTask.ImageStream);
                         //    _saveQueue.Add(saveTask, token);
@@ -474,7 +475,7 @@ namespace ImgViewer.Models
                             TiffInfo = tiffInfo,
                             //DisposeStream = true
                         };
-                        _saveQueue.Add(saveTask, token);
+                        _saveQueue.Add(saveTask);
                         if (_saveQueue.Count >= 2)
                         {
                             StartSavingWorkerIfNeeded();
@@ -496,8 +497,7 @@ namespace ImgViewer.Models
                 string logMsg = "Worker cancelled by token.";
                 Debug.WriteLine(logMsg);
 #endif
-                return;
-
+                
             }
             catch (Exception ex)
             {
@@ -510,10 +510,23 @@ namespace ImgViewer.Models
 
         }
 
+        private void SaveProcessingLog(string logMsg, string timeMsg, string plOps, string errors, bool cancelled)
+        {
+            if (cancelled)
+                logMsg = "[Processing cancelled]. " + logMsg;
+            {
+                File.WriteAllLines(
+                    Path.Combine(_outputFolder, "_processing_log.txt"),
+                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", "Errors:", "\n", errors, "\n", _plJson ?? "Error get PL json" }
+                );
+            }
+        }
+
         public async Task RunAsync()
         {
             var startTime = DateTime.Now;
             var processingTasks = new List<Task>();
+            bool cancelled = false;
             try
             {
                 //if _plOperations contains SmartCrop _workersCount--
@@ -532,8 +545,10 @@ namespace ImgViewer.Models
                 processingTasks.Add(enqueueTask);
                 StartSavingWorkerIfNeeded();
                 await Task.WhenAll(processingTasks);
-                _saveQueue.CompleteAdding();
-                await Task.WhenAll(_savingTasks);
+                if (_token.IsCancellationRequested)
+                {
+                    cancelled = true;
+                }
 
                 var duration = DateTime.Now - startTime;
                 var durationHours = (int)duration.TotalHours;
@@ -541,16 +556,13 @@ namespace ImgViewer.Models
                 var durationSeconds = duration.Seconds;
                 var logMsg = $"Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
                 var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
-                
+
                 var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
                 var errors = _fileErrors.Count > 0
                     ? string.Join(Environment.NewLine, _fileErrors)
                     : "No errors.";
                 var plJsonMsg = _plJson;
-                File.WriteAllLines(
-                    Path.Combine(_outputFolder, "_processing_log.txt"),
-                    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", "Errors:", "\n", errors, "\n", _plJson ?? "Error get PL json" }
-                );
+                SaveProcessingLog(logMsg, timeMsg, plOps, errors, cancelled);
                 if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
                 {
                     File.Delete(_batchErrorsPath);
@@ -560,20 +572,39 @@ namespace ImgViewer.Models
             {
 #if DEBUG
                 Debug.WriteLine("Batch processing cancelled!");
-                
+
 #endif
             }
             catch (Exception ex)
             {
+                var duration = DateTime.Now - startTime;
+                var durationHours = (int)duration.TotalHours;
+                var durationMinutes = duration.Minutes;
+                var durationSeconds = duration.Seconds;
+                var logMsg = $"[ERROR OCCURED: {ex.Message}]. Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
+                var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
+
+                var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
+                var errors = _fileErrors.Count > 0
+                    ? string.Join(Environment.NewLine, _fileErrors)
+                    : "No errors.";
+                var plJsonMsg = _plJson;
+                SaveProcessingLog(logMsg, timeMsg, plOps, errors, false);
+                if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
+                {
+                    File.Delete(_batchErrorsPath);
+                }
                 RegisterFileError("<ImgWorkerPool>", "Error in Batch processing.", ex);
             }
             finally
             {
+                _saveQueue.CompleteAdding();
+                await Task.WhenAll(_savingTasks);
                 try { _tokenRegistration.Dispose(); } catch { }
                 try { _filesQueue.Dispose(); } catch { }
 
             }
-            
+
 
 
         }

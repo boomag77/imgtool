@@ -280,7 +280,9 @@ namespace ImgViewer.Models
             tif.SetField(TiffTag.COMPRESSION, compressionMethod);
             tif.SetField(TiffTag.PHOTOMETRIC, photometricMinIsWhite ? Photometric.MINISWHITE : Photometric.MINISBLACK);
             tif.SetField(TiffTag.FILLORDER, FillOrder.MSB2LSB);
-            tif.SetField(TiffTag.ROWSPERSTRIP, height);
+            int rowsPerStrip = Math.Min(height, 128);
+            tif.SetField(TiffTag.ROWSPERSTRIP, rowsPerStrip);
+
             if (dpi > 0)
             {
                 tif.SetField(TiffTag.XRESOLUTION, (double)dpi);

@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 
 namespace ImgViewer.Models
@@ -609,9 +610,13 @@ namespace ImgViewer.Models
                 if (_operations.Count == 0)
                     return string.Empty;
 
-                snapshot = new List<PipelineSaveItem>(_operations.Count);
+                var filtered = _operations.Where(op => op.InPipeline).ToList();
+                if (filtered.Count == 0)
+                    return string.Empty;
 
-                foreach (var op in _operations)
+                snapshot = new List<PipelineSaveItem>(filtered.Count);
+
+                foreach (var op in filtered)
                 {
                     var parameters = op.CreateParameterDictionary();
 
