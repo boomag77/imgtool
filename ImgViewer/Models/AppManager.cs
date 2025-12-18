@@ -363,15 +363,15 @@ namespace ImgViewer.Models
             if (fullTree)
             {
                 sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths_FullTree(rootFolder, batchToken);
-                if (debug)
-                {
-                    Debug.WriteLine("Folders to process (FULL):");
-                    foreach (var folder in sourceFolders)
-                    {
-                        Debug.WriteLine(folder.Path);
-                    }
-                    return;
-                }
+                //if (debug)
+                //{
+                //    Debug.WriteLine("Folders to process (FULL):");
+                //    foreach (var folder in sourceFolders)
+                //    {
+                //        Debug.WriteLine(folder.Path);
+                //    }
+                //    return;
+                //}
 
                 if (sourceFolders == null) return;
             }

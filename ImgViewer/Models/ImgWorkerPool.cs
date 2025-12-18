@@ -268,10 +268,28 @@ namespace ImgViewer.Models
 
                 _currentSavingWorkers++;
 
-                var workerTask = Task.Run(() => ImageSavingWorkerAsync(), _token)
-                             .ContinueWith(t => Interlocked.Decrement(ref _currentSavingWorkers));
 
+
+                var workerTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await ImageSavingWorkerAsync().ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref _currentSavingWorkers);
+                    }
+                }, _token);
+                
                 _savingTasks.Add(workerTask);
+
+                workerTask.ContinueWith(t =>
+                {
+                    RegisterFileError("<ImageSavingWorker>", "Saving worker faulted.", t.Exception!);
+                }, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
         }
 
@@ -301,16 +319,13 @@ namespace ImgViewer.Models
                         throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
 
 
-                    await Task.Run(() =>
-                    {
-                        var finalPath = saveTask.OutputFilePath;
-                        var tempPath = finalPath + ".tmp";
-                        currentOutputFile = finalPath;
-                        fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
-                        if (File.Exists(finalPath))
-                            File.Delete(finalPath);
-                        File.Move(tempPath, finalPath);
-                    }, token);
+                    var finalPath = saveTask.OutputFilePath;
+                    var tempPath = finalPath + ".tmp";
+                    currentOutputFile = finalPath;
+                    fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
+                    if (File.Exists(finalPath))
+                        File.Delete(finalPath);
+                    File.Move(tempPath, finalPath);
                 }
             }
             catch (OperationCanceledException)
@@ -457,7 +472,7 @@ namespace ImgViewer.Models
                             //ImageStream = outStream,
                             OutputFilePath = outputFilePath,
                             TiffInfo = tiffInfo,
-                            DisposeStream = true
+                            //DisposeStream = true
                         };
                         _saveQueue.Add(saveTask, token);
                         if (_saveQueue.Count >= 2)

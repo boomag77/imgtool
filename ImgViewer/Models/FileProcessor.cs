@@ -575,7 +575,8 @@ namespace ImgViewer.Models
                 }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
                 {
-                    Debug.WriteLine($"Can't enumerate children of {dir}: {ex.Message}");
+                    ErrorOccured?.Invoke($"Cannot enumerate sub-folders in '{dir}': {ex.Message}");
+                    //Debug.WriteLine($"Can't enumerate children of {dir}: {ex.Message}");
                 }
             }
 
