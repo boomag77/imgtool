@@ -33,6 +33,10 @@ namespace ImgViewer.Models
 
         //private DocBoundaryModel _docBoundaryModel;
 
+        private volatile bool _inRootFolderBatch = false;
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _rootBatchIssues
+            = new System.Collections.Concurrent.ConcurrentQueue<string>();
+
         public Pipeline CurrentPipeline => _pipeline;
 
         public AppManager(IMainView mainView, CancellationTokenSource cts)
@@ -44,12 +48,15 @@ namespace ImgViewer.Models
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
 
-            _fileProcessor.ErrorOccured += (msg) => ReportError(msg, null, "File Processor Error");
+            //_fileProcessor.ErrorOccured += (msg) => ReportError(msg, null, "File Processor Error");
+            _fileProcessor.ErrorOccured += OnFileProcessorError;
 
             _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token);
 
             _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
+            
+
         }
 
         //public DocBoundaryModel DocBoundaryModel => _docBoundaryModel;
@@ -91,6 +98,19 @@ namespace ImgViewer.Models
                 _appSettings.LastOpenedFolder = value;
             }
         }
+
+        private void OnFileProcessorError(string msg)
+        {
+            if (_inRootFolderBatch)
+            {
+                _rootBatchIssues.Enqueue("[FileProcessor] " + msg);
+                return;
+            }
+
+            // обычный режим — как было
+            ReportError(msg, null, "File Processor Error");
+        }
+
 
         public void Shutdown()
         {
@@ -342,80 +362,97 @@ namespace ImgViewer.Models
 
         }
 
-        public async Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree = true)
+        private static bool TryHasAnyImageFast(string folderPath, CancellationToken token, out string? issue)
         {
+            issue = null;
+
+            try
+            {
+                foreach (var f in Directory.EnumerateFiles(folderPath))
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    if (f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                        f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                        f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                        f.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+                        f.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+
+                return false; // просто нет картинок
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (ex is IOException ||
+                                      ex is UnauthorizedAccessException ||
+                                      ex is PathTooLongException ||
+                                      ex is DirectoryNotFoundException)
+            {
+                issue = $"SKIP_ENUM_FILES: '{folderPath}' ({ex.GetType().Name}) {ex.Message}";
+                return false;
+            }
+        }
+
+
+        public async Task ProcessRootFolder(string rootFolderPath, Pipeline pipeline, bool fullTree = true)
+        {
+            if (pipeline == null) return;
             _rootFolderCts?.Cancel();
             _rootFolderCts?.Dispose();
+
+            _inRootFolderBatch = true;
+            while (_rootBatchIssues.TryDequeue(out _)) { }
 
             _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             var batchToken = _rootFolderCts.Token;
 
-            var debug = false;
-            if (pipeline == null) return;
+            //var debug = false;
+            
 
             var startTime = DateTime.Now;   
 
-            UpdateStatus($"Processing folders in " + rootFolder);
+            UpdateStatus($"Processing folders in " + rootFolderPath);
             //_mainViewModel.Status = $"Processing folders in " + rootFolder;
 
-            SourceImageFolder[] sourceFolders = Array.Empty<SourceImageFolder>();
-
-            if (fullTree)
-            {
-                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths_FullTree(rootFolder, batchToken);
-                //if (debug)
-                //{
-                //    Debug.WriteLine("Folders to process (FULL):");
-                //    foreach (var folder in sourceFolders)
-                //    {
-                //        Debug.WriteLine(folder.Path);
-                //    }
-                //    return;
-                //}
-
-                if (sourceFolders == null) return;
-            }
-            else
-            {
-                sourceFolders = _fileProcessor.GetSubFoldersWithImagesPaths(rootFolder, batchToken);
-                if (debug)
-                {
-                    Debug.WriteLine("Folders to process:");
-                    foreach (var folder in sourceFolders)
-                    {
-                        Debug.WriteLine(folder.Path);
-                    }
-                    return;
-                }
-                if (sourceFolders == null) return;
-
-            }
-
-            if (sourceFolders.Length == 0) return;
-
             var processedCount = 0;
+            var visitedCount = 0;
+            
+            var folderPaths = _fileProcessor.EnumerateSubFolderPaths(rootFolderPath, fullTree, batchToken);
 
 
-            //_rootFolderCts = new CancellationTokenSource();
+
             try
             {
-                foreach (var sourceFolder in sourceFolders)
+                foreach (var folderPath in folderPaths)
                 {
                     if (batchToken.IsCancellationRequested) break;
                     try
                     {
-                        await Task.Run(() => ProcessFolder(sourceFolder.Path, pipeline, batchToken), batchToken);
+                        visitedCount++;
+
+                        if (!TryHasAnyImageFast(folderPath, batchToken, out var issue))
+                        {
+                            // если issue == null → просто нет изображений
+                            _rootBatchIssues.Enqueue(issue ?? $"SKIP_NO_IMAGES: '{folderPath}'");
+                            continue;
+                        }
+
+                        await ProcessFolder(folderPath, pipeline, batchToken).ConfigureAwait(false);
                         processedCount++;
                     }
                     catch (OperationCanceledException)
                     {
+#if DEBUG
                         Debug.WriteLine("Processing Root Folder was canceled.");
+#endif
                         break;
                     }
                     catch (Exception ex)
                     {
-                        //Debug.WriteLine($"Error while processing sub-Folder in root Folder {rootFolder}: {ex.Message}");
-                        ReportError($"Error while processing sub-Folder in root Folder {rootFolder}.", ex, "Processing Error");
+                        _rootBatchIssues.Enqueue($"[ProcessFolder] {folderPath}: {ex.Message}");
+                        if (!_inRootFolderBatch)
+                            ReportError($"Error while processing sub-folder {folderPath} in root folder {rootFolderPath}.", ex, "Processing Error");
+
                     }
                 }
 
@@ -424,7 +461,7 @@ namespace ImgViewer.Models
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
                 var durationSeconds = duration.Seconds;
-                var logMsg = $"Processed {processedCount} of {sourceFolders.Length} folders from ** {rootFolder} **.";
+                var logMsg = $"Processed {processedCount} folders (visited {visitedCount}) from ** {rootFolderPath} **.";
                 var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
                 var opsLog = new List<string>();
                 foreach (var op in pipeline.Operations)
@@ -435,19 +472,50 @@ namespace ImgViewer.Models
                 var plJson = pipeline.BuildPipelineForSave();
                 try
                 {
-                    File.WriteAllLines(
-                        Path.Combine(rootFolder, "_processing_log.txt"),
-                        new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", plJson }
-                    );
+                    //File.WriteAllLines(
+                    //    Path.Combine(rootFolderPath, "_processing_log.txt"),
+                    //    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", plJson }
+                    //);
+                    var logPath = Path.Combine(rootFolderPath, "_processing_log.txt");
+                    var logLines = new List<string>
+                    {
+                        logMsg,
+                        timeMsg,
+                        "Operations performed:",
+                        plOps,
+                        "",
+                        plJson
+                    };
+
+                    if (!_rootBatchIssues.IsEmpty)
+                    {
+                        logLines.Add("");
+                        logLines.Add("Issues / skipped folders:");
+                        while (_rootBatchIssues.TryDequeue(out var issue))
+                            logLines.Add("- " + issue);
+                    }
+
+                    File.WriteAllLines(logPath, logLines);
+
                 }
                 catch (Exception ex)
                 {
-                    ReportError($"Failed to write processing log to {rootFolder}", ex, "Logging Error");
+                    ReportError($"Failed to write processing log to {rootFolderPath}", ex, "Logging Error");
                 }
 
             }
+            catch (OperationCanceledException)
+            {
+                // iterator мог бросить из ThrowIfCancellationRequested()
+            }
+            catch (Exception ex)
+            {
+                ReportError($"Error while enumerating folders in root folder: {rootFolderPath}", ex, "Processing Error");
+            }
             finally
             {
+                _inRootFolderBatch = false;
+
                 UpdateStatus("Standby");
                 try { _rootFolderCts?.Dispose(); } catch { }
                 _rootFolderCts = null;

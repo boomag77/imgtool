@@ -3,6 +3,7 @@ using ImageMagick;
 using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.IO;
+using System.Security;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -263,6 +264,8 @@ namespace ImgViewer.Models
                 var bmp = TiffReader.LoadImageSourceFromTiff(path).GetAwaiter().GetResult();
                 if (bmp != null)
                 {
+                    if (bmp is BitmapSource bs && !bs.IsFrozen)
+                        bs.Freeze();
                     return (bmp, Array.Empty<byte>());
                 }
                 // If failed, fallback to Magick.NET
@@ -275,7 +278,7 @@ namespace ImgViewer.Models
 #endif
                 return (wicBmp!, wicBytes);
             }
-                
+
 
             try
             {
@@ -441,6 +444,121 @@ namespace ImgViewer.Models
 
             return subFolders.ToArray();
         }
+
+        public IEnumerable<string> EnumerateSubFolderPaths(string rootFolderPath, bool fullTree, CancellationToken token)
+        {
+            if (token.IsCancellationRequested) yield break;
+
+            if (string.IsNullOrWhiteSpace(rootFolderPath) || !Directory.Exists(rootFolderPath))
+            {
+                ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
+                yield break;
+            }
+
+            // fullTree=false: только 1 уровень
+            if (!fullTree)
+            {
+                IEnumerable<string> top;
+                try
+                {
+                    top = Directory.EnumerateDirectories(rootFolderPath);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) when (IsFsEnumerationException(ex))
+                {
+                    ErrorOccured?.Invoke($"Cannot enumerate directories in '{rootFolderPath}': {ex.Message}");
+                    yield break;
+                }
+
+                foreach (var dir in top)
+                {
+                    if (token.IsCancellationRequested) yield break;
+                    if (IsSkippableDir(dir)) continue;
+                    yield return dir;
+                }
+
+                yield break;
+            }
+
+            // fullTree=true: ручной DFS, best-effort
+            var stack = new Stack<string>();
+
+            // Сначала кладём первый уровень
+            try
+            {
+                foreach (var d in Directory.EnumerateDirectories(rootFolderPath))
+                {
+                    if (token.IsCancellationRequested) yield break;
+                    if (IsSkippableDir(d)) continue;
+                    stack.Push(d);
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (IsFsEnumerationException(ex))
+            {
+                ErrorOccured?.Invoke($"Cannot enumerate directories in '{rootFolderPath}': {ex.Message}");
+                yield break;
+            }
+
+            while (stack.Count > 0)
+            {
+                if (token.IsCancellationRequested) yield break;
+
+                var dir = stack.Pop();
+                yield return dir;
+
+                try
+                {
+                    foreach (var child in Directory.EnumerateDirectories(dir))
+                    {
+                        if (token.IsCancellationRequested) yield break;
+                        if (IsSkippableDir(child)) continue;
+                        stack.Push(child);
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) when (IsFsEnumerationException(ex))
+                {
+                    // best-effort: пропускаем ветку, но продолжаем
+                    //ErrorOccured?.Invoke($"Cannot enumerate sub-folders in '{dir}': {ex.Message}");
+                    ErrorOccured?.Invoke($"SKIP_ENUM: '{dir}' ({ex.GetType().Name}) {ex.Message}");
+                    continue;
+                }
+            }
+        }
+
+        private static bool IsFsEnumerationException(Exception ex) =>
+            ex is IOException ||
+            ex is UnauthorizedAccessException ||
+            ex is PathTooLongException ||
+            ex is DirectoryNotFoundException ||
+            ex is ArgumentException ||
+            ex is NotSupportedException ||
+            ex is SecurityException;
+
+        private static bool IsSkippableDir(string path)
+        {
+            try
+            {
+                var attr = File.GetAttributes(path);
+
+                // junction/symlink (ReparsePoint) -> предотвращает циклы
+                if ((attr & FileAttributes.ReparsePoint) != 0) return true;
+
+                // system dirs часто inaccessible / мусорные
+                if ((attr & FileAttributes.System) != 0) return true;
+            }
+            catch
+            {
+                // если даже атрибуты не читаются — считаем inaccessible
+                return true;
+            }
+
+            return false;
+        }
+
+
+
 
         public SourceImageFolder? GetImageFilesPaths(string folderPath, CancellationToken token)
         {
