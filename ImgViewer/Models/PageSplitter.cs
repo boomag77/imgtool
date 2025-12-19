@@ -5,6 +5,8 @@ using OpenCvSharp;
 using Point = OpenCvSharp.Point;
 using Size = OpenCvSharp.Size;
 
+namespace ImgViewer.Models
+{
 public sealed class PageSplitter
 {
     public sealed class Settings
@@ -476,4 +478,5 @@ public sealed class PageSplitter
         int mid = tmp.Length / 2;
         return (tmp.Length % 2 == 1) ? tmp[mid] : 0.5 * (tmp[mid - 1] + tmp[mid]);
     }
+}
 }

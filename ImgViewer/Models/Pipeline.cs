@@ -341,6 +341,22 @@ namespace ImgViewer.Models
                         operation => ExecuteManagerCommand(ProcessorCommand.SmartCrop, operation.CreateParameterDictionary()));
                     }
                     break;
+                case PipelineOperationType.SplitPage:
+                    {
+                        operation = new PipelineOperation(
+                            PipelineOperationType.SplitPage,
+                            ProcessorCommand.PageSplit,
+                            displayName,
+                            buttonText,
+                            new[]
+                            {
+                                new PipeLineParameter("Padding (px)", "padPx", 24, 0, 200, 1),
+                                new PipeLineParameter("Min confidence", "minConfidence", 0.30, 0.0, 1.0, 0.01),
+                                new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true)
+                            },
+                            operation => ExecuteManagerCommand(ProcessorCommand.PageSplit, operation.CreateParameterDictionary()));
+                    }
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(
                                      nameof(type),

@@ -1609,10 +1609,15 @@ namespace ImgViewer.Models
 
                             return PunchHolesRemove(src, specs, roundness, fillRatio, offsets);
 
-
-
-                            break;
-
+                        case ProcessorCommand.PageSplit:
+                            {
+                                if (!batchProcessing)
+                                {
+                                    var splitParameters = parameters ?? new Dictionary<string, object>();
+                                    ExecutePageSplitPreview(src, splitParameters);
+                                }
+                                return src.Clone();
+                            }
                     }
                 }
             }
@@ -1942,6 +1947,72 @@ namespace ImgViewer.Models
                 return src.Clone();
             }
 
+        }
+
+        private void ExecutePageSplitPreview(Mat src, Dictionary<string, object> parameters)
+        {
+            if (_appManager == null)
+                return;
+
+            try
+            {
+                var splitter = new PageSplitter(BuildPageSplitterSettings(parameters));
+                PageSplitter.SplitResult? result = null;
+                try
+                {
+                    result = splitter.Split(src, false, _token);
+                    if (result.Success && result.Left != null && result.Right != null)
+                    {
+                        var leftBmp = MatToBitmapSource(result.Left);
+                        var rightBmp = MatToBitmapSource(result.Right);
+                        _appManager.SetSplitPreviewImages(leftBmp, rightBmp);
+                    }
+                    else
+                    {
+                        _appManager.ClearSplitPreviewImages();
+                        var reason = result?.Reason;
+                        if (!string.IsNullOrWhiteSpace(reason))
+                            ErrorOccured?.Invoke($"Page split failed: {reason}");
+                    }
+                }
+                finally
+                {
+                    result?.Dispose();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _appManager.ClearSplitPreviewImages();
+            }
+            catch (Exception ex)
+            {
+                _appManager.ClearSplitPreviewImages();
+                ErrorOccured?.Invoke($"Page split failed: {ex.Message}");
+            }
+        }
+
+        private PageSplitter.Settings BuildPageSplitterSettings(Dictionary<string, object> parameters)
+        {
+            var settings = new PageSplitter.Settings
+            {
+                PadPx = 24,
+                MinConfidence = 0.30,
+                UseLabConfirmation = true
+            };
+
+            if (parameters != null)
+            {
+                if (parameters.TryGetValue("padPx", out var padObj))
+                    settings.PadPx = SafeInt(padObj, settings.PadPx);
+
+                if (parameters.TryGetValue("minConfidence", out var confObj))
+                    settings.MinConfidence = SafeDouble(confObj, settings.MinConfidence);
+
+                if (parameters.TryGetValue("useLabConfirmation", out var labObj))
+                    settings.UseLabConfirmation = SafeBool(labObj, settings.UseLabConfirmation);
+            }
+
+            return settings;
         }
 
 

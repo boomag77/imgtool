@@ -183,6 +183,39 @@ namespace ImgViewer.Models
             }, System.Windows.Threading.DispatcherPriority.Render);
         }
 
+        public void SetSplitPreviewImages(ImageSource left, ImageSource right)
+        {
+            if (left is Freezable lf && !lf.IsFrozen)
+                lf.Freeze();
+            if (right is Freezable rf && !rf.IsFrozen)
+                rf.Freeze();
+
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                _mainViewModel.SetSplitPreviewImages(left, right);
+            }
+            else
+            {
+                dispatcher.InvokeAsync(() => _mainViewModel.SetSplitPreviewImages(left, right),
+                    System.Windows.Threading.DispatcherPriority.Render);
+            }
+        }
+
+        public void ClearSplitPreviewImages()
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                _mainViewModel.ClearSplitPreviewImages();
+            }
+            else
+            {
+                dispatcher.InvokeAsync(() => _mainViewModel.ClearSplitPreviewImages(),
+                    System.Windows.Threading.DispatcherPriority.Render);
+            }
+        }
+
         private async Task SetBmpImageAsOriginal(ImageSource bmp)
         {
 
@@ -208,6 +241,7 @@ namespace ImgViewer.Models
                 _mainViewModel.CurrentImagePath = imagePath;
                 await SetBmpImageAsOriginal(bmpImage);
                 await SetBmpImageOnPreview(bmpImage);
+                ClearSplitPreviewImages();
                 await SetImageForProcessing(bmpImage);
             }
             catch (OperationCanceledException)

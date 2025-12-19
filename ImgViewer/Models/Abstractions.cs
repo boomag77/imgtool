@@ -12,7 +12,8 @@ namespace ImgViewer.Models
         PunchHolesRemove,
         Despeckle,
         LinesRemove,
-        SmartCrop
+        SmartCrop,
+        SplitPage
     }
 
     public class TiffInfo
@@ -259,5 +260,4 @@ namespace ImgViewer.Models
 
 
 }
-
 

@@ -164,6 +164,7 @@ namespace ImgViewer.Models
             PipelineOperationType.Despeckle => "despeckle",
             PipelineOperationType.LinesRemove => "lines",
             PipelineOperationType.SmartCrop => "smartcrop",
+            PipelineOperationType.SplitPage => "pagesplit",
             _ => null
         };
 

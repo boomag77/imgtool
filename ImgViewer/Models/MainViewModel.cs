@@ -23,6 +23,8 @@ namespace ImgViewer.Models
         private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
         private string _tiffCompressionLabel;
+        private ImageSource? _splitPreviewLeft;
+        private ImageSource? _splitPreviewRight;
 
         private bool _isSelectionAvailable = true;
 
@@ -35,6 +37,7 @@ namespace ImgViewer.Models
         private CancellationTokenSource? _cts;
         private PreviewSplitMode _previewSplitMode = PreviewSplitMode.Single;
         private PreviewSplitMode _twoPaneOrientation = PreviewSplitMode.Vertical;
+        private PreviewSplitMode? _previewSplitModeBeforePageSplit;
         private int _selectedPreviewPaneCount = 2;
         private int _focusedSplitPreviewIndex = -1;
 
@@ -110,6 +113,7 @@ namespace ImgViewer.Models
                 _imageOnPreview = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsProcessingImageOnPreview));
+                OnPropertyChanged(nameof(PrimaryPreviewImage));
             }
         }
 
@@ -134,6 +138,32 @@ namespace ImgViewer.Models
             }
         }
 
+        public ImageSource? SplitPreviewLeft
+        {
+            get => _splitPreviewLeft;
+            private set
+            {
+                if (_splitPreviewLeft == value) return;
+                _splitPreviewLeft = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PrimaryPreviewImage));
+            }
+        }
+
+        public ImageSource? SplitPreviewRight
+        {
+            get => _splitPreviewRight;
+            private set
+            {
+                if (_splitPreviewRight == value) return;
+                _splitPreviewRight = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PrimaryPreviewImage));
+            }
+        }
+
+        public bool IsPageSplitPreview => _splitPreviewLeft != null && _splitPreviewRight != null;
+
         public bool IsDefaultPreview => _previewSplitMode == PreviewSplitMode.Single;
         public bool IsQuadSplitPreview => _previewSplitMode == PreviewSplitMode.Grid4;
         public bool IsSixSplitPreview => _previewSplitMode == PreviewSplitMode.Grid6;
@@ -141,7 +171,33 @@ namespace ImgViewer.Models
         public bool AreSplitOrientationButtonsEnabled => _selectedPreviewPaneCount == 2;
         public int FocusedSplitPreviewIndex => _focusedSplitPreviewIndex;
         public bool HasFocusedSplitPreview => _focusedSplitPreviewIndex >= 0;
-        public bool ShowPrimaryPreview => IsDefaultPreview || HasFocusedSplitPreview;
+        public bool ShowPrimaryPreview
+        {
+            get
+            {
+                if (IsPageSplitPreview)
+                    return HasFocusedSplitPreview;
+                return IsDefaultPreview || HasFocusedSplitPreview;
+            }
+        }
+
+        public ImageSource? PrimaryPreviewImage
+        {
+            get
+            {
+                if (IsPageSplitPreview && HasFocusedSplitPreview)
+                {
+                    return _focusedSplitPreviewIndex switch
+                    {
+                        0 => _splitPreviewLeft,
+                        1 => _splitPreviewRight,
+                        _ => _imageOnPreview
+                    };
+                }
+
+                return _imageOnPreview;
+            }
+        }
 
         public bool IsVerticalSplitPreview
         {
@@ -198,6 +254,53 @@ namespace ImgViewer.Models
             }
 
             UpdatePreviewSplitMode(modeToApply);
+        }
+
+        public void SetSplitPreviewImages(ImageSource left, ImageSource right)
+        {
+            if (left == null || right == null)
+                return;
+
+            SplitPreviewLeft = left;
+            SplitPreviewRight = right;
+
+            if (!_previewSplitModeBeforePageSplit.HasValue)
+                _previewSplitModeBeforePageSplit = _previewSplitMode;
+
+            ClearFocusedSplitPreview();
+
+            var desiredMode = _twoPaneOrientation;
+            if (desiredMode != PreviewSplitMode.Vertical && desiredMode != PreviewSplitMode.Horizontal)
+                desiredMode = PreviewSplitMode.Vertical;
+
+            UpdatePreviewSplitMode(desiredMode);
+
+            OnPropertyChanged(nameof(IsPageSplitPreview));
+            OnPropertyChanged(nameof(ShowPrimaryPreview));
+            OnPropertyChanged(nameof(PrimaryPreviewImage));
+        }
+
+        public void ClearSplitPreviewImages()
+        {
+            if (_splitPreviewLeft == null && _splitPreviewRight == null)
+                return;
+
+            SplitPreviewLeft = null;
+            SplitPreviewRight = null;
+
+            OnPropertyChanged(nameof(IsPageSplitPreview));
+            OnPropertyChanged(nameof(ShowPrimaryPreview));
+            OnPropertyChanged(nameof(PrimaryPreviewImage));
+
+            if (_previewSplitModeBeforePageSplit.HasValue)
+            {
+                UpdatePreviewSplitMode(_previewSplitModeBeforePageSplit.Value);
+                _previewSplitModeBeforePageSplit = null;
+            }
+            else
+            {
+                UpdatePreviewSplitMode(PreviewSplitMode.Single);
+            }
         }
 
         public void ToggleFocusedSplitPreview(int tileIndex)
@@ -296,6 +399,7 @@ namespace ImgViewer.Models
             OnPropertyChanged(nameof(FocusedSplitPreviewIndex));
             OnPropertyChanged(nameof(HasFocusedSplitPreview));
             OnPropertyChanged(nameof(ShowPrimaryPreview));
+            OnPropertyChanged(nameof(PrimaryPreviewImage));
         }
 
         private void EnsureFocusedSplitPreviewInRange()

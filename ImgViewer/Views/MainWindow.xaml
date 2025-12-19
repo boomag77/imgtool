@@ -848,6 +848,9 @@
                                     <MenuItem Header="Crop"
                                       Tag="{x:Static models:PipelineOperationType.SmartCrop}"
                                       Click="AddOperationMenuItem_Click" /> 
+                                    <MenuItem Header="Split Page"
+                                      Tag="{x:Static models:PipelineOperationType.SplitPage}"
+                                      Click="AddOperationMenuItem_Click" />
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
@@ -1385,7 +1388,7 @@
                                  PreviewMouseLeftButtonUp="PreviewViewbox_PreviewMouseLeftButtonUp">
                             <Image x:Name="PreviewImgBox"
                                    RenderOptions.BitmapScalingMode="HighQuality"
-                                   Source="{Binding ImageOnPreview}"
+                                   Source="{Binding PrimaryPreviewImage}"
                                    Stretch="None"/>
                         </Viewbox>
                     </Grid>
@@ -1401,16 +1404,36 @@
                              Tag="0"
                              MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
-                               Source="{Binding ImageOnPreview}"
-                               Stretch="None"/>
+                               Stretch="None">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Source" Value="{Binding ImageOnPreview}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPageSplitPreview}" Value="True">
+                                            <Setter Property="Source" Value="{Binding SplitPreviewLeft}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
                     </Viewbox>
                     <Viewbox Grid.Column="1"
                              Style="{StaticResource SplitPreviewTileStyle1}"
                              Tag="1"
                              MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
-                               Source="{Binding ImageOnPreview}"
-                               Stretch="None"/>
+                               Stretch="None">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Source" Value="{Binding ImageOnPreview}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPageSplitPreview}" Value="True">
+                                            <Setter Property="Source" Value="{Binding SplitPreviewRight}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
                     </Viewbox>
                 </Grid>
 
@@ -1424,16 +1447,36 @@
                              Tag="0"
                              MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
-                               Source="{Binding ImageOnPreview}"
-                               Stretch="None"/>
+                               Stretch="None">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Source" Value="{Binding ImageOnPreview}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPageSplitPreview}" Value="True">
+                                            <Setter Property="Source" Value="{Binding SplitPreviewLeft}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
                     </Viewbox>
                     <Viewbox Grid.Row="1"
                              Style="{StaticResource SplitPreviewTileStyle1}"
                              Tag="1"
                              MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
-                               Source="{Binding ImageOnPreview}"
-                               Stretch="None"/>
+                               Stretch="None">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Source" Value="{Binding ImageOnPreview}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPageSplitPreview}" Value="True">
+                                            <Setter Property="Source" Value="{Binding SplitPreviewRight}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
                     </Viewbox>
                 </Grid>
                 <Grid Visibility="{Binding IsQuadSplitPreview, Converter={StaticResource BoolToVis}}">
