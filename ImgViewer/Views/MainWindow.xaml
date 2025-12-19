@@ -248,6 +248,48 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="StatusBarToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#2F3136"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border CornerRadius="6" Background="Transparent" Margin="0,2,0,0">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.15"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="bd"
+                                    CornerRadius="4"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#FF1E66E0"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Pipeline-styled ComboBox (paste inside Window.Resources) -->
         <Style x:Key="PipelineComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}" />
@@ -497,8 +539,21 @@
             <StatusBarItem>
                 <ProgressBar x:Name="MyProgressBar" Width="200" Height="16" Minimum="0" Maximum="100" />
             </StatusBarItem>
-            <StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock HorizontalAlignment="Right" Text="{Binding TiffCompressionLabel}"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Content="V"
+                                  Style="{StaticResource StatusBarToggleButtonStyle}"
+                                  Margin="0,0,4,0"
+                                  ToolTip="Split preview vertically"
+                                  IsChecked="{Binding IsVerticalSplitPreview, Mode=TwoWay}"/>
+                    <ToggleButton Content="H"
+                                  Style="{StaticResource StatusBarToggleButtonStyle}"
+                                  ToolTip="Split preview horizontally"
+                                  IsChecked="{Binding IsHorizontalSplitPreview, Mode=TwoWay}"/>
+                </StackPanel>
             </StatusBarItem>
         </StatusBar>
 
@@ -1024,18 +1079,56 @@
                 VerticalAlignment="Center"
                 SnapsToDevicePixels="True"
                 CornerRadius="6">
+            <Grid>
                 <Viewbox x:Name="PreviewViewbox"
                          Stretch="Uniform"
+                         Visibility="{Binding IsDefaultPreview, Converter={StaticResource BoolToVis}}"
                          MouseMove="PreviewImgBox_MouseMove"
                          MouseWheel="PreviewImgBox_MouseWheel"
                          PreviewMouseLeftButtonDown="PreviewViewbox_PreviewMouseLeftButtonDown"
                          PreviewMouseLeftButtonUp="PreviewViewbox_PreviewMouseLeftButtonUp">
-                <Image x:Name="PreviewImgBox"
-                       RenderOptions.BitmapScalingMode="HighQuality"
-                       Source="{Binding ImageOnPreview}"
-                       Stretch="None" 
-                       />
-            </Viewbox>
+                    <Image x:Name="PreviewImgBox"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           Source="{Binding ImageOnPreview}"
+                           Stretch="None"/>
+                </Viewbox>
+
+                <Grid Visibility="{Binding IsVerticalSplitPreview, Converter={StaticResource BoolToVis}}"
+                      IsHitTestVisible="False">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Viewbox Grid.Column="0" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Column="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                </Grid>
+
+                <Grid Visibility="{Binding IsHorizontalSplitPreview, Converter={StaticResource BoolToVis}}"
+                      IsHitTestVisible="False">
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <Viewbox Grid.Row="0" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                </Grid>
+            </Grid>
         </Border>
 
     </Grid>

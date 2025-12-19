@@ -7,6 +7,13 @@ using System.Windows.Media;
 
 namespace ImgViewer.Models
 {
+    internal enum PreviewSplitMode
+    {
+        Single,
+        Vertical,
+        Horizontal
+    }
+
     internal class MainViewModel : IViewModel, INotifyPropertyChanged
     {
         private readonly IAppManager _manager;
@@ -24,6 +31,7 @@ namespace ImgViewer.Models
         private string _status = "Ready";
 
         private CancellationTokenSource? _cts;
+        private PreviewSplitMode _previewSplitMode = PreviewSplitMode.Single;
 
         public bool SavePipelineToMd
         {
@@ -121,6 +129,32 @@ namespace ImgViewer.Models
             }
         }
 
+        public bool IsDefaultPreview => _previewSplitMode == PreviewSplitMode.Single;
+
+        public bool IsVerticalSplitPreview
+        {
+            get => _previewSplitMode == PreviewSplitMode.Vertical;
+            set
+            {
+                var newMode = value
+                    ? PreviewSplitMode.Vertical
+                    : (_previewSplitMode == PreviewSplitMode.Vertical ? PreviewSplitMode.Single : _previewSplitMode);
+                UpdatePreviewSplitMode(newMode);
+            }
+        }
+
+        public bool IsHorizontalSplitPreview
+        {
+            get => _previewSplitMode == PreviewSplitMode.Horizontal;
+            set
+            {
+                var newMode = value
+                    ? PreviewSplitMode.Horizontal
+                    : (_previewSplitMode == PreviewSplitMode.Horizontal ? PreviewSplitMode.Single : _previewSplitMode);
+                UpdatePreviewSplitMode(newMode);
+            }
+        }
+
         //public string? LastOpenedFolder
         //{
         //    get => _lastOpenedFolder;
@@ -145,6 +179,16 @@ namespace ImgViewer.Models
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        private void UpdatePreviewSplitMode(PreviewSplitMode newMode)
+        {
+            if (_previewSplitMode == newMode)
+                return;
+
+            _previewSplitMode = newMode;
+            OnPropertyChanged(nameof(IsVerticalSplitPreview));
+            OnPropertyChanged(nameof(IsHorizontalSplitPreview));
+            OnPropertyChanged(nameof(IsDefaultPreview));
+        }
 
 
     }
