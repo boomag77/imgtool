@@ -421,6 +421,42 @@ namespace ImgViewer.Views
             }
         }
 
+        private void SplitPreviewTile_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_viewModel is not MainViewModel vm)
+                return;
+
+            if (sender is not FrameworkElement element)
+                return;
+
+            int index;
+            if (element.Tag is int directIndex)
+            {
+                index = directIndex;
+            }
+            else if (!int.TryParse(element.Tag?.ToString(), out index))
+            {
+                return;
+            }
+
+            vm.ToggleFocusedSplitPreview(index);
+            e.Handled = true;
+        }
+
+        private void CloseFocusedPreviewButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewModel is MainViewModel vm)
+            {
+                vm.ClearFocusedSplitPreview();
+            }
+
+            if (_magnifierEnabled)
+            {
+                DisableMagnifier();
+            }
+        }
+
+
         private void GetFromSelection_Click(object sender, RoutedEventArgs e)
         {
 
@@ -2230,6 +2266,8 @@ namespace ImgViewer.Views
                 _selectionMode = SelectionMode.None;
                 e.Handled = true;
             }
+
+
         }
 
         private void ResetSelection()

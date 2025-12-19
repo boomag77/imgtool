@@ -18,6 +18,7 @@
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InvBoolToVis"/>
+        <conv:MultiplyConverter x:Key="MultiplyConverter"/>
 
         <DataTemplate x:Key="ParameterTemplate">
             <Border Padding="4" Margin="2"
@@ -329,6 +330,168 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="PreviewCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#2F3136"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="3"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#FF1E66E0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SplitPreviewTileBaseStyle" TargetType="Viewbox">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Panel.ZIndex" Value="1"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <BlurEffect Radius="0"/>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Opacity" Value="1"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasFocusedSplitPreview}" Value="True">
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="4"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="0.6"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SplitPreviewTileStyle0" TargetType="Viewbox" BasedOn="{StaticResource SplitPreviewTileBaseStyle}">
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasFocusedSplitPreview}" Value="True"/>
+                        <Condition Binding="{Binding FocusedSplitPreviewIndex}" Value="0"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="0"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Panel.ZIndex" Value="5"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SplitPreviewTileStyle1" TargetType="Viewbox" BasedOn="{StaticResource SplitPreviewTileBaseStyle}">
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasFocusedSplitPreview}" Value="True"/>
+                        <Condition Binding="{Binding FocusedSplitPreviewIndex}" Value="1"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="0"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Panel.ZIndex" Value="5"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SplitPreviewTileStyle2" TargetType="Viewbox" BasedOn="{StaticResource SplitPreviewTileBaseStyle}">
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasFocusedSplitPreview}" Value="True"/>
+                        <Condition Binding="{Binding FocusedSplitPreviewIndex}" Value="2"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="0"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Panel.ZIndex" Value="5"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SplitPreviewTileStyle3" TargetType="Viewbox" BasedOn="{StaticResource SplitPreviewTileBaseStyle}">
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasFocusedSplitPreview}" Value="True"/>
+                        <Condition Binding="{Binding FocusedSplitPreviewIndex}" Value="3"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="0"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Panel.ZIndex" Value="5"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SplitPreviewTileStyle4" TargetType="Viewbox" BasedOn="{StaticResource SplitPreviewTileBaseStyle}">
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasFocusedSplitPreview}" Value="True"/>
+                        <Condition Binding="{Binding FocusedSplitPreviewIndex}" Value="4"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="0"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Panel.ZIndex" Value="5"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SplitPreviewTileStyle5" TargetType="Viewbox" BasedOn="{StaticResource SplitPreviewTileBaseStyle}">
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasFocusedSplitPreview}" Value="True"/>
+                        <Condition Binding="{Binding FocusedSplitPreviewIndex}" Value="5"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <BlurEffect Radius="0"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Panel.ZIndex" Value="5"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
         <!-- Pipeline-styled ComboBox (paste inside Window.Resources) -->
         <Style x:Key="PipelineComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}" />
@@ -521,7 +684,7 @@
             <!--Upper controls -->
             <RowDefinition Height="Auto"/>
             <!-- Main content row -->
-            <RowDefinition Height="*"/>
+            <RowDefinition x:Name="MainContentRow" Height="*"/>
             <!--Lower controls-->
             <RowDefinition Height="Auto"/>
             <!--Status bar row -->
@@ -530,13 +693,13 @@
         </Grid.RowDefinitions>
         
         <Grid.ColumnDefinitions>
-            
+
             <!--Original image -->
             <ColumnDefinition Width="4*"/>
             <!--Pipeline and controls -->
             <ColumnDefinition Width="2*" MinWidth="370"/>
             <!--Processing image -->
-            <ColumnDefinition Width="4*"/>
+            <ColumnDefinition x:Name="ProcessingImageColumn" Width="4*"/>
             
         </Grid.ColumnDefinitions>
 
@@ -1131,7 +1294,8 @@
 
 
         <!--Processing Image preview -->
-        <Border Grid.Row="1" Grid.Column="2" Grid.RowSpan="3"
+        <Border x:Name="ProcessingPreviewBorder"
+                Grid.Row="1" Grid.Column="2" Grid.RowSpan="3"
                 BorderThickness="0"
                 BorderBrush="#FFBDBDBD"
                 Margin="5"
@@ -1140,57 +1304,139 @@
                 VerticalAlignment="Center"
                 SnapsToDevicePixels="True"
                 CornerRadius="6">
-            <Grid>
-                <Viewbox x:Name="PreviewViewbox"
-                         Stretch="Uniform"
-                         Visibility="{Binding IsDefaultPreview, Converter={StaticResource BoolToVis}}"
-                         MouseMove="PreviewImgBox_MouseMove"
-                         MouseWheel="PreviewImgBox_MouseWheel"
-                         PreviewMouseLeftButtonDown="PreviewViewbox_PreviewMouseLeftButtonDown"
-                         PreviewMouseLeftButtonUp="PreviewViewbox_PreviewMouseLeftButtonUp">
-                    <Image x:Name="PreviewImgBox"
-                           RenderOptions.BitmapScalingMode="HighQuality"
-                           Source="{Binding ImageOnPreview}"
-                           Stretch="None"/>
-                </Viewbox>
+            <Grid x:Name="SplitPreviewHost">
+                <Border x:Name="PrimaryPreviewContainer"
+                        Visibility="{Binding ShowPrimaryPreview, Converter={StaticResource BoolToVis}}"
+                        Panel.ZIndex="5">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                            <Setter Property="VerticalAlignment" Value="Stretch"/>
+                            <Setter Property="Width" Value="Auto"/>
+                            <Setter Property="Height" Value="Auto"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Effect" Value="{x:Null}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasFocusedSplitPreview}" Value="True">
+                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Padding" Value="6"/>
+                                    <Setter Property="CornerRadius" Value="10"/>
+                                    <Setter Property="Background" Value="#F21F232B"/>
+                                    <Setter Property="BorderBrush" Value="#FF1E66E0"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                    <Setter Property="Effect">
+                                        <Setter.Value>
+                                            <DropShadowEffect BlurRadius="15" ShadowDepth="4" Opacity="0.35"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Setter Property="MaxWidth">
+                                        <Setter.Value>
+                                            <Binding ElementName="ProcessingImageColumn"
+                                                     Path="ActualWidth"
+                                                     Converter="{StaticResource MultiplyConverter}"
+                                                     ConverterParameter="0.95"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Setter Property="MaxHeight">
+                                        <Setter.Value>
+                                            <Binding ElementName="MainContentRow"
+                                                     Path="ActualHeight"
+                                                     Converter="{StaticResource MultiplyConverter}"
+                                                     ConverterParameter="0.95"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0"
+                                Background="#AA1C1F24"
+                                CornerRadius="6,6,0,0"
+                                Padding="6,2"
+                                Visibility="{Binding HasFocusedSplitPreview, Converter={StaticResource BoolToVis}}">
+                            <DockPanel LastChildFill="False">
+                                <TextBlock Text="Focused preview"
+                                           Foreground="White"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Opacity="0.8"/>
+                                <Button Content="×"
+                                        Style="{StaticResource PreviewCloseButtonStyle}"
+                                        DockPanel.Dock="Right"
+                                        Margin="4,0,0,0"
+                                        Click="CloseFocusedPreviewButton_Click"/>
+                            </DockPanel>
+                        </Border>
+                        <Viewbox Grid.Row="1"
+                                 x:Name="PreviewViewbox"
+                                 Stretch="Uniform"
+                                 MouseMove="PreviewImgBox_MouseMove"
+                                 MouseWheel="PreviewImgBox_MouseWheel"
+                                 PreviewMouseLeftButtonDown="PreviewViewbox_PreviewMouseLeftButtonDown"
+                                 PreviewMouseLeftButtonUp="PreviewViewbox_PreviewMouseLeftButtonUp">
+                            <Image x:Name="PreviewImgBox"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Source="{Binding ImageOnPreview}"
+                                   Stretch="None"/>
+                        </Viewbox>
+                    </Grid>
+                </Border>
 
-                <Grid Visibility="{Binding IsVerticalSplitPreview, Converter={StaticResource BoolToVis}}"
-                      IsHitTestVisible="False">
+                <Grid Visibility="{Binding IsVerticalSplitPreview, Converter={StaticResource BoolToVis}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
-                    <Viewbox Grid.Column="0" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Column="0"
+                             Style="{StaticResource SplitPreviewTileStyle0}"
+                             Tag="0"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Column="1" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Column="1"
+                             Style="{StaticResource SplitPreviewTileStyle1}"
+                             Tag="1"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
                 </Grid>
 
-                <Grid Visibility="{Binding IsHorizontalSplitPreview, Converter={StaticResource BoolToVis}}"
-                      IsHitTestVisible="False">
+                <Grid Visibility="{Binding IsHorizontalSplitPreview, Converter={StaticResource BoolToVis}}">
                     <Grid.RowDefinitions>
                         <RowDefinition/>
                         <RowDefinition/>
                     </Grid.RowDefinitions>
-                    <Viewbox Grid.Row="0" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="0"
+                             Style="{StaticResource SplitPreviewTileStyle0}"
+                             Tag="0"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="1" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="1"
+                             Style="{StaticResource SplitPreviewTileStyle1}"
+                             Tag="1"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
                 </Grid>
-                <Grid Visibility="{Binding IsQuadSplitPreview, Converter={StaticResource BoolToVis}}"
-                      IsHitTestVisible="False">
+                <Grid Visibility="{Binding IsQuadSplitPreview, Converter={StaticResource BoolToVis}}">
                     <Grid.RowDefinitions>
                         <RowDefinition/>
                         <RowDefinition/>
@@ -1199,29 +1445,40 @@
                         <ColumnDefinition/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
-                    <Viewbox Grid.Row="0" Grid.Column="0" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="0" Grid.Column="0"
+                             Style="{StaticResource SplitPreviewTileStyle0}"
+                             Tag="0"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="0" Grid.Column="1" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="0" Grid.Column="1"
+                             Style="{StaticResource SplitPreviewTileStyle1}"
+                             Tag="1"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="1" Grid.Column="0" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="1" Grid.Column="0"
+                             Style="{StaticResource SplitPreviewTileStyle2}"
+                             Tag="2"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="1" Grid.Column="1" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="1" Grid.Column="1"
+                             Style="{StaticResource SplitPreviewTileStyle3}"
+                             Tag="3"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
                 </Grid>
-                <Grid Visibility="{Binding IsSixSplitPreview, Converter={StaticResource BoolToVis}}"
-                      IsHitTestVisible="False">
+                <Grid Visibility="{Binding IsSixSplitPreview, Converter={StaticResource BoolToVis}}">
                     <Grid.RowDefinitions>
                         <RowDefinition/>
                         <RowDefinition/>
@@ -1231,37 +1488,56 @@
                         <ColumnDefinition/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
-                    <Viewbox Grid.Row="0" Grid.Column="0" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="0" Grid.Column="0"
+                             Style="{StaticResource SplitPreviewTileStyle0}"
+                             Tag="0"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="0" Grid.Column="1" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="0" Grid.Column="1"
+                             Style="{StaticResource SplitPreviewTileStyle1}"
+                             Tag="1"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="0" Grid.Column="2" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="0" Grid.Column="2"
+                             Style="{StaticResource SplitPreviewTileStyle2}"
+                             Tag="2"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="1" Grid.Column="0" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="1" Grid.Column="0"
+                             Style="{StaticResource SplitPreviewTileStyle3}"
+                             Tag="3"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="1" Grid.Column="1" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="1" Grid.Column="1"
+                             Style="{StaticResource SplitPreviewTileStyle4}"
+                             Tag="4"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
-                    <Viewbox Grid.Row="1" Grid.Column="2" Margin="2" Stretch="Uniform">
+                    <Viewbox Grid.Row="1" Grid.Column="2"
+                             Style="{StaticResource SplitPreviewTileStyle5}"
+                             Tag="5"
+                             MouseLeftButtonUp="SplitPreviewTile_MouseLeftButtonUp">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>
                     </Viewbox>
                 </Grid>
+
             </Grid>
         </Border>
 

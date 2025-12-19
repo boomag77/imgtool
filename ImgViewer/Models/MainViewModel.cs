@@ -36,6 +36,7 @@ namespace ImgViewer.Models
         private PreviewSplitMode _previewSplitMode = PreviewSplitMode.Single;
         private PreviewSplitMode _twoPaneOrientation = PreviewSplitMode.Vertical;
         private int _selectedPreviewPaneCount = 2;
+        private int _focusedSplitPreviewIndex = -1;
 
         public bool SavePipelineToMd
         {
@@ -138,6 +139,9 @@ namespace ImgViewer.Models
         public bool IsSixSplitPreview => _previewSplitMode == PreviewSplitMode.Grid6;
         public string PreviewSplitCountLabel => _selectedPreviewPaneCount.ToString();
         public bool AreSplitOrientationButtonsEnabled => _selectedPreviewPaneCount == 2;
+        public int FocusedSplitPreviewIndex => _focusedSplitPreviewIndex;
+        public bool HasFocusedSplitPreview => _focusedSplitPreviewIndex >= 0;
+        public bool ShowPrimaryPreview => IsDefaultPreview || HasFocusedSplitPreview;
 
         public bool IsVerticalSplitPreview
         {
@@ -196,6 +200,26 @@ namespace ImgViewer.Models
             UpdatePreviewSplitMode(modeToApply);
         }
 
+        public void ToggleFocusedSplitPreview(int tileIndex)
+        {
+            if (_previewSplitMode == PreviewSplitMode.Single)
+                return;
+
+            if (_focusedSplitPreviewIndex == tileIndex)
+            {
+                SetFocusedSplitPreviewIndex(-1);
+            }
+            else
+            {
+                SetFocusedSplitPreviewIndex(tileIndex);
+            }
+        }
+
+        public void ClearFocusedSplitPreview()
+        {
+            SetFocusedSplitPreviewIndex(-1);
+        }
+
         //public string? LastOpenedFolder
         //{
         //    get => _lastOpenedFolder;
@@ -247,12 +271,53 @@ namespace ImgViewer.Models
                 OnPropertyChanged(nameof(AreSplitOrientationButtonsEnabled));
             }
 
+            if (newMode == PreviewSplitMode.Single)
+            {
+                ClearFocusedSplitPreview();
+            }
+
             _previewSplitMode = newMode;
             OnPropertyChanged(nameof(IsVerticalSplitPreview));
             OnPropertyChanged(nameof(IsHorizontalSplitPreview));
             OnPropertyChanged(nameof(IsDefaultPreview));
             OnPropertyChanged(nameof(IsQuadSplitPreview));
             OnPropertyChanged(nameof(IsSixSplitPreview));
+            OnPropertyChanged(nameof(ShowPrimaryPreview));
+
+            EnsureFocusedSplitPreviewInRange();
+        }
+
+        private void SetFocusedSplitPreviewIndex(int index)
+        {
+            if (_focusedSplitPreviewIndex == index)
+                return;
+
+            _focusedSplitPreviewIndex = index;
+            OnPropertyChanged(nameof(FocusedSplitPreviewIndex));
+            OnPropertyChanged(nameof(HasFocusedSplitPreview));
+            OnPropertyChanged(nameof(ShowPrimaryPreview));
+        }
+
+        private void EnsureFocusedSplitPreviewInRange()
+        {
+            int paneCount = GetPaneCountForMode(_previewSplitMode);
+            if (_focusedSplitPreviewIndex >= paneCount)
+            {
+                ClearFocusedSplitPreview();
+            }
+        }
+
+        private static int GetPaneCountForMode(PreviewSplitMode mode)
+        {
+            return mode switch
+            {
+                PreviewSplitMode.Single => 1,
+                PreviewSplitMode.Vertical => 2,
+                PreviewSplitMode.Horizontal => 2,
+                PreviewSplitMode.Grid4 => 4,
+                PreviewSplitMode.Grid6 => 6,
+                _ => 1
+            };
         }
 
 
