@@ -398,6 +398,29 @@ namespace ImgViewer.Views
             //Debug.WriteLine("Stopping");
         }
 
+        private void SplitCountButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button button && button.ContextMenu != null)
+            {
+                button.ContextMenu.PlacementTarget = button;
+                button.ContextMenu.IsOpen = true;
+            }
+        }
+
+        private void SplitCountMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem)
+                return;
+
+            if (!int.TryParse(menuItem.Tag?.ToString(), out int targetCount))
+                return;
+
+            if (_viewModel is MainViewModel vm)
+            {
+                vm.SetPreviewSplitCount(targetCount);
+            }
+        }
+
         private void GetFromSelection_Click(object sender, RoutedEventArgs e)
         {
 

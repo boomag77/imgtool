@@ -290,6 +290,45 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="StatusBarButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#2F3136"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border CornerRadius="6" Background="Transparent" Margin="0,2,0,0">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.15"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="bd"
+                                    CornerRadius="4"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="{TemplateBinding Padding}"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Pipeline-styled ComboBox (paste inside Window.Resources) -->
         <Style x:Key="PipelineComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Foreground" Value="{StaticResource PipelineTextBrush}" />
@@ -548,11 +587,33 @@
                                   Style="{StaticResource StatusBarToggleButtonStyle}"
                                   Margin="0,0,4,0"
                                   ToolTip="Split preview vertically"
-                                  IsChecked="{Binding IsVerticalSplitPreview, Mode=TwoWay}"/>
+                                  IsChecked="{Binding IsVerticalSplitPreview, Mode=TwoWay}"
+                                  IsEnabled="{Binding AreSplitOrientationButtonsEnabled}"/>
                     <ToggleButton Content="H"
                                   Style="{StaticResource StatusBarToggleButtonStyle}"
                                   ToolTip="Split preview horizontally"
-                                  IsChecked="{Binding IsHorizontalSplitPreview, Mode=TwoWay}"/>
+                                  IsChecked="{Binding IsHorizontalSplitPreview, Mode=TwoWay}"
+                                  IsEnabled="{Binding AreSplitOrientationButtonsEnabled}"/>
+                    <Button x:Name="SplitCountButton"
+                            Content="{Binding PreviewSplitCountLabel}"
+                            Margin="6,0,0,0"
+                            Style="{StaticResource StatusBarButtonStyle}"
+                            ToolTip="Choose number of preview panes"
+                            Click="SplitCountButton_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="2 views"
+                                          Tag="2"
+                                          Click="SplitCountMenuItem_Click"/>
+                                <MenuItem Header="4 views"
+                                          Tag="4"
+                                          Click="SplitCountMenuItem_Click"/>
+                                <MenuItem Header="6 views"
+                                          Tag="6"
+                                          Click="SplitCountMenuItem_Click"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
             </StatusBarItem>
         </StatusBar>
@@ -1123,6 +1184,79 @@
                                Stretch="None"/>
                     </Viewbox>
                     <Viewbox Grid.Row="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                </Grid>
+                <Grid Visibility="{Binding IsQuadSplitPreview, Converter={StaticResource BoolToVis}}"
+                      IsHitTestVisible="False">
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Viewbox Grid.Row="0" Grid.Column="0" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="0" Grid.Column="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="1" Grid.Column="0" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="1" Grid.Column="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                </Grid>
+                <Grid Visibility="{Binding IsSixSplitPreview, Converter={StaticResource BoolToVis}}"
+                      IsHitTestVisible="False">
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Viewbox Grid.Row="0" Grid.Column="0" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="0" Grid.Column="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="0" Grid.Column="2" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="1" Grid.Column="0" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="1" Grid.Column="1" Margin="2" Stretch="Uniform">
+                        <Image RenderOptions.BitmapScalingMode="HighQuality"
+                               Source="{Binding ImageOnPreview}"
+                               Stretch="None"/>
+                    </Viewbox>
+                    <Viewbox Grid.Row="1" Grid.Column="2" Margin="2" Stretch="Uniform">
                         <Image RenderOptions.BitmapScalingMode="HighQuality"
                                Source="{Binding ImageOnPreview}"
                                Stretch="None"/>

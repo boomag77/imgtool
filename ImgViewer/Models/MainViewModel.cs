@@ -11,7 +11,9 @@ namespace ImgViewer.Models
     {
         Single,
         Vertical,
-        Horizontal
+        Horizontal,
+        Grid4,
+        Grid6
     }
 
     internal class MainViewModel : IViewModel, INotifyPropertyChanged
@@ -32,6 +34,8 @@ namespace ImgViewer.Models
 
         private CancellationTokenSource? _cts;
         private PreviewSplitMode _previewSplitMode = PreviewSplitMode.Single;
+        private PreviewSplitMode _twoPaneOrientation = PreviewSplitMode.Vertical;
+        private int _selectedPreviewPaneCount = 2;
 
         public bool SavePipelineToMd
         {
@@ -130,12 +134,19 @@ namespace ImgViewer.Models
         }
 
         public bool IsDefaultPreview => _previewSplitMode == PreviewSplitMode.Single;
+        public bool IsQuadSplitPreview => _previewSplitMode == PreviewSplitMode.Grid4;
+        public bool IsSixSplitPreview => _previewSplitMode == PreviewSplitMode.Grid6;
+        public string PreviewSplitCountLabel => _selectedPreviewPaneCount.ToString();
+        public bool AreSplitOrientationButtonsEnabled => _selectedPreviewPaneCount == 2;
 
         public bool IsVerticalSplitPreview
         {
             get => _previewSplitMode == PreviewSplitMode.Vertical;
             set
             {
+                if (!AreSplitOrientationButtonsEnabled)
+                    return;
+
                 var newMode = value
                     ? PreviewSplitMode.Vertical
                     : (_previewSplitMode == PreviewSplitMode.Vertical ? PreviewSplitMode.Single : _previewSplitMode);
@@ -148,11 +159,41 @@ namespace ImgViewer.Models
             get => _previewSplitMode == PreviewSplitMode.Horizontal;
             set
             {
+                if (!AreSplitOrientationButtonsEnabled)
+                    return;
+
                 var newMode = value
                     ? PreviewSplitMode.Horizontal
                     : (_previewSplitMode == PreviewSplitMode.Horizontal ? PreviewSplitMode.Single : _previewSplitMode);
                 UpdatePreviewSplitMode(newMode);
             }
+        }
+
+        public void SetPreviewSplitCount(int paneCount)
+        {
+            if (paneCount != 2 && paneCount != 4 && paneCount != 6)
+                return;
+
+            _selectedPreviewPaneCount = paneCount;
+            OnPropertyChanged(nameof(PreviewSplitCountLabel));
+            OnPropertyChanged(nameof(AreSplitOrientationButtonsEnabled));
+
+            PreviewSplitMode modeToApply = _previewSplitMode;
+
+            switch (paneCount)
+            {
+                case 2:
+                    modeToApply = _twoPaneOrientation;
+                    break;
+                case 4:
+                    modeToApply = PreviewSplitMode.Grid4;
+                    break;
+                case 6:
+                    modeToApply = PreviewSplitMode.Grid6;
+                    break;
+            }
+
+            UpdatePreviewSplitMode(modeToApply);
         }
 
         //public string? LastOpenedFolder
@@ -184,10 +225,34 @@ namespace ImgViewer.Models
             if (_previewSplitMode == newMode)
                 return;
 
+            if (newMode == PreviewSplitMode.Vertical || newMode == PreviewSplitMode.Horizontal)
+            {
+                _twoPaneOrientation = newMode;
+                _selectedPreviewPaneCount = 2;
+                OnPropertyChanged(nameof(PreviewSplitCountLabel));
+                OnPropertyChanged(nameof(AreSplitOrientationButtonsEnabled));
+            }
+
+            if (newMode == PreviewSplitMode.Grid4 && _selectedPreviewPaneCount != 4)
+            {
+                _selectedPreviewPaneCount = 4;
+                OnPropertyChanged(nameof(PreviewSplitCountLabel));
+                OnPropertyChanged(nameof(AreSplitOrientationButtonsEnabled));
+            }
+
+            if (newMode == PreviewSplitMode.Grid6 && _selectedPreviewPaneCount != 6)
+            {
+                _selectedPreviewPaneCount = 6;
+                OnPropertyChanged(nameof(PreviewSplitCountLabel));
+                OnPropertyChanged(nameof(AreSplitOrientationButtonsEnabled));
+            }
+
             _previewSplitMode = newMode;
             OnPropertyChanged(nameof(IsVerticalSplitPreview));
             OnPropertyChanged(nameof(IsHorizontalSplitPreview));
             OnPropertyChanged(nameof(IsDefaultPreview));
+            OnPropertyChanged(nameof(IsQuadSplitPreview));
+            OnPropertyChanged(nameof(IsSixSplitPreview));
         }
 
 
