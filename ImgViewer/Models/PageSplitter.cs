@@ -9,6 +9,8 @@ namespace ImgViewer.Models
 {
 public sealed class PageSplitter
 {
+    private const int SplitBorderPadding = 50;
+
     public sealed class Settings
     {
         // --- Search band (fraction of width) where we expect the gutter ---
@@ -176,6 +178,8 @@ public sealed class PageSplitter
             FinalConfidence = finalConf
         };
 
+        var borderColor = EstimateBorderColor(srcBgr);
+
         if (finalConf < _s.MinConfidence)
         {
             result.Success = false;
@@ -191,8 +195,16 @@ public sealed class PageSplitter
         }
 
         // Clone() so the returned Mats are independent from src lifetime
-        result.Left = new Mat(src, new Rect(0, 0, leftW, origH)).Clone();
-        result.Right = new Mat(src, new Rect(rightX, 0, rightW, origH)).Clone();
+        using (var leftRoi = new Mat(src, new Rect(0, 0, leftW, origH)))
+        using (var leftClone = leftRoi.Clone())
+        {
+            result.Left = AddSplitBorder(leftClone, 0, SplitBorderPadding, borderColor);
+        }
+        using (var rightRoi = new Mat(src, new Rect(rightX, 0, rightW, origH)))
+        using (var rightClone = rightRoi.Clone())
+        {
+            result.Right = AddSplitBorder(rightClone, SplitBorderPadding, 0, borderColor);
+        }
         result.Success = true;
 
         if (createDebugOverlay)
@@ -469,6 +481,58 @@ public sealed class PageSplitter
     private static double Clamp(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v);
 
     private static double Clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+
+    private static Mat AddSplitBorder(Mat src, int leftPad, int rightPad, Scalar color)
+    {
+        if (src == null)
+            throw new ArgumentNullException(nameof(src));
+
+        int padLeft = Math.Max(0, leftPad);
+        int padRight = Math.Max(0, rightPad);
+        if (padLeft == 0 && padRight == 0)
+            return src.Clone();
+
+        var padded = new Mat();
+        Cv2.CopyMakeBorder(src, padded, 0, 0, padLeft, padRight, BorderTypes.Constant, color);
+        return padded;
+    }
+
+    private static Scalar EstimateBorderColor(Mat bgr)
+    {
+        if (bgr == null || bgr.Empty())
+            return new Scalar(255, 255, 255);
+
+        int rows = bgr.Rows;
+        int cols = bgr.Cols;
+        int cornerSize = Math.Max(1, Math.Min(32, Math.Min(rows, cols) / 30));
+        double sb = 0, sg = 0, sr = 0;
+        int count = 0;
+
+        var rects = new[]
+        {
+            new Rect(0, 0, cornerSize, cornerSize),
+            new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
+            new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
+            new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
+        };
+
+        foreach (var rect in rects)
+        {
+            if (rect.Width <= 0 || rect.Height <= 0)
+                continue;
+            using var patch = new Mat(bgr, rect);
+            var mean = Cv2.Mean(patch);
+            sb += mean.Val0;
+            sg += mean.Val1;
+            sr += mean.Val2;
+            count++;
+        }
+
+        if (count == 0)
+            return new Scalar(255, 255, 255);
+
+        return new Scalar(sb / count, sg / count, sr / count);
+    }
 
     private static double Median(double[] arr)
     {
