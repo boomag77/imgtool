@@ -67,8 +67,8 @@ namespace ImgViewer.Models
         {
             lock (_operationsLock)
             {
-                _operations.Add(CreatePipelineOperation(operationType));
-
+                var op = CreatePipelineOperation(operationType);
+                InsertInternal(_operations.Count, op);
             }
 
         }
@@ -77,7 +77,7 @@ namespace ImgViewer.Models
         {
             lock (_operationsLock)
             {
-                _operations.Insert(index, operation);
+                InsertInternal(index, operation);
             }
 
         }
@@ -428,7 +428,10 @@ namespace ImgViewer.Models
                         }
                     }
 
-                    _operations.Add(op);
+                    if (CanAddOperation_NoLock(op.Type))
+                    InsertInternal(_operations.Count, op);
+                    if (op.Type == PipelineOperationType.SplitPage)
+                        break;
                 }
             }
         }
@@ -672,6 +675,58 @@ namespace ImgViewer.Models
             Add(PipelineOperationType.Binarize);
 
 
+        }
+
+        private void InsertInternal(int index, PipelineOperation operation)
+        {
+            if (operation.Type == PipelineOperationType.SplitPage)
+            {
+                _operations.Clear();
+                _operations.Add(operation);
+                return;
+            }
+
+            if (!CanAddOperation_NoLock(operation.Type, operation))
+                return;
+
+            index = Math.Max(0, Math.Min(index, _operations.Count));
+            _operations.Insert(index, operation);
+        }
+
+        public bool ContainsSplitPageOperation()
+        {
+            lock (_operationsLock)
+                return ContainsSplitPageOperation_NoLock();
+        }
+
+        public bool CanAddOperation(PipelineOperationType type)
+        {
+            lock (_operationsLock)
+                return CanAddOperation_NoLock(type);
+        }
+
+        private bool CanAddOperation_NoLock(PipelineOperationType type, PipelineOperation? except = null)
+        {
+            bool hasSplit = ContainsSplitPageOperation_NoLock(except);
+
+            if (type == PipelineOperationType.SplitPage)
+                return !hasSplit;
+
+            return !hasSplit;
+        }
+
+        private bool ContainsSplitPageOperation_NoLock(PipelineOperation? except = null)
+        {
+            foreach (var op in _operations)
+            {
+                if (ReferenceEquals(op, except))
+                    continue;
+
+                if (op.Type == PipelineOperationType.SplitPage)
+                    return true;
+            }
+
+            return false;
         }
 
     }
