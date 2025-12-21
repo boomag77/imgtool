@@ -13,6 +13,7 @@ namespace ImgViewer.Interfaces
         public ImageSource? OriginalImage {  get; set; }
         public string Status { get; set; }
         public string? CurrentImagePath { get; set; }
-        //public string? LastOpenedFolder { get; set; }
+        public void SetSplitPreviewImages(ImageSource left, ImageSource right);
+        public void ClearSplitPreviewImages();
     }
 }

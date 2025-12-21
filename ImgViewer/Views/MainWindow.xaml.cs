@@ -1,4 +1,4 @@
-﻿using ImgViewer.Interfaces;
+using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using ImgViewer.Models.Onnx;
 using System.Collections.Specialized;
@@ -73,7 +73,7 @@ namespace ImgViewer.Views
 
         private DocumentationWindow? _documentationWindow;
 
-        private double _eraseOffset;   // пикселей от левого/правого края
+        private double _eraseOffset;   // ???????? ?? ??????/??????? ????
         private bool _eraseModeActive;
         private bool _operationErased;
 
@@ -107,14 +107,14 @@ namespace ImgViewer.Views
         }
 
         private SelectionMode _selectionMode = SelectionMode.None;
-        private Point _selectionDragStart;   // точка, где начался drag
-        private Rect _selectionStartRect;    // прямоугольник на момент начала drag
+        private Point _selectionDragStart;   // ?????, ??? ??????? drag
+        private Rect _selectionStartRect;    // ????????????? ?? ?????? ?????? drag
 
-        // radius hit-zones вокруг углов/граней
+        // radius hit-zones ?????? ?????/??????
         private const double SelectionHandleHit = 8.0;
         private const double SelectionMinSize = 5.0;
 
-        // debounce для Live-пайплайна
+        // debounce ??? Live-?????????
         private CancellationTokenSource? _liveDebounceCts;
         private TimeSpan _liveDebounceDelay;
 
@@ -198,7 +198,7 @@ namespace ImgViewer.Views
 
         private void OrigExpander_Collapsed(object sender, RoutedEventArgs e)
         {
-            // Прячем левую колонку с оригиналом
+            // ?????? ????? ??????? ? ??????????
             _viewModel.OriginalImageIsExpanded = false;
             RootGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Auto);
             RootGrid.ColumnDefinitions[2].Width = new GridLength(8, GridUnitType.Star);
@@ -206,7 +206,7 @@ namespace ImgViewer.Views
 
         private void OrigExpander_Expanded(object sender, RoutedEventArgs e)
         {
-            // Возвращаем исходную ширину (4*)
+            // ?????????? ???????? ?????? (4*)
             _viewModel.OriginalImageIsExpanded = true;
             RootGrid.ColumnDefinitions[0].Width = _originalImageColumnWidth;
             RootGrid.ColumnDefinitions[2].Width = new GridLength(4, GridUnitType.Star);
@@ -214,7 +214,7 @@ namespace ImgViewer.Views
 
         private void ScheduleLivePipelineRun()
         {
-            // отменяем предыдущий запланированный запуск
+            // ???????? ?????????? ??????????????? ??????
             _liveDebounceCts?.Cancel();
 
             var cts = new CancellationTokenSource();
@@ -224,11 +224,11 @@ namespace ImgViewer.Views
             {
                 try
                 {
-                    // ждём паузу между изменениями
+                    // ???? ????? ????? ???????????
                     await Task.Delay(_liveDebounceDelay, cts.Token);
                     cts.Token.ThrowIfCancellationRequested();
 
-                    // если в этот момент уже идёт прогон — ждём, пока закончится
+                    // ???? ? ???? ?????? ??? ???? ?????? � ????, ???? ??????????
                     //while (_livePipelineRunning)
                     //{
                     //    await Task.Delay(50, cts.Token);
@@ -239,7 +239,7 @@ namespace ImgViewer.Views
                 }
                 catch (TaskCanceledException)
                 {
-                    // это нормально — сработал debounce
+                    // ??? ????????? � ???????? debounce
                 }
                 catch (Exception ex)
                 {
@@ -256,7 +256,7 @@ namespace ImgViewer.Views
             var pos = Mouse.GetPosition(PipelineListBox);
             double width = PipelineListBox.ActualWidth;
 
-            // "зона удаления" — когда ушли дальше, чем EraseOffset за левый/правый край списка
+            // "???? ????????" � ????? ???? ??????, ??? EraseOffset ?? ?????/?????? ???? ??????
             return pos.X < -_eraseOffset || pos.X > width + _eraseOffset;
         }
 
@@ -275,7 +275,7 @@ namespace ImgViewer.Views
                     _livePipelineRestartPending = true;
                     return;
                 }
-                // не запускаем параллельно, просто пропускаем лишний вызов
+                // ?? ????????? ???????????, ?????? ?????????? ?????? ?????
                 _livePipelineRunning = true;
             }
 
@@ -341,7 +341,7 @@ namespace ImgViewer.Views
         private void OnOperationLiveChanged(PipelineOperation op)
         {
 
-            // при ЛЮБОМ изменении Live (ON/OFF) пересобираем весь pipeline
+            // ??? ????? ????????? Live (ON/OFF) ???????????? ???? pipeline
             _manager.CancelImageProcessing();
             ScheduleLivePipelineRun();
             //if (op.Live)
@@ -385,7 +385,7 @@ namespace ImgViewer.Views
         {
             
            
-            // если операция не включена в pipeline, игнорируем изменение параметров
+            // ???? ???????? ?? ???????? ? pipeline, ?????????? ????????? ??????????
             if (!op.InPipeline || !op.Live)
                 return;
             _manager.CancelImageProcessing();
@@ -397,6 +397,65 @@ namespace ImgViewer.Views
             _manager.CancelBatchProcessing();
             //Debug.WriteLine("Stopping");
         }
+
+        private void SplitCountButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button button && button.ContextMenu != null)
+            {
+                button.ContextMenu.PlacementTarget = button;
+                button.ContextMenu.IsOpen = true;
+            }
+        }
+
+        private void SplitCountMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem)
+                return;
+
+            if (!int.TryParse(menuItem.Tag?.ToString(), out int targetCount))
+                return;
+
+            if (_viewModel is MainViewModel vm)
+            {
+                vm.SetPreviewSplitCount(targetCount);
+            }
+        }
+
+        private void SplitPreviewTile_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_viewModel is not MainViewModel vm)
+                return;
+
+            if (sender is not FrameworkElement element)
+                return;
+
+            int index;
+            if (element.Tag is int directIndex)
+            {
+                index = directIndex;
+            }
+            else if (!int.TryParse(element.Tag?.ToString(), out index))
+            {
+                return;
+            }
+
+            vm.ToggleFocusedSplitPreview(index);
+            e.Handled = true;
+        }
+
+        private void CloseFocusedPreviewButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewModel is MainViewModel vm)
+            {
+                vm.ClearFocusedSplitPreview();
+            }
+
+            if (_magnifierEnabled)
+            {
+                DisableMagnifier();
+            }
+        }
+
 
         private void GetFromSelection_Click(object sender, RoutedEventArgs e)
         {
@@ -418,7 +477,7 @@ namespace ImgViewer.Views
                             {
                                 Rect viewboxRect = _selectedRect;
 
-                                // 1) Viewbox → Image (DIPs в системе координат PreviewImgBox)
+                                // 1) Viewbox ? Image (DIPs ? ??????? ????????? PreviewImgBox)
                                 GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
                                 Rect imageRectDip = transform.TransformBounds(viewboxRect);
 
@@ -428,7 +487,7 @@ namespace ImgViewer.Views
                                 int imgW = bmp.PixelWidth;
                                 int imgH = bmp.PixelHeight;
 
-                                // если параметры — "толщина от краёв"
+                                // ???? ????????? � "??????? ?? ?????"
                                 int manualLeft = x;
                                 int manualTop = y;
                                 int manualRight = imgW - (x + w);
@@ -473,7 +532,7 @@ namespace ImgViewer.Views
             if (PreviewImgBox.Source is not BitmapSource bmp)
                 return (false, 0, 0, 0, 0);
 
-            // 1) Viewbox -> Image (DIPs в системе координат PreviewImgBox)
+            // 1) Viewbox -> Image (DIPs ? ??????? ????????? PreviewImgBox)
             Rect viewboxRect = _selectedRect;
 
             GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
@@ -482,7 +541,7 @@ namespace ImgViewer.Views
             if (PreviewImgBox.ActualWidth <= 0 || PreviewImgBox.ActualHeight <= 0)
                 return (false, 0, 0, 0, 0);
 
-            // 2) DIPs (Image) -> пиксели BitmapSource
+            // 2) DIPs (Image) -> ??????? BitmapSource
             double scaleX = bmp.PixelWidth / PreviewImgBox.ActualWidth;
             double scaleY = bmp.PixelHeight / PreviewImgBox.ActualHeight;
 
@@ -613,11 +672,11 @@ namespace ImgViewer.Views
                 return;
             }
 
-            // «сырая» позиция курсора относительно ListBox
+            // �?????� ??????? ??????? ???????????? ListBox
             var rawPos = e.GetPosition(PipelineListBox);
             double width = PipelineListBox.ActualWidth;
 
-            // включаем режим удаления, как и раньше
+            // ???????? ????? ????????, ??? ? ??????
             bool erase =
                 rawPos.X < _eraseOffset ||
                 rawPos.X > width - _eraseOffset;
@@ -625,17 +684,17 @@ namespace ImgViewer.Views
             _eraseModeActive = erase;
             _draggedItemAdorner?.SetEraseMode(erase);
 
-            // КЛЭМПИМ X для визуального призрака:
-            // не даём ему уйти дальше EraseOffset от краёв
+            // ??????? X ??? ??????????? ????????:
+            // ?? ???? ??? ???? ?????? EraseOffset ?? ?????
             double clampedX = Math.Max(_eraseOffset, Math.Min(rawPos.X, width - _eraseOffset));
             var clampedPos = new Point(clampedX, rawPos.Y);
 
-            // двигаем drag-ghost по зажатой позиции
+            // ??????? drag-ghost ?? ??????? ???????
             _draggedItemAdorner?.Update(clampedPos);
 
             if (erase)
             {
-                // В режиме удаления не показываем линию вставки
+                // ? ?????? ???????? ?? ?????????? ????? ???????
                 RemoveInsertionAdorner();
                 e.Effects = DragDropEffects.None;
                 e.Handled = true;
@@ -643,7 +702,7 @@ namespace ImgViewer.Views
             }
 
             //PipelineListBox.UpdateLayout();
-            _currentInsertionIndex = GetInsertionIndex(PipelineListBox, rawPos); // для индекса используем сырую позицию
+            _currentInsertionIndex = GetInsertionIndex(PipelineListBox, rawPos); // ??? ??????? ?????????? ????? ???????
             EnsureInsertionAdorner();
             _insertionAdorner?.Update(PipelineListBox, _currentInsertionIndex);
 
@@ -678,17 +737,17 @@ namespace ImgViewer.Views
 
 
 
-                // ----- РЕЖИМ УДАЛЕНИЯ -----
+                // ----- ????? ???????? -----
                 _dropHandled = true;
                 _operationErased = true;
                 e.Effects = DragDropEffects.Move;
                 e.Handled = true;
 
-                // если ты уже работаешь через Pipeline:
+                // ???? ?? ??? ????????? ????? Pipeline:
                 //_pipeline.Remove(_draggedOperation);
 
-                // в текущей реализации _pipeLineOperations.Remove уже был
-                // сделан в BeginPipelineDrag(), поэтому просто НЕ вставляем обратно
+                // ? ??????? ?????????? _pipeLineOperations.Remove ??? ???
+                // ?????? ? BeginPipelineDrag(), ??????? ?????? ?? ????????? ???????
 
                 _eraseModeActive = false;
                 _draggedItemAdorner?.SetEraseMode(false);
@@ -712,10 +771,10 @@ namespace ImgViewer.Views
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
 
-            // ----- NEW: после изменения порядка ресетим и перезапускаем live-пайплайн -----
+            // ----- NEW: ????? ????????? ??????? ??????? ? ????????????? live-???????? -----
             try
             {
-                // RunLiveOperationsForNewImageAsync уже делает ResetPreview в начале, поэтому просто вызываем его.
+                // RunLiveOperationsForNewImageAsync ??? ?????? ResetPreview ? ??????, ??????? ?????? ???????? ???.
                 await RunLiveOperationsForNewImageAsync();
             }
             catch (Exception ex)
@@ -741,7 +800,7 @@ namespace ImgViewer.Views
                 //_draggedItemAdorner.Update(clampedPos);
 
                 //_draggedItemAdorner.Update(Mouse.GetPosition(RootGrid));
-                //_draggedItemAdorner.Update(e.GetPosition(PipelineListBox)); // вместо Mouse.GetPosition
+                //_draggedItemAdorner.Update(e.GetPosition(PipelineListBox)); // ?????? Mouse.GetPosition
                 //Mouse.SetCursor(Cursors.Arrow);
                 e.Handled = true;
             }
@@ -795,7 +854,7 @@ namespace ImgViewer.Views
 
             if (cancelled && IsEraseDropPosition())
             {
-                // тут мышь ушла далеко за края → пользователь явно "выбросил" карточку
+                // ??? ???? ???? ?????? ?? ???? ? ???????????? ???? "????????" ????????
                 var res = System.Windows.MessageBox.Show(
                     $"WARNING! Are you sure you want to remove {_draggedOperation?.DisplayName} from current pipeline?",
                     "Confirm",
@@ -876,10 +935,10 @@ namespace ImgViewer.Views
             if (element == null)
                 return null;
 
-            // Обновляем layout, чтобы ActualWidth/ActualHeight были валидными
+            // ????????? layout, ????? ActualWidth/ActualHeight ???? ?????????
             element.UpdateLayout();
 
-            // Границы содержимого элемента (в его собственной системе координат)
+            // ??????? ??????????? ???????? (? ??? ??????????? ??????? ?????????)
             var bounds = VisualTreeHelper.GetDescendantBounds(element);
             if (bounds.IsEmpty)
                 return null;
@@ -892,7 +951,7 @@ namespace ImgViewer.Views
             const double dpi = 96.0;
             var rtb = new RenderTargetBitmap(width, height, dpi, dpi, PixelFormats.Pbgra32);
 
-            // Рисуем элемент через VisualBrush, чтобы "отвязаться" от глобальных координат
+            // ?????? ??????? ????? VisualBrush, ????? "??????????" ?? ?????????? ?????????
             var dv = new DrawingVisual();
             using (var ctx = dv.RenderOpen())
             {
@@ -917,7 +976,7 @@ namespace ImgViewer.Views
         //    if (_manager == null)
         //        return;
 
-        //    // Опционально: если хочешь, чтобы новый запуск отменял предыдущий Despeckle:
+        //    // ???????????: ???? ??????, ????? ????? ?????? ??????? ?????????? Despeckle:
         //    _manager.CancelImageProcessing();
 
         //    try
@@ -926,7 +985,7 @@ namespace ImgViewer.Views
         //    }
         //    catch (OperationCanceledException)
         //    {
-        //        // тихо игнорируем
+        //        // ???? ??????????
         //    }
         //    catch (Exception ex)
         //    {
@@ -1082,16 +1141,33 @@ namespace ImgViewer.Views
             if (menuItem.Tag is not PipelineOperationType type)
                 return;
 
-            // создаём новую операцию нужного типа
-            var op = Pipeline.CreatePipelineOperation(type);  // см. шаг 4
+            if (!Pipeline.CanAddOperation(type))
+                return;
 
-            // вставляем в начало pipeline (индекс 0)
+            // ??????? ????? ???????? ??????? ????
+            var op = Pipeline.CreatePipelineOperation(type);  // ??. ??? 4
+
+            // ????????? ? ?????? pipeline (?????? 0)
             Pipeline.Insert(0, op);
 
-            // опционально: сразу пересчитать live-pipeline
+            // ???????????: ????? ??????????? live-pipeline
             ScheduleLivePipelineRun();
         }
 
+        private void AddOperationContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.ContextMenu ctx)
+                return;
+
+            foreach (var item in ctx.Items)
+            {
+                if (item is System.Windows.Controls.MenuItem mi &&
+                    mi.Tag is PipelineOperationType type)
+                {
+                    mi.IsEnabled = Pipeline.CanAddOperation(type);
+                }
+            }
+        }
         private void SavePipelinePreset_Click(object sender, RoutedEventArgs e)
         {
 
@@ -1103,7 +1179,7 @@ namespace ImgViewer.Views
             {
                 var fileName = dlg.FileName;
 
-                // если пользователь не указал расширение — добавим .igpreset
+                // ???? ???????????? ?? ?????? ?????????? � ??????? .igpreset
                 if (!Path.HasExtension(fileName))
                     fileName += ".igpreset";
 
@@ -1147,7 +1223,7 @@ namespace ImgViewer.Views
             string[] _imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
             try
             {
-                // проверим папку
+                // ???????? ?????
                 var folder = _manager.LastOpenedFolder;
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
@@ -1155,7 +1231,7 @@ namespace ImgViewer.Views
                     return;
                 }
 
-                // собрать файлы с нужными расширениями
+                // ??????? ????? ? ??????? ????????????
                 var files = Directory.GetFiles(folder)
                                      .Where(f => _imageExtensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
                                      .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
@@ -1180,7 +1256,7 @@ namespace ImgViewer.Views
             }
             catch (OperationCanceledException)
             {
-                // cancelled — игнорируем
+                // cancelled � ??????????
             }
             catch (Exception ex)
             {
@@ -1209,7 +1285,7 @@ namespace ImgViewer.Views
             if (Pipeline == null) return;
             if (Pipeline.Operations.Count == 0)
             {
-                System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                System.Windows.MessageBox.Show("Pipeline is empty � choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1223,7 +1299,7 @@ namespace ImgViewer.Views
             if (rootFolder == string.Empty) return;
             _manager.LastOpenedFolder = rootFolder;
 
-            // опционально: спросить подтверждение у пользователя
+            // ???????????: ???????? ????????????? ? ????????????
             var res = System.Windows.MessageBox.Show($"Apply current pipeline to all sub-folders in:\n{rootFolder} ?",
                                                      "Confirm",
                                                      MessageBoxButton.OKCancel,
@@ -1249,7 +1325,7 @@ namespace ImgViewer.Views
         {
             try
             {
-                // попытка взять папку  из пути текущего файла
+                // ??????? ????? ?????  ?? ???? ???????? ?????
                 //string? folder = _viewModel?.LastOpenedFolder;
 
 
@@ -1257,7 +1333,7 @@ namespace ImgViewer.Views
 
                 if (Pipeline.Operations.Count == 0)
                 {
-                    System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    System.Windows.MessageBox.Show("Pipeline is empty � choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
@@ -1276,7 +1352,7 @@ namespace ImgViewer.Views
                     return;
                 }
 
-                // опционально: спросить подтверждение у пользователя
+                // ???????????: ???????? ????????????? ? ????????????
                 var res = System.Windows.MessageBox.Show($"Apply current pipeline to all images in:\n\n{folder} ?",
                                                          "Confirm",
                                                          MessageBoxButton.OKCancel,
@@ -1288,7 +1364,7 @@ namespace ImgViewer.Views
 
 
 
-                // вызываем менеджер, передавая команды
+                // ???????? ????????, ????????? ???????
                 await _manager.ProcessFolder(folder, Pipeline);
 
 
@@ -1423,7 +1499,7 @@ namespace ImgViewer.Views
 
             protected override void OnRender(DrawingContext drawingContext)
             {
-                // Корректно пересчитаем размер из пикселей в DIPs
+                // ????????? ??????????? ?????? ?? ???????? ? DIPs
                 double scaleX = _bitmap.DpiX / 96.0;
                 double scaleY = _bitmap.DpiY / 96.0;
 
@@ -1439,7 +1515,7 @@ namespace ImgViewer.Views
 
                 if (_eraseMode)
                 {
-                    // полупрозрачный ghost + красный overlay ровно по тому же rect
+                    // ?????????????? ghost + ??????? overlay ????? ?? ???? ?? rect
                     drawingContext.PushOpacity(0.5);
                     drawingContext.DrawImage(_bitmap, rect);
                     drawingContext.Pop();
@@ -1453,7 +1529,7 @@ namespace ImgViewer.Views
                 {
                     drawingContext.PushOpacity(0.7);
                     drawingContext.DrawImage(_bitmap, rect);
-                    drawingContext.Pop(); // важно!
+                    drawingContext.Pop(); // ?????!
                 }
             }
 
@@ -1579,7 +1655,7 @@ namespace ImgViewer.Views
             if (_magnifierZoom < MagnifierMinZoom)
                 _magnifierZoom = MagnifierMinZoom;
 
-            // сначала клампим глобальный размер
+            // ??????? ??????? ?????????? ??????
             //ClampMagnifierSize();
 
             Debug.WriteLine($"Working magn size: {_magnifierSize}");
@@ -1591,10 +1667,10 @@ namespace ImgViewer.Views
             );
             _magnifierEnabled = true;
 
-            // и синхронизируем размер со второй лупой, если она уже включена
+            // ? ?????????????? ?????? ?? ?????? ?????, ???? ??? ??? ????????
             ApplyMagnifierSizeToAdorners();
 
-            // стартуем из центра превью
+            // ???????? ?? ?????? ??????
             var center = new Point(PreviewViewbox.ActualWidth / 2.0,
                                    PreviewViewbox.ActualHeight / 2.0);
             _magnifierAdorner.UpdatePosition(center);
@@ -1616,7 +1692,7 @@ namespace ImgViewer.Views
             if (layer == null)
                 return;
 
-            // клампим глобальный размер по обоим изображениям
+            // ??????? ?????????? ?????? ?? ????? ????????????
             //ClampMagnifierSize();
 
             Debug.WriteLine($"original magn size: {_magnifierSize}");
@@ -1628,7 +1704,7 @@ namespace ImgViewer.Views
             );
             _originalMagnifierEnabled = true;
 
-            // позиционируем по нормализованным координатам
+            // ????????????? ?? ??????????????? ???????????
             var sizeOrig = OrigViewbox.RenderSize;
             Point center;
             if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
@@ -1649,7 +1725,7 @@ namespace ImgViewer.Views
 
             _originalMagnifierAdorner.UpdatePosition(center);
 
-            // СИНХРОНИЗАЦИЯ: вдруг уже есть лупа на превью → подгоняем её тоже
+            // ?????????????: ????? ??? ???? ???? ?? ?????? ? ????????? ?? ????
             ApplyMagnifierSizeToAdorners();
         }
 
@@ -1665,7 +1741,7 @@ namespace ImgViewer.Views
         {
             double max = MagnifierMaxSize;
 
-            // ограничиваем по превью
+            // ???????????? ?? ??????
             if (PreviewViewbox != null)
             {
                 var s = PreviewViewbox.RenderSize;
@@ -1676,7 +1752,7 @@ namespace ImgViewer.Views
                 }
             }
 
-            // ограничиваем по оригиналу
+            // ???????????? ?? ?????????
             if (OrigViewbox != null)
             {
                 var s = OrigViewbox.RenderSize;
@@ -1687,7 +1763,7 @@ namespace ImgViewer.Views
                 }
             }
 
-            // БЕЗ Max(MagnifierMinSize, max) — только максимум
+            // ??? Max(MagnifierMinSize, max) � ?????? ????????
             return max;
         }
 
@@ -1710,20 +1786,20 @@ namespace ImgViewer.Views
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            // ESC — turn off both magnifiers
+            // ESC � turn off both magnifiers
             if (e.Key == Key.Escape)
             {
                 if (_magnifierEnabled || _originalMagnifierEnabled)
                 {
-                    DisableMagnifier();           // твой метод, который выключает Preview
-                    DisableOriginalMagnifier();   // новый метод, см. ниже
+                    DisableMagnifier();           // ???? ?????, ??????? ????????? Preview
+                    DisableOriginalMagnifier();   // ????? ?????, ??. ????
                     ResetSelection();
                     e.Handled = true;
                     return;
                 }
             }
 
-            // M — on/off magnifier on PreviewImgBox (working image)
+            // M � on/off magnifier on PreviewImgBox (working image)
             if (e.Key == Key.M)
             {
                 if (_magnifierEnabled)
@@ -1734,7 +1810,7 @@ namespace ImgViewer.Views
                 e.Handled = true;
             }
 
-            // S — on/off synced magnifier on OrigImgBox (original Image)
+            // S � on/off synced magnifier on OrigImgBox (original Image)
             if (e.Key == Key.S)
             {
                 if (_originalMagnifierEnabled)
@@ -1754,7 +1830,7 @@ namespace ImgViewer.Views
         //    var pos = e.GetPosition(PreviewViewbox);
         //    _magnifierAdorner.UpdatePosition(pos);
 
-        //    // --- считаем нормализованные координаты центра лупы ---
+        //    // --- ??????? ??????????????? ?????????? ?????? ???? ---
         //    var size = PreviewViewbox.RenderSize;
         //    if (size.Width > 0 && size.Height > 0)
         //    {
@@ -1763,7 +1839,7 @@ namespace ImgViewer.Views
         //            pos.Y / size.Height
         //        );
 
-        //        // если включена лупа на оригинале — двигаем её в то же относительное место
+        //        // ???? ???????? ???? ?? ????????? � ??????? ?? ? ?? ?? ????????????? ?????
         //        if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
         //        {
         //            var sizeOrig = OrigViewbox.RenderSize;
@@ -1787,7 +1863,7 @@ namespace ImgViewer.Views
 
             var pos = e.GetPosition(PreviewViewbox);
 
-            // --- 1) Обновление selection (если идёт drag) ---
+            // --- 1) ?????????? selection (???? ???? drag) ---
             if (_selectionMode != SelectionMode.None &&
                 e.LeftButton == MouseButtonState.Pressed)
             {
@@ -1895,7 +1971,7 @@ namespace ImgViewer.Views
                 }
             }
 
-            // --- 2) Лупа (не трогаем твою логику синхронизации) ---
+            // --- 2) ???? (?? ??????? ???? ?????? ?????????????) ---
             if (_magnifierEnabled && _magnifierAdorner != null)
             {
                 _magnifierAdorner.UpdatePosition(pos);
@@ -1935,10 +2011,10 @@ namespace ImgViewer.Views
 
             if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
             {
-                // меняем размер
+                // ?????? ??????
                 double deltaSize = e.Delta > 0 ? MagnifierSizeStep : -MagnifierSizeStep;
 
-                // сначала двигаем
+                // ??????? ???????
                 _magnifierSize += deltaSize;
                 ClampMagnifierSize();
                 ApplyMagnifierSizeToAdorners();
@@ -1951,7 +2027,7 @@ namespace ImgViewer.Views
             }
             else
             {
-                // меняем zoom
+                // ?????? zoom
                 double deltaZoom = e.Delta > 0 ? MagnifierZoomStep : -MagnifierZoomStep;
                 _magnifierZoom = Math.Max(MagnifierMinZoom,
                                   Math.Min(MagnifierMaxZoom, _magnifierZoom + deltaZoom));
@@ -2023,7 +2099,7 @@ namespace ImgViewer.Views
 
                 double half = lensSize / 2.0;
 
-                // центр так, чтобы ВЕСЬ квадрат был внутри элемента
+                // ????? ???, ????? ???? ??????? ??? ?????? ????????
                 double cx = _position.X;
                 double cy = _position.Y;
 
@@ -2033,7 +2109,7 @@ namespace ImgViewer.Views
                 var center = new Point(cx, cy);
                 var lensRect = new Rect(center.X - half, center.Y - half, lensSize, lensSize);
 
-                // размер окна в источнике под zoom
+                // ?????? ???? ? ????????? ??? zoom
                 double viewW = lensSize / _zoom;
                 double viewH = lensSize / _zoom;
 
@@ -2043,7 +2119,7 @@ namespace ImgViewer.Views
                     viewH = size.Height;
 
                 // PARALLAX:
-                //  положение лупы (0..1) → положение viewbox (0..maxOffset)
+                //  ????????? ???? (0..1) ? ????????? viewbox (0..maxOffset)
                 double travelX = Math.Max(1.0, size.Width - lensSize);
                 double travelY = Math.Max(1.0, size.Height - lensSize);
 
@@ -2068,12 +2144,12 @@ namespace ImgViewer.Views
                     Stretch = Stretch.Fill
                 };
 
-                // содержимое лупы
+                // ?????????? ????
                 drawingContext.PushClip(new RectangleGeometry(lensRect));
                 drawingContext.DrawRectangle(brush, null, lensRect);
                 drawingContext.Pop();
 
-                // рамка
+                // ?????
                 var borderBrush = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
                 borderBrush.Freeze();
                 var borderPen = new Pen(borderBrush, 1.5);
@@ -2107,13 +2183,13 @@ namespace ImgViewer.Views
                 _layer = layer;
                 IsHitTestVisible = false;
 
-                var borderColor = Color.FromArgb(220, 0, 120, 215); // синий
+                var borderColor = Color.FromArgb(220, 0, 120, 215); // ?????
                 var borderBrush = new SolidColorBrush(borderColor);
                 borderBrush.Freeze();
                 _borderPen = new Pen(borderBrush, 1.0);
                 _borderPen.Freeze();
 
-                _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215)); // полупрозрачный
+                _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215)); // ??????????????
                 _fillBrush.Freeze();
 
                 _handleBrush = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
@@ -2135,7 +2211,7 @@ namespace ImgViewer.Views
                 if (_rect.IsEmpty || _rect.Width <= 0 || _rect.Height <= 0)
                     return;
 
-                // заполнение + рамка
+                // ?????????? + ?????
                 drawingContext.DrawRectangle(_fillBrush, _borderPen, _rect);
 
                 double hs = HandleSize / 2.0;
@@ -2170,7 +2246,7 @@ namespace ImgViewer.Views
 
             EnsureSelectionAdorner();
 
-            // если уже есть selection — проверим, попали ли в него
+            // ???? ??? ???? selection � ????????, ?????? ?? ? ????
             if (HasSelection)
             {
                 var mode = HitTestSelection(pos);
@@ -2185,12 +2261,12 @@ namespace ImgViewer.Views
                 }
             }
 
-            // иначе начинаем новый selection
+            // ????? ???????? ????? selection
             _selectionMode = SelectionMode.Creating;
             _selectionDragStart = pos;
             _selectionStartRect = Rect.Empty;
 
-            // начальный прямоугольник нулевого размера
+            // ????????? ????????????? ???????? ???????
             UpdateSelectedRect(new Rect(pos, new Size(0, 0)));
             PreviewViewbox.CaptureMouse();
             e.Handled = true;
@@ -2207,11 +2283,13 @@ namespace ImgViewer.Views
                 _selectionMode = SelectionMode.None;
                 e.Handled = true;
             }
+
+
         }
 
         private void ResetSelection()
         {
-            // сбрасываем геометрию
+            // ?????????? ?????????
             _selectedRect = Rect.Empty;
 
             _leftSelected = 0;
@@ -2221,14 +2299,14 @@ namespace ImgViewer.Views
 
             _selectionMode = SelectionMode.None;
 
-            // отпускаем мышь, если держим
+            // ????????? ????, ???? ??????
             PreviewViewbox?.ReleaseMouseCapture();
 
-            // убираем адорнер, если хочешь полностью его снять
+            // ??????? ???????, ???? ?????? ????????? ??? ?????
             if (_selectionAdorner != null)
             {
-                _selectionAdorner.UpdateRect(Rect.Empty); // чтобы он ничего не рисовал
-                                                          // или, если у тебя есть метод Remove():
+                _selectionAdorner.UpdateRect(Rect.Empty); // ????? ?? ?????? ?? ???????
+                                                          // ???, ???? ? ???? ???? ????? Remove():
                                                           // _selectionAdorner.Remove();
                                                           // _selectionAdorner = null;
             }
@@ -2260,7 +2338,7 @@ namespace ImgViewer.Views
             if (size.Width <= 0 || size.Height <= 0)
                 return;
 
-            // клампим внутрь PreviewViewbox
+            // ??????? ?????? PreviewViewbox
             double left = Math.Max(0, Math.Min(rect.Left, size.Width));
             double top = Math.Max(0, Math.Min(rect.Top, size.Height));
             double right = Math.Max(0, Math.Min(rect.Right, size.Width));
@@ -2273,7 +2351,7 @@ namespace ImgViewer.Views
 
             if (clamped.Width < SelectionMinSize || clamped.Height < SelectionMinSize)
             {
-                // даём сделать совсем маленький, но не отрицательный
+                // ???? ??????? ?????? ?????????, ?? ?? ?????????????
                 clamped = new Rect(clamped.X, clamped.Y,
                                    Math.Max(clamped.Width, SelectionMinSize),
                                    Math.Max(clamped.Height, SelectionMinSize));
@@ -2293,7 +2371,7 @@ namespace ImgViewer.Views
 #endif
         }
 
-        // простой хелпер, чтобы узнать — есть ли уже выбор
+        // ??????? ??????, ????? ?????? � ???? ?? ??? ?????
         private bool HasSelection =>
             !_selectedRect.IsEmpty &&
             _selectedRect.Width > 0 &&
@@ -2306,7 +2384,7 @@ namespace ImgViewer.Views
 
             var r = _selectedRect;
 
-            // углы
+            // ????
             if (Distance(pos, r.TopLeft) <= SelectionHandleHit)
                 return SelectionMode.ResizeTopLeft;
             if (Distance(pos, r.TopRight) <= SelectionHandleHit)
@@ -2316,7 +2394,7 @@ namespace ImgViewer.Views
             if (Distance(pos, r.BottomRight) <= SelectionHandleHit)
                 return SelectionMode.ResizeBottomRight;
 
-            // грани
+            // ?????
             if (Math.Abs(pos.X - r.Left) <= SelectionHandleHit &&
                 pos.Y >= r.Top && pos.Y <= r.Bottom)
                 return SelectionMode.ResizeLeft;
@@ -2333,7 +2411,7 @@ namespace ImgViewer.Views
                 pos.X >= r.Left && pos.X <= r.Right)
                 return SelectionMode.ResizeBottom;
 
-            // внутри — move
+            // ?????? � move
             if (r.Contains(pos))
                 return SelectionMode.Moving;
 
@@ -2352,3 +2430,8 @@ namespace ImgViewer.Views
 
 
 }
+
+
+
+
+

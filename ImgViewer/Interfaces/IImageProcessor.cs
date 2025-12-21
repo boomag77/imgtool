@@ -75,7 +75,8 @@ namespace ImgViewer.Interfaces
         LinesRemove,
         DotsRemove,
         PunchHolesRemove,
-        ChannelsCorrection
+        ChannelsCorrection,
+        PageSplit
     }
 
     //public enum TiffCompression
@@ -90,4 +91,3 @@ namespace ImgViewer.Interfaces
     //}
 
 }
-
