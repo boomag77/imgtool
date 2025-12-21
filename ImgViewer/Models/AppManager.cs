@@ -568,27 +568,19 @@ namespace ImgViewer.Models
 
         public async Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken)
         {
-            bool debug = false;
             if (pipeline == null) return;
 
             UpdateStatus($"Processing folder " + srcFolder);
 
             
-            var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
-            if (sourceFolder == null || sourceFolder.Files == null || sourceFolder.Files.Length == 0) return;
+            //var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
+            //if (sourceFolder == null || sourceFolder.Files == null || sourceFolder.Files.Length == 0) return;
 
 
             _poolCts?.Cancel();
             _poolCts?.Dispose();
             _poolCts = CancellationTokenSource.CreateLinkedTokenSource(batchToken);
 
-            if (debug)
-            {
-                foreach (var imagePath in sourceFolder.Files)
-                {
-                    Debug.WriteLine(imagePath);
-                }
-            }
 
             //_poolCts = new CancellationTokenSource();
 
@@ -596,7 +588,7 @@ namespace ImgViewer.Models
 
             try
             {
-                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, sourceFolder, 0, IsSavePipelineToMd))
+                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, srcFolder, 0, IsSavePipelineToMd))
                 {
                     try
                     {

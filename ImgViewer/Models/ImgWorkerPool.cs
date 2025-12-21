@@ -29,7 +29,7 @@ namespace ImgViewer.Models
         private readonly CancellationTokenSource _cts;
         private readonly CancellationToken _token;
         private CancellationTokenRegistration _tokenRegistration;
-        private readonly SourceImageFolder _sourceFolder;
+        //private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
         private int _workersCount;
 
@@ -42,9 +42,10 @@ namespace ImgViewer.Models
 
         private bool overWriteExistingOutputs = true;
 
+        private string _sourceFolderPath = string.Empty;
 
         private int _processedCount;
-        private readonly int _totalCount;
+        private int _totalCount;
         private (ProcessorCommand Command, Dictionary<string, object> Params)[] _plOperations;
         private readonly string? _plJson;
         private List<string> _opsLog = new List<string>();
@@ -58,16 +59,17 @@ namespace ImgViewer.Models
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
                              int maxWorkersCount,
-                             SourceImageFolder sourceFolder,
+                             string sourceFolderPath,
                              int maxFilesQueue,
                              bool savePipelineToMd)
         {
             _cts = cts;
             _token = _cts.Token;
-            _sourceFolder = sourceFolder;
-
-            string sourceFolderName = Path.GetFileName(_sourceFolder.Path);
-            _outputFolder = Path.Combine(_sourceFolder.ParentPath, sourceFolderName + "_processed");
+            //_sourceFolder = sourceFolder;
+            _sourceFolderPath = sourceFolderPath;
+            string sourceFolderName = Path.GetFileName(_sourceFolderPath);
+            string parentPath = Path.GetDirectoryName(_sourceFolderPath);
+            _outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
             Directory.CreateDirectory(_outputFolder);
             _batchErrorsPath = Path.Combine(_outputFolder, "_batch_errors.txt");
 
@@ -75,7 +77,7 @@ namespace ImgViewer.Models
 
             if (_existingOutputNames.Count > 0)
             {
-                // inform user that there is existing files and ask for overwrite or skip existing files
+                // inform user that there are existing files and ask for overwrite or skip existing files
                 var dispatcher = System.Windows.Application.Current?.Dispatcher;
                 string title = "Existing Processed Files Detected";
                 string message =
@@ -121,17 +123,17 @@ namespace ImgViewer.Models
             _filesQueue = new BlockingCollection<SourceImageFile>(
                 maxFilesQueue == 0 ? _workersCount : maxFilesQueue
             );
-            int saveQueueCapacity = Math.Max(2, _workersCount);
+            int saveQueueCapacity = Math.Max(1, _workersCount/2);
             _saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
             
-            _maxSavingWorkers = 1;
+            _maxSavingWorkers = 2;
             _tokenRegistration = _token.Register(() =>
             {
                 try { _filesQueue.CompleteAdding(); } catch { }
                 //try { _saveQueue.CompleteAdding(); } catch { } gracefull cancel
             });
             _processedCount = 0;
-            _totalCount = sourceFolder.Files.Length;
+            //_totalCount = sourceFolder.Files.Length;
             foreach (var op in opsSnapshot)
             {
                 _opsLog.Add($"- {op.Command}");
@@ -230,18 +232,45 @@ namespace ImgViewer.Models
 
 
                 }
-                foreach (var file in _sourceFolder.Files)
+
+                IEnumerable<string> files;
+                try
+                {
+                    files = Directory.EnumerateFiles(_sourceFolderPath)
+                                 .Where(file =>
+                                            file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+                                            file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
+                }
+                catch (Exception ex)
+                {
+                    RegisterFileError(_sourceFolderPath, "Error enumerating files in source folder.", ex);
+                    throw;
+                }
+                _totalCount = files.Count();
+                foreach (var file in files)
                 {
                     _token.ThrowIfCancellationRequested();
-                    var baseName = Path.GetFileNameWithoutExtension(file.Path);
+
+                    var baseName = Path.GetFileNameWithoutExtension(file);
                     if (!overWriteExistingOutputs && _existingOutputNames.Contains(baseName))
                     {
                         // skip existing output
-                        _processedCount++;
+                        //_processedCount++;
+                        Interlocked.Increment(ref _processedCount);
                         continue;
                     }
-                    _filesQueue.Add(file, _token);
-                    await Task.Yield();
+                    var sourceFile = new SourceImageFile
+                    {
+                        Path = file,
+                        Layout = GetLayoutFromFileName(file)
+                    };
+                    _filesQueue.Add(sourceFile, _token);
+
+
+                    //await Task.Yield();
                 }
             }
             catch (OperationCanceledException)
@@ -259,6 +288,30 @@ namespace ImgViewer.Models
                 try { _filesQueue.CompleteAdding(); } catch { }
             }
 
+        }
+        private static SourceFileLayout? GetLayoutFromFileName(string path)
+        {
+            var name = Path.GetFileNameWithoutExtension(path); // e.g. "page001"
+
+            if (string.IsNullOrEmpty(name))
+                return SourceFileLayout.Right;
+
+            int i = name.Length - 1;
+
+            // идём с конца, пока цифры
+            while (i >= 0 && char.IsDigit(name[i]))
+                i--;
+
+            int start = i + 1; // первая цифра в хвостовом числе
+            string digits = (start < name.Length)
+                ? name.Substring(start)    // всё от первой цифры до конца
+                : string.Empty;
+
+            if (digits.Length > 0 && int.TryParse(digits, out int num))
+                return (num % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
+
+            // нет числового суффикса → Right по умолчанию
+            return null;
         }
 
         private void StartSavingWorkerIfNeeded()
@@ -538,11 +591,11 @@ namespace ImgViewer.Models
                 for (int i = 0; i < _workersCount; i++)
                 {
                     if (_cts.IsCancellationRequested) throw new OperationCanceledException();
-                    processingTasks.Add(Task.Run(() => ImageProcessingWorker(), _token));
+                    processingTasks.Add(Task.Run(() => ImageProcessingWorker(), CancellationToken.None));
                 }
 
                 // in parallel enqueing que
-                var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
+                var enqueueTask = Task.Run(() => EnqueueFiles(), CancellationToken.None);
                 processingTasks.Add(enqueueTask);
                 StartSavingWorkerIfNeeded();
                 await Task.WhenAll(processingTasks);
@@ -555,7 +608,7 @@ namespace ImgViewer.Models
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
                 var durationSeconds = duration.Seconds;
-                var logMsg = $"Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
+                var logMsg = $"Processed {_processedCount} of {_totalCount} files from ** {_sourceFolderPath} **.";
                 var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
 
                 var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
@@ -582,7 +635,7 @@ namespace ImgViewer.Models
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
                 var durationSeconds = duration.Seconds;
-                var logMsg = $"[ERROR OCCURED: {ex.Message}]. Processed {_processedCount} of {_totalCount} files from ** {_sourceFolder.Path} **.";
+                var logMsg = $"[ERROR OCCURED: {ex.Message}]. Processed {_processedCount} of {_totalCount} files from ** {_sourceFolderPath} **.";
                 var timeMsg = $"Completed in {durationHours} hours, {durationMinutes} minutes, {durationSeconds} seconds.";
 
                 var plOps = _opsLog.Count > 0 ? string.Join(Environment.NewLine, _opsLog) : "No operations were performed.";
