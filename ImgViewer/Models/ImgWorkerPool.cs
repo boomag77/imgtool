@@ -123,7 +123,7 @@ namespace ImgViewer.Models
             );
             int saveQueueCapacity = Math.Max(2, _workersCount);
             _saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
-            //_maxSavingWorkers = Math.Max(1, cpuCount/2);
+            
             _maxSavingWorkers = 1;
             _tokenRegistration = _token.Register(() =>
             {
@@ -476,7 +476,7 @@ namespace ImgViewer.Models
                             TiffInfo = tiffInfo,
                             //DisposeStream = true
                         };
-                        _saveQueue.Add(saveTask);
+                        _saveQueue.Add(saveTask, _token);
                         if (_saveQueue.Count >= 2)
                         {
                             StartSavingWorkerIfNeeded();
