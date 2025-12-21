@@ -826,7 +826,8 @@
                             Click="AddPipelineOperation_Click">      
                             +
                         <Button.ContextMenu>
-                            <ContextMenu x:Name="AddOperationContextMenu">
+                            <ContextMenu x:Name="AddOperationContextMenu"
+                                         Opened="AddOperationContextMenu_Opened">
                                 <MenuItem Header="Deskew"
                                       Tag="{x:Static models:PipelineOperationType.Deskew}"
                                       Click="AddOperationMenuItem_Click" />
