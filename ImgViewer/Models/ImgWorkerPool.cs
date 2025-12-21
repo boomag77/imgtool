@@ -1,4 +1,5 @@
 ﻿using ImgViewer.Interfaces;
+using OpenCvSharp;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
@@ -136,7 +137,7 @@ namespace ImgViewer.Models
             int saveQueueCapacity = Math.Max(1, _workersCount/2);
             _saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
             
-            _maxSavingWorkers = 2;
+            _maxSavingWorkers = 3;
             _tokenRegistration = _token.Register(() =>
             {
                 try { _filesQueue.CompleteAdding(); } catch { }
@@ -212,6 +213,88 @@ namespace ImgViewer.Models
             }
 
             return set;
+        }
+
+        private bool TrySaveSplitOutputs(OpenCvImageProcessor imgProc, SourceImageFile file)
+        {
+            var splitResults = imgProc.GetSplitResults();
+            if (splitResults == null || splitResults.Length == 0)
+                return false;
+
+            try
+            {
+                SaveSplitResults(splitResults, file);
+                return true;
+            }
+            finally
+            {
+                foreach (var mat in splitResults)
+                {
+                    mat?.Dispose();
+                }
+                imgProc.ClearSplitResults();
+            }
+        }
+
+        private void SaveSplitResults(Mat[] splitResults, SourceImageFile file)
+        {
+            if (splitResults == null || splitResults.Length == 0)
+                return;
+
+            var originalExtension = Path.GetExtension(file.Path);
+            if (string.IsNullOrWhiteSpace(originalExtension))
+                originalExtension = ".tif";
+
+            var encodeExt = NormalizeEncodeExtension(originalExtension);
+            var baseName = Path.GetFileNameWithoutExtension(file.Path);
+
+            for (int i = 0; i < splitResults.Length; i++)
+            {
+                var mat = splitResults[i];
+                if (mat == null || mat.IsDisposed)
+                    continue;
+                if (mat.Empty())
+                    throw new InvalidOperationException("Split image is empty.");
+
+                var finalPath = Path.Combine(_outputFolder, $"{baseName}_{i + 1}{originalExtension}");
+                SaveMatToFile(mat, encodeExt, finalPath);
+            }
+        }
+
+        private static void SaveMatToFile(Mat mat, string encodeExt, string finalPath)
+        {
+            if (mat == null)
+                throw new ArgumentNullException(nameof(mat));
+            if (mat.IsDisposed)
+                throw new ObjectDisposedException(nameof(mat));
+            if (mat.Empty())
+                throw new InvalidOperationException("Split image is empty.");
+
+            Cv2.ImEncode(encodeExt, mat, out var buffer);
+            var tempPath = finalPath + ".tmp";
+            File.WriteAllBytes(tempPath, buffer);
+            if (File.Exists(finalPath))
+                File.Delete(finalPath);
+            File.Move(tempPath, finalPath);
+        }
+
+        private static string NormalizeEncodeExtension(string originalExtension)
+        {
+            if (string.IsNullOrWhiteSpace(originalExtension))
+                return ".tif";
+
+            var lower = originalExtension.ToLowerInvariant();
+            return lower switch
+            {
+                ".jpg" => ".jpg",
+                ".jpeg" => ".jpg",
+                ".png" => ".png",
+                ".bmp" => ".bmp",
+                ".tif" => ".tif",
+                ".tiff" => ".tif",
+                ".webp" => ".webp",
+                _ => ".tif"
+            };
         }
 
 
@@ -510,7 +593,22 @@ namespace ImgViewer.Models
 
                     token.ThrowIfCancellationRequested();
 
+                    bool handledSplit = false;
+                    try
+                    {
+                        handledSplit = TrySaveSplitOutputs(imgProc, file);
+                    }
+                    catch (Exception splitEx)
+                    {
+                        RegisterFileError(file.Path, "Error saving split images.", splitEx);
+                        continue;
+                    }
 
+                    if (handledSplit)
+                    {
+                        Interlocked.Increment(ref _processedCount);
+                        continue;
+                    }
 
                     var fileName = Path.ChangeExtension(Path.GetFileName(file.Path), ".tif");
                     var outputFilePath = Path.Combine(_outputFolder, fileName);

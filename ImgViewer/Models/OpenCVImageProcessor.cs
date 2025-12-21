@@ -30,8 +30,10 @@ namespace ImgViewer.Models
 
         private readonly object _imageLock = new();
         private readonly object _commandLock = new();
+        private readonly object _splitLock = new();
 
         private readonly DocBoundaryModel? _docBoundaryModel;
+        private Mat[]? _splitWorkingImages;
 
         private Mat WorkingImage
         {
@@ -63,6 +65,7 @@ namespace ImgViewer.Models
             {
                 try
                 {
+                    ClearSplitResults();
                     using var mat = BitmapSourceToMat((BitmapSource)value);
                     if (mat == null || mat.Empty()) return;
                     WorkingImage = mat.Clone();
@@ -265,6 +268,7 @@ namespace ImgViewer.Models
                 _currentImage?.Dispose();
                 _currentImage = null;
             }
+            ClearSplitResults();
 
             //_blurred?.Dispose();
             //_blurred = null;
@@ -1611,9 +1615,13 @@ namespace ImgViewer.Models
 
                         case ProcessorCommand.PageSplit:
                             {
-                                if (!batchProcessing)
+                                var splitParameters = parameters ?? new Dictionary<string, object>();
+                                if (batchProcessing)
                                 {
-                                    var splitParameters = parameters ?? new Dictionary<string, object>();
+                                    ExecutePageSplitBatch(src, splitParameters);
+                                }
+                                else
+                                {
                                     ExecutePageSplitPreview(src, splitParameters);
                                 }
                                 return src.Clone();
@@ -1949,6 +1957,9 @@ namespace ImgViewer.Models
 
         }
 
+
+        
+
         private void ExecutePageSplitPreview(Mat src, Dictionary<string, object> parameters)
         {
             if (_appManager == null)
@@ -1991,6 +2002,47 @@ namespace ImgViewer.Models
             }
         }
 
+        private void ExecutePageSplitBatch(Mat src, Dictionary<string, object> parameters)
+        {
+            ClearSplitResults();
+            try
+            {
+                var splitter = new PageSplitter(BuildPageSplitterSettings(parameters));
+                PageSplitter.SplitResult? result = null;
+                try
+                {
+                    result = splitter.Split(src, false, _token);
+                    if (result.Success && result.Left != null && result.Right != null)
+                    {
+                        var left = result.Left;
+                        var right = result.Right;
+                        result.Left = null;
+                        result.Right = null;
+                        SetSplitResults(left, right);
+                    }
+                    else
+                    {
+                        var reason = result?.Reason;
+                        ErrorOccured?.Invoke($"Page split failed: {reason ?? "Unknown reason"}");
+                    }
+                }
+                finally
+                {
+                    result?.Dispose();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                ClearSplitResults();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ClearSplitResults();
+                ErrorOccured?.Invoke($"Page split failed: {ex.Message}");
+            }
+        }
+
         private PageSplitter.Settings BuildPageSplitterSettings(Dictionary<string, object> parameters)
         {
             var settings = new PageSplitter.Settings
@@ -2013,6 +2065,60 @@ namespace ImgViewer.Models
             }
 
             return settings;
+        }
+
+        public Mat[]? GetSplitResults()
+        {
+            lock (_splitLock)
+            {
+                if (_splitWorkingImages == null)
+                    return null;
+
+                var clones = new List<Mat>(_splitWorkingImages.Length);
+                foreach (var mat in _splitWorkingImages)
+                {
+                    if (mat == null || mat.IsDisposed)
+                        continue;
+                    if (mat.Empty())
+                        continue;
+                    clones.Add(mat.Clone());
+                }
+
+                return clones.Count > 0 ? clones.ToArray() : null;
+            }
+        }
+
+        public void ClearSplitResults()
+        {
+            lock (_splitLock)
+            {
+                ClearSplitResultsUnsafe();
+            }
+        }
+
+        private void SetSplitResults(Mat left, Mat right)
+        {
+            if (left == null || right == null)
+                return;
+
+            lock (_splitLock)
+            {
+                ClearSplitResultsUnsafe();
+                _splitWorkingImages = new[] { left, right };
+            }
+        }
+
+        private void ClearSplitResultsUnsafe()
+        {
+            if (_splitWorkingImages == null)
+                return;
+
+            foreach (var mat in _splitWorkingImages)
+            {
+                mat?.Dispose();
+            }
+
+            _splitWorkingImages = null;
         }
 
 
