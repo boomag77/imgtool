@@ -119,9 +119,10 @@ namespace ImgViewer.Models
             _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount - 1) : maxWorkersCount;
 
             _filesQueue = new BlockingCollection<SourceImageFile>(
-                maxFilesQueue == 0 ? _workersCount * 2 : maxFilesQueue
+                maxFilesQueue == 0 ? _workersCount : maxFilesQueue
             );
-            _saveQueue = new BlockingCollection<SaveTaskInfo>(_workersCount);
+            int saveQueueCapacity = Math.Max(2, _workersCount);
+            _saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
             //_maxSavingWorkers = Math.Max(1, cpuCount/2);
             _maxSavingWorkers = 1;
             _tokenRegistration = _token.Register(() =>
