@@ -69,8 +69,18 @@ namespace ImgViewer.Models
             _sourceFolderPath = sourceFolderPath;
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
             string parentPath = Path.GetDirectoryName(_sourceFolderPath);
-            _outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
-            Directory.CreateDirectory(_outputFolder);
+
+            
+
+            if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.PageSplit))
+            {
+                _outputFolder = Path.Combine(parentPath, sourceFolderName + "_splitted");
+            } else
+            {
+                _outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
+            }
+
+                Directory.CreateDirectory(_outputFolder);
             _batchErrorsPath = Path.Combine(_outputFolder, "_batch_errors.txt");
 
             _existingOutputNames = LoadExistingOutputNamesAndCleanupTmp(_outputFolder);
