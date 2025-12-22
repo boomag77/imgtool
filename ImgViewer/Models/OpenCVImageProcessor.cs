@@ -87,6 +87,7 @@ namespace ImgViewer.Models
 
         public OpenCvImageProcessor(IAppManager appManager, CancellationToken token, int cvNumThreads = 1, bool needDocBoundaryModel = true)
         {
+            _currentImage = new Mat();
             _appManager = appManager;
             _token = token;
             //_onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -163,16 +164,15 @@ namespace ImgViewer.Models
 
             int byteCount = (int)total;
             byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
-            GCHandle? handle = null;
+            //GCHandle? handle = null;
 
             try
             {
                 _token.ThrowIfCancellationRequested();
                 src.CopyPixels(buffer, stride, 0);
 
-                // pin buffer short-lived, создать Mat view и совершить Clone/CvtColor
-                handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-                IntPtr ptr = handle.Value.AddrOfPinnedObject();
+                //handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+                //IntPtr ptr = handle.Value.AddrOfPinnedObject();
 
                 Mat result = CreateMatFromBuffer(buffer, w, h, stride, copyFormat);
 
@@ -190,7 +190,7 @@ namespace ImgViewer.Models
             }
             finally
             {
-                if (handle.HasValue && handle.Value.IsAllocated) handle.Value.Free();
+                //if (handle.HasValue && handle.Value.IsAllocated) handle.Value.Free();
                 ArrayPool<byte>.Shared.Return(buffer);
             }
         }
@@ -325,7 +325,7 @@ namespace ImgViewer.Models
                         paramsList.Add((int)TiffCompression.None);
                         break;
                     case TiffCompression.CCITTG4:
-                        if (WorkingImage.Channels() != 1)
+                        if (img.Channels() != 1)
                         {
                             // для G4 нужно 1-битное изображение
                             //using var gray = new Mat();
@@ -561,7 +561,6 @@ namespace ImgViewer.Models
             }
             finally
             {
-                img.Dispose();
                 tmp?.Dispose();
             }
         }
@@ -1036,7 +1035,7 @@ namespace ImgViewer.Models
                                             int color = Math.Max(0, Math.Min(255, i));
                                             //bgColor = new Scalar(0, 0, 255);
                                             //bgColor = new Scalar(color, color, color);
-                                            bgColor = SampleCentralGrayScalar(WorkingImage, 0, 0.1);
+                                            bgColor = SampleCentralGrayScalar(src, 0, 0.1);
                                             Debug.WriteLine("bgColor:", bgColor.ToString());
                                             break;
                                         case "darkThreshold":
@@ -1771,7 +1770,7 @@ namespace ImgViewer.Models
                                 Action<string> log = null)
         {
             using var src = WorkingImage; // cloned inside WorkingImage getter
-            var result = ProcessSingle(WorkingImage, command, parameters ?? new Dictionary<string, object>(), _token, batchProcessing);
+            var result = ProcessSingle(src, command, parameters ?? new Dictionary<string, object>(), _token, batchProcessing);
             if (result == null)
             {
                 var msg = $"[{currentFilePath ?? "<unknown>"}] Command {command} returned null.";
