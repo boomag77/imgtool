@@ -44,18 +44,25 @@ namespace ImgViewer.Models
             }
             set
             {
-                if (value == null) return;
+                if (value == null || value.Empty()) return;
                 Mat old;
-                //Mat newMat = value.Clone();
+                Mat previewSnap = null;
                 lock (_imageLock)
                 {
                     old = _currentImage;
                     _currentImage = value;
-                    
+                    previewSnap = new Mat(value, new Rect(0, 0, value.Cols, value.Rows));
                 }
                 old?.Dispose();
-                if (_appManager == null) return;
-                _appManager.SetBmpImageOnPreview(MatToBitmapSource(value));
+                if (_appManager == null) { previewSnap?.Dispose(); return; }
+                try
+                {
+                    _appManager.SetBmpImageOnPreview(MatToBitmapSource(previewSnap));
+                }
+                finally
+                {
+                    previewSnap?.Dispose();
+                }
 
             }
         }
@@ -66,9 +73,13 @@ namespace ImgViewer.Models
                 try
                 {
                     ClearSplitResults();
-                    using var mat = BitmapSourceToMat((BitmapSource)value);
-                    if (mat == null || mat.Empty()) return;
-                    WorkingImage = mat.Clone();
+                    var mat = BitmapSourceToMat((BitmapSource)value);
+                    if (mat == null || mat.Empty())
+                    {
+                        mat?.Dispose();
+                        return;
+                    }
+                    WorkingImage = mat;
                 }
                 
                 catch (OperationCanceledException)
@@ -763,42 +774,6 @@ namespace ImgViewer.Models
             }
         }
 
-        private Mat ApplyProcessingBlur(Mat source, int kernelSize = 3, string blurMode = "gaussian")
-        {
-            if (source == null) return null!;
-            // ensure safe copy of source
-            var src = source.Clone();
-
-            // sanitize kernel
-            int k = Math.Max(0, kernelSize);
-            if (k < 3)
-                return src; // no blur — return clone so caller can dispose safely
-
-            // make odd
-            if ((k & 1) == 0) k++;
-
-            Mat outMat = new Mat();
-            switch (blurMode?.ToLowerInvariant())
-            {
-                case "median":
-                    Cv2.MedianBlur(src, outMat, k); // k must be odd >= 3
-                    break;
-                case "bilateral":
-                    // bilateral uses diameter, sigmaColor, sigmaSpace; pick reasonable defaults
-                    Cv2.BilateralFilter(src, outMat, k, k * 2, k / 2);
-                    break;
-                case "box":
-                    Cv2.Blur(src, outMat, new OpenCvSharp.Size(k, k));
-                    break;
-                case "gaussian":
-                default:
-                    Cv2.GaussianBlur(src, outMat, new OpenCvSharp.Size(k, k), 0);
-                    break;
-            }
-
-            src.Dispose();
-            return outMat;
-        }
 
         private void ApplyBinarize(BinarizeMethod method, BinarizeParameters parameters)
         {
