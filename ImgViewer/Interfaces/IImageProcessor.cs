@@ -15,7 +15,6 @@ namespace ImgViewer.Interfaces
         
 
 
-        void Load(string path);
 
         public void UpdateCancellationToken(CancellationToken token);
 

@@ -56,6 +56,8 @@ namespace ImgViewer.Models
         private string _batchErrorsPath = string.Empty;
         private readonly object _errorFileLock = new();
 
+        private readonly bool _boundaryModelRequested = false;
+
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
                              int maxWorkersCount,
@@ -70,12 +72,16 @@ namespace ImgViewer.Models
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
             string parentPath = Path.GetDirectoryName(_sourceFolderPath);
 
-            
+            if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.SmartCrop))
+            {
+                _boundaryModelRequested = true;
+            }
 
             if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.PageSplit))
             {
                 _outputFolder = Path.Combine(parentPath, sourceFolderName + "_splitted");
-            } else
+            }
+            else
             {
                 _outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
             }
@@ -494,7 +500,7 @@ namespace ImgViewer.Models
         {
             var token = _token;
 
-            using var imgProc = new OpenCvImageProcessor(null, token);
+            using var imgProc = new OpenCvImageProcessor(null, token, 1, _boundaryModelRequested);
             using var fileProc = new FileProcessor(token);
             try
             {

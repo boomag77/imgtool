@@ -52,7 +52,7 @@ namespace ImgViewer.Models
             _fileProcessor.ErrorOccured += OnFileProcessorError;
 
             _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
-            _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token);
+            _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token, Environment.ProcessorCount-1, true);
 
             _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
             

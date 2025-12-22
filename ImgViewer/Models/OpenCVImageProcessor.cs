@@ -118,7 +118,7 @@ namespace ImgViewer.Models
 
                 //var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
                 //var onnxToken = linkedCts.Token;
-                _docBoundaryModel = new DocBoundaryModel(modelPath);
+                _docBoundaryModel = needDocBoundaryModel ? new DocBoundaryModel(modelPath) : null;
             }
             catch (Exception ex)
             {
@@ -128,7 +128,6 @@ namespace ImgViewer.Models
                 _docBoundaryModel = null;
             }
 
-            //_docBoundaryModel = new DocBoundaryModel(_onnxCts.Token, "Models/ML/model.onnx");
         }
 
         private byte[] RentBinaryBuffer(int size)
@@ -282,33 +281,13 @@ namespace ImgViewer.Models
             }
             ClearSplitResults();
 
-            //_blurred?.Dispose();
-            //_blurred = null;
-            //throw new NotImplementedException();
 
         }
 
         public event Action<Stream>? ImageUpdated;
         public event Action<string>? ErrorOccured;
 
-        public void Load(string path)
-        {
-            //throw new NotImplementedException();
-            try
-            {
-                //_currentImage = Cv2.ImRead(path, ImreadModes.Color);
-
-                //BitmapSource bmpSource = MatToBitmapSource(_currentImage);
-                //ImageUpdated?.Invoke(BitmapSourceToStream(bmpSource));
-            }
-            catch (Exception ex)
-            {
-                ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
-            }
-            //_pageColor = ScalarFromNormalized(AnalyzePageAndBorderColorsSimple(_currentImage).pageColorNorm);
-            //_borderColor = ScalarFromNormalized(AnalyzePageAndBorderColorsSimple(_currentImage).borderColorNorm);
-
-        }
+        
 
 
         public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
