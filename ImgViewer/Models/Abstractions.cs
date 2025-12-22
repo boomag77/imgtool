@@ -75,10 +75,11 @@ namespace ImgViewer.Models
         public int MorphKernelBinarize;
         public int MorphIterationsBinarize;
         public int MajorityOffset;
+        public int SauvolaClaheGridSize;
         public bool UseGaussian;
         public bool UseMorphology;
         public bool SauvolaUseClahe;
-        public int SauvolaClaheGridSize;
+        
 
 
 

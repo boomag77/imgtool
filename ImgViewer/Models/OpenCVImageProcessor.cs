@@ -85,18 +85,19 @@ namespace ImgViewer.Models
 
 
 
-        public OpenCvImageProcessor(IAppManager appManager, CancellationToken token)
+        public OpenCvImageProcessor(IAppManager appManager, CancellationToken token, int cvNumThreads = 1, bool needDocBoundaryModel = true)
         {
             _appManager = appManager;
             _token = token;
             //_onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            Cv2.SetNumThreads(1);
+            Cv2.SetNumThreads(cvNumThreads);
+
             try
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 var modelPath = Path.Combine(baseDir, "Models", "ML", "model.onnx");
 
-                if (!File.Exists(modelPath))
+                if (!File.Exists(modelPath) && needDocBoundaryModel)
                 {
                     Debug.WriteLine($"[DocBoundaryModel] Model file not found: {modelPath}");
                     _docBoundaryModel = null;
@@ -110,7 +111,7 @@ namespace ImgViewer.Models
             catch (Exception ex)
             {
                 var msg = $"[DocBoundaryModel] Failed to initialize: {ex}";
-                ErrorOccured?. Invoke(msg);
+                ErrorOccured?.Invoke(msg);
                 Debug.WriteLine(msg);
                 _docBoundaryModel = null;
             }
@@ -197,7 +198,7 @@ namespace ImgViewer.Models
         private Mat CreateMatFromBuffer(byte[] buffer, int width, int height, int srcStride, PixelFormat copyFormat)
         {
             _token.ThrowIfCancellationRequested();
-            var bufferCopy = buffer.Clone();
+            //var bufferCopy = buffer.Clone();
             try
             {
                 if (copyFormat == PixelFormats.Bgr24)
