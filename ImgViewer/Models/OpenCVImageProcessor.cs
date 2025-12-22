@@ -105,8 +105,8 @@ namespace ImgViewer.Models
                     return;
                 }
 
-                var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-                var onnxToken = linkedCts.Token;
+                //var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                //var onnxToken = linkedCts.Token;
                 _docBoundaryModel = new DocBoundaryModel(modelPath);
             }
             catch (Exception ex)
