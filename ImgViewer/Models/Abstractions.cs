@@ -16,7 +16,7 @@ namespace ImgViewer.Models
         SplitPage
     }
 
-    public class TiffInfo
+    public sealed class TiffInfo
     {
         public byte[] Pixels { get; set; }
         public int Width { get; set; }

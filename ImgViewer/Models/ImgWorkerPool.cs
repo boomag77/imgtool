@@ -14,11 +14,10 @@ namespace ImgViewer.Models
 
         private sealed class SaveTaskInfo
         {
-            public Stream? ImageStream { get; set; }
-            public string OutputFilePath { get; set; } = string.Empty;
-            public bool DisposeStream { get; set; } = false;
-
             public TiffInfo? TiffInfo { get; set; }
+            public string OutputFilePath { get; set; } = string.Empty;
+
+            
         }
 
         private bool _disposed;
