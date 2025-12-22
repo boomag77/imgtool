@@ -1861,13 +1861,44 @@ namespace ImgViewer.Models
         private Mat MajorityBinarize(Mat src, BinarizeParameters p)
         {
             int step = 10; // 5 or 10
-            int range = p.MajorityOffset; // max absolute offset
-            var deltas = Enumerable.Range(-10, (range * 2) / step + 1)
-                                   .Select(i => i * step)
-                                   .ToArray();
+            int range = Math.Max(0, p.MajorityOffset); // max absolute offset
+            int[] deltas = BuildMajorityDeltas(range, step);
+
             return MajorityVotingBinarize(src, p.Threshold, deltas);
         }
 
+        private static int[] BuildMajorityDeltas(int range, int step)
+        {
+            range = Math.Max(0, range);
+            step = Math.Max(1, step);
+
+            if (range == 0)
+                return new[] { 0 };
+
+            // Max multiple of step that fits into range
+            int coreMax = (range / step) * step;
+
+            // If range not divisible by step -> we add edges -range and +range
+            bool addEdges = coreMax != range;
+
+            // Core always includes 0 (because it is symmetric)
+            int coreCount = (coreMax / step) * 2 + 1; // [-coreMax, ..., 0, ..., +coreMax]
+            int total = addEdges ? coreCount + 2 : coreCount;
+
+            var deltas = new int[total];
+            int idx = 0;
+
+            if (addEdges)
+                deltas[idx++] = -range;
+
+            for (int v = -coreMax; v <= coreMax; v += step)
+                deltas[idx++] = v;
+
+            if (addEdges)
+                deltas[idx++] = +range;
+
+            return deltas;
+        }
 
         private static Mat ConvertWithChannelScalesToGray_CustomWeights(Mat src, double rPercent, double gPercent, double bPercent, out Mat? alphaMat)
         {
