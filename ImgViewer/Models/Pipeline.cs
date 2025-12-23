@@ -317,8 +317,8 @@ namespace ImgViewer.Models
                 case PipelineOperationType.SmartCrop:
                     {
                         operation = new PipelineOperation(
-                        PipelineOperationType.SmartCrop,
-                        ProcessorCommand.SmartCrop,
+                            PipelineOperationType.SmartCrop,
+                            ProcessorCommand.SmartCrop,
                         displayName,
                         buttonText,
                         new[]
@@ -339,6 +339,37 @@ namespace ImgViewer.Models
                             new PipeLineParameter("East debug", "eastDebug", true)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.SmartCrop, operation.CreateParameterDictionary()));
+                    }
+                    break;
+                case PipelineOperationType.Enhance:
+                    {
+                        operation = new PipelineOperation(
+                            PipelineOperationType.Enhance,
+                            ProcessorCommand.Enhance,
+                            displayName,
+                            buttonText,
+                            new[]
+                            {
+                                new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma"}, 0),
+                                new PipeLineParameter("CLAHE Clip Limit", "claheClipLimit", 4.0, 0.5, 12.0, 0.1),
+                                new PipeLineParameter("CLAHE Grid Size", "claheGridSize", 8, 2, 64, 1),
+                                new PipeLineParameter("Retinex Output Mode", "retinexOutputMode", new [] { "LogHighpass", "ReconstructExp" }, 0),
+                                new PipeLineParameter("Retinex Use Lab L Channel", "retinexUseLabL", true),
+                                new PipeLineParameter("Retinex Sigma", "retinexSigma", 50, 5, 200, 1),
+                                new PipeLineParameter("Retinex Gamma High", "retinexGammaHigh", 1.8, 0.1, 4.0, 0.1),
+                                new PipeLineParameter("Retinex Gamma Low", "retinexGammaLow", 0.6, 0.01, 2.0, 0.05),
+                                new PipeLineParameter("Retinex Epsilon", "retinexEps", 0.000001, 0.000001, 0.01, 0.000001),
+                                new PipeLineParameter("Retinex Robust Normalize", "retinexRobustNormalize", true),
+                                new PipeLineParameter("Retinex Low Percent", "retinexPercentLow", 0.5, 0.0, 5.0, 0.1),
+                                new PipeLineParameter("Retinex High Percent", "retinexPercentHigh", 99.5, 95.0, 100.0, 0.1),
+                                new PipeLineParameter("Retinex Hist Bins", "retinexHistBins", 2048, 32, 4096, 1),
+                                new PipeLineParameter("Retinex Exp Clamp", "retinexExpClamp", 4.0, 1.0, 8.0, 0.1),
+                                new PipeLineParameter("Levels Black %", "levelsBlackPercent", 1.0, 0.0, 20.0, 0.1),
+                                new PipeLineParameter("Levels White %", "levelsWhitePercent", 95.0, 50.0, 100.0, 0.1),
+                                new PipeLineParameter("Levels Gamma", "levelsGamma", 0.85, 0.1, 3.0, 0.05),
+                                new PipeLineParameter("Levels Target White", "levelsTargetWhite", 255, 128, 255, 1)
+                            },
+                            op => ExecuteManagerCommand(ProcessorCommand.Enhance, op.CreateParameterDictionary()));
                     }
                     break;
                 case PipelineOperationType.SplitPage:

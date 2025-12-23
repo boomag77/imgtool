@@ -13,7 +13,8 @@ namespace ImgViewer.Models
         Despeckle,
         LinesRemove,
         SmartCrop,
-        SplitPage
+        SplitPage,
+        Enhance
     }
 
     public sealed class TiffInfo
@@ -261,4 +262,3 @@ namespace ImgViewer.Models
 
 
 }
-

@@ -51,31 +51,8 @@ namespace ImgViewer.Models
 
 
 
-        public static Mat Binarize(Mat src, BinarizeMethod binMethod, BinarizeParameters binParams, PreBinarizationParameters preBinParams = default)
+        public static Mat Binarize(Mat src, BinarizeMethod binMethod, BinarizeParameters binParams)
         {
-            
-            if (preBinParams.Method != PreBinarizationMethod.None)
-            {
-                switch (preBinParams.Method)
-                {
-                    case PreBinarizationMethod.HomomorphicRetinex:
-                        {
-                            using var preBinMat = PreBinarization.HomomorphicRetinex(
-                                                                        src,
-                                                                        preBinParams.UseLabLChannel,
-                                                                        preBinParams.HomomorphicSigma,
-                                                                        preBinParams.HomomorphicGammaHigh,
-                                                                        preBinParams.HomomorphicGammaLow,
-                                                                        preBinParams.HomomorphicEps,
-                                                                        preBinParams.HomomorphicApplyClahe,
-                                                                        preBinParams.HomomorphicClaheClipLimit,
-                                                                        preBinParams.HomomorphicClaheTileSize);
-                            return Binarize(preBinMat, binMethod, binParams);
-                        }
-                    default:
-                        throw new NotImplementedException($"Pre-binarization method {preBinParams.Method} is not implemented.");
-                }
-            }
             switch (binMethod)
             {
                 case BinarizeMethod.Sauvola:
@@ -88,6 +65,7 @@ namespace ImgViewer.Models
                     throw new NotImplementedException($"Binarization method {binMethod} is not implemented.");
             }
         }
+
 
         private static Mat BinarizeAdaptive(Mat src, BinarizeParameters p, bool invert = false)
         {
@@ -270,118 +248,6 @@ namespace ImgViewer.Models
             if (gray != src && gray != pre) gray.Dispose();
 
             return bin;
-        }
-
-        private static class PreBinarization
-        {
-            /// <summary>
-            /// Homomorphic filtering / Retinex-like normalization for document images.
-            /// Returns 8-bit single-channel Mat suitable for Sauvola/Adaptive/Otsu.
-            /// </summary>
-            public static Mat HomomorphicRetinex(
-                Mat src,
-                bool useLabL = true,            // true = extract L from Lab (best for paper), false = Gray
-                double sigma = 50.0,            // blur sigma in log-domain; scale-dependent
-                double gammaHigh = 1.6,         // boost details (ink strokes)
-                double gammaLow = 0.7,          // keep some low-freq to avoid over-flattening
-                double eps = 1e-6,              // avoid log(0)
-                bool applyClahe = false,        // optional: mild local contrast on result
-                double claheClipLimit = 2.0,
-                Size? claheTile = null)
-            {
-                if (src == null) throw new ArgumentNullException(nameof(src));
-                if (src.Empty()) return new Mat();
-
-                // 1) Get grayscale base: Lab.L or Gray
-                using var gray8u = ExtractGray8U(src, useLabL);
-
-                // 2) float [0..1]
-                using var f = new Mat();
-                gray8u.ConvertTo(f, MatType.CV_32F, 1.0 / 255.0);
-
-                // 3) log(I + eps)
-                Cv2.Max(f, eps, f); // clamp to eps
-                using var logI = new Mat();
-                Cv2.Log(f, logI);
-
-                // 4) low = blur(logI)
-                using var low = new Mat();
-                Cv2.GaussianBlur(
-                    logI, low,
-                    ksize: new Size(0, 0),
-                    sigmaX: sigma, sigmaY: sigma,
-                    borderType: BorderTypes.Reflect101);
-
-                // 5) high = logI - low
-                using var high = new Mat();
-                Cv2.Subtract(logI, low, high);
-
-                // 6) outLog = gammaHigh*high + gammaLow*low
-                using var outLog = new Mat();
-                Cv2.AddWeighted(high, gammaHigh, low, gammaLow, 0.0, outLog);
-
-                // 7) exp(outLog)
-                using var expI = new Mat();
-                Cv2.Exp(outLog, expI);
-
-                // 8) normalize -> 8U
-                var out8u = new Mat();
-                Cv2.Normalize(expI, out8u, 0, 255, NormTypes.MinMax);
-                out8u.ConvertTo(out8u, MatType.CV_8U);
-
-                // Optional: CLAHE (usually only if you still have weak strokes)
-                if (applyClahe)
-                {
-                    var tile = claheTile ?? new Size(8, 8);
-                    using var clahe = Cv2.CreateCLAHE(claheClipLimit, tile);
-                    using var tmp = new Mat();
-                    clahe.Apply(out8u, tmp);
-                    out8u.Dispose();
-                    return tmp.Clone();
-                }
-
-                return out8u;
-            }
-
-            private static Mat ExtractGray8U(Mat src, bool useLabL)
-            {
-                // Returns single-channel 8U Mat. Caller owns returned Mat.
-                if (src.Channels() == 1)
-                {
-                    if (src.Type() == MatType.CV_8U) return src.Clone();
-
-                    var g = new Mat();
-                    src.ConvertTo(g, MatType.CV_8U); // assume already normalized reasonably
-                    return g;
-                }
-
-                // If BGRA -> BGR
-                using var bgr = (src.Channels() == 4)
-                    ? src.CvtColor(ColorConversionCodes.BGRA2BGR)
-                    : src;
-
-                if (!useLabL)
-                {
-                    var gray = new Mat();
-                    Cv2.CvtColor(bgr, gray, ColorConversionCodes.BGR2GRAY);
-                    return gray;
-                }
-
-                // Lab L-channel tends to be more stable for paper shading
-                using var lab = new Mat();
-                Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
-
-                var ch = lab.Split();
-                try
-                {
-                    // L is ch[0]
-                    return ch[0].Clone();
-                }
-                finally
-                {
-                    foreach (var m in ch) m.Dispose();
-                }
-            }
         }
 
         private static class Helper

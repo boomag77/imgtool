@@ -165,6 +165,7 @@ namespace ImgViewer.Models
             PipelineOperationType.LinesRemove => "lines",
             PipelineOperationType.SmartCrop => "smartcrop",
             PipelineOperationType.SplitPage => "pagesplit",
+            PipelineOperationType.Enhance => "enhance",
             _ => null
         };
 
@@ -335,6 +336,27 @@ namespace ImgViewer.Models
                 despeckleRelativeFlagImmediate.PropertyChanged += DespeckleRelativeFlag_PropertyChanged;
             }
 
+
+            var enhanceMethodParam = _parameters.FirstOrDefault(p => p.Key == "enhanceMethod");
+            if (enhanceMethodParam != null)
+            {
+                ApplyEnhanceVisibility(enhanceMethodParam.SelectedOption);
+                enhanceMethodParam.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex))
+                    {
+                        ApplyEnhanceVisibility(enhanceMethodParam.SelectedOption);
+                    }
+                };
+            }
+
+            var retinexRobustFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "retinexRobustNormalize");
+            if (retinexRobustFlagImmediate != null)
+            {
+                ApplyRetinexRobustVisibility(retinexRobustFlagImmediate.BoolValue);
+                retinexRobustFlagImmediate.PropertyChanged -= RetinexRobustFlag_PropertyChanged;
+                retinexRobustFlagImmediate.PropertyChanged += RetinexRobustFlag_PropertyChanged;
+            }
 
         }
 
@@ -591,6 +613,99 @@ namespace ImgViewer.Models
             }
         }
 
+        private void ApplyEnhanceVisibility(string? selectedOption)
+        {
+            var mode = GetEnhanceMode(selectedOption);
+            var robustFlag = _parameters.FirstOrDefault(p => p.Key == "retinexRobustNormalize");
+            bool retinexRobust = robustFlag != null && robustFlag.BoolValue;
+
+            foreach (var parameter in _parameters)
+            {
+                switch (parameter.Key)
+                {
+                    case "claheClipLimit":
+                    case "claheGridSize":
+                        parameter.IsVisible = mode == EnhanceMode.Clahe;
+                        break;
+                    case "retinexOutputMode":
+                    case "retinexUseLabL":
+                    case "retinexSigma":
+                    case "retinexGammaHigh":
+                    case "retinexGammaLow":
+                    case "retinexEps":
+                    case "retinexRobustNormalize":
+                    case "retinexExpClamp":
+                        parameter.IsVisible = mode == EnhanceMode.Retinex;
+                        break;
+                    case "retinexPercentLow":
+                    case "retinexPercentHigh":
+                    case "retinexHistBins":
+                        parameter.IsVisible = mode == EnhanceMode.Retinex && retinexRobust;
+                        break;
+                    case "levelsBlackPercent":
+                    case "levelsWhitePercent":
+                    case "levelsGamma":
+                    case "levelsTargetWhite":
+                        parameter.IsVisible = mode == EnhanceMode.Levels;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            ApplyRetinexRobustVisibility(retinexRobust);
+        }
+
+        private void ApplyRetinexRobustVisibility(bool retinexRobustFlag)
+        {
+            var mode = GetEnhanceMode();
+            bool visible = (mode == EnhanceMode.Retinex) && retinexRobustFlag;
+
+            foreach (var parameter in _parameters)
+            {
+                if (parameter.Key == "retinexPercentLow" || parameter.Key == "retinexPercentHigh" || parameter.Key == "retinexHistBins")
+                {
+                    parameter.IsVisible = visible;
+                }
+            }
+        }
+
+        private EnhanceMode GetEnhanceMode(string? overrideOption = null)
+        {
+            var methodParam = _parameters.FirstOrDefault(p => p.Key == "enhanceMethod");
+            string method = overrideOption ?? methodParam?.SelectedOption ?? string.Empty;
+            method = method?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrEmpty(method) && methodParam != null)
+            {
+                return methodParam.SelectedIndex switch
+                {
+                    0 => EnhanceMode.Clahe,
+                    1 => EnhanceMode.Retinex,
+                    2 => EnhanceMode.Levels,
+                    _ => EnhanceMode.Clahe
+                };
+            }
+
+            if (method.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase))
+                return EnhanceMode.Retinex;
+            if (method.Equals("CLAHE", StringComparison.OrdinalIgnoreCase))
+                return EnhanceMode.Clahe;
+            if (method.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) || method.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase))
+                return EnhanceMode.Levels;
+
+            return EnhanceMode.Unknown;
+        }
+
+        private enum EnhanceMode
+        {
+            Unknown,
+            Clahe,
+            Retinex,
+            Levels
+        }
+
+
         private void ApplyBorderRemovalVisibility(string? selectedOption)
         {
             var bordersAlgo = _parameters.FirstOrDefault(x => x.Key == "borderRemovalAlgorithm");
@@ -698,6 +813,13 @@ namespace ImgViewer.Models
         {
             if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
             ApplyDespeckleVisibility();
+        }
+
+                private void RetinexRobustFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            if (sender is not PipeLineParameter flag) return;
+            ApplyRetinexRobustVisibility(flag.BoolValue);
         }
 
         private void ClaheFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)

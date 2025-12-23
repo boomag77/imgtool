@@ -11,6 +11,7 @@ using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using System.Threading;
 using static ImgViewer.Models.BordersRemover;
 
 namespace ImgViewer.Models
@@ -868,8 +869,8 @@ namespace ImgViewer.Models
         }
 
         public Mat ProcessSingle(Mat src,
-                          ProcessorCommand command,
-                          Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing)
+                           ProcessorCommand command,
+                           Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing)
         {
             lock (_commandLock)
             {
@@ -881,44 +882,23 @@ namespace ImgViewer.Models
                     {
                         case ProcessorCommand.Binarize:
 
-                            //int threshold = 128;
-                            //int blockSize = 3;
-                            //double c = 14;
-                            //bool useGaussian = false;
-                            //bool useMorphology = false;
-                            //int morphKernel = 3;
-                            //int morphIters = 1;
-                            //int majorityOffset = 20;
 
                             var binParams = ToStruct<BinarizeParameters>(parameters);
                             return Binarizer.Binarize(src, binParams.Method, binParams);
 
-                            //switch (binParams.Method)
-                            //{
-                            //    case BinarizeMethod.Threshold:
-                            //        //DumpStruct(binParams);
-                            //        return Binarizer.Binarize(src, BinarizeMethod.Threshold, binParams);
-                            //    case BinarizeMethod.Adaptive:
-                            //        return Binarizer.Binarize(src, BinarizeMethod.Adaptive, binParams);
-                            //        break;
-                            //    case BinarizeMethod.Sauvola:
-                            //        return Binarizer.Binarize(src, BinarizeMethod.Sauvola, binParams);
-                            //    case BinarizeMethod.Majority:
-                            //        return MajorityBinarize(src, binParams);
-                            //        break;
-                            //}
-                            //break;
-                        case ProcessorCommand.Deskew:
-                            //Deskewer.Parameters p = new Deskewer.Parameters();
-                            foreach (var kv in parameters)
-                            {
-                                Debug.WriteLine(kv.Key.ToString());
-                                Debug.WriteLine(kv.Value.ToString());
+                        case ProcessorCommand.Enhance:
+                            return ApplyEnhanceCommand(src, parameters ?? new Dictionary<string, object>());
 
-                            }
+                        case ProcessorCommand.Deskew:
+
+                            //foreach (var kv in parameters)
+                            //{
+                            //    Debug.WriteLine(kv.Key.ToString());
+                            //    Debug.WriteLine(kv.Value.ToString());
+
+                            //}
                             return NewDeskew(src, parameters);
-                            //Deskew();
-                            break;
+
                         case ProcessorCommand.BordersRemove:
                             {
                                 //BordersDeskew();
@@ -1583,6 +1563,202 @@ namespace ImgViewer.Models
                 }
             }
             return src.Clone();
+        }
+
+        private Mat ApplyEnhanceCommand(Mat src, Dictionary<string, object> parameters)
+        {
+            string? method = null;
+            if (parameters.TryGetValue("enhanceMethod", out var methodObj))
+                method = methodObj?.ToString();
+
+            string methodName = method?.Trim() ?? string.Empty;
+            bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
+            bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
+                            methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
+
+            if (isRetinex)
+            {
+                var outputMode = Enhancer.RetinexOutputMode.LogHighpass;
+                bool useLabL = true;
+                double sigma = 50.0;
+                double gammaHigh = 1.6;
+                double gammaLow = 0.7;
+                double eps = 1e-6;
+                bool robustNormalize = true;
+                double percentLow = 0.5;
+                double percentHigh = 99.5;
+                int histBins = 2048;
+                double expClampAbs = 4.0;
+
+                foreach (var kv in parameters)
+                {
+                    switch (kv.Key)
+                    {
+                        case "retinexOutputMode":
+                            var modeStr = kv.Value?.ToString();
+                            if (!string.IsNullOrWhiteSpace(modeStr) &&
+                                Enum.TryParse(modeStr, true, out Enhancer.RetinexOutputMode parsedMode))
+                            {
+                                outputMode = parsedMode;
+                            }
+                            break;
+                        case "retinexUseLabL":
+                            useLabL = SafeBool(kv.Value, useLabL);
+                            break;
+                        case "retinexSigma":
+                            sigma = SafeDouble(kv.Value, sigma);
+                            break;
+                        case "retinexGammaHigh":
+                            gammaHigh = SafeDouble(kv.Value, gammaHigh);
+                            break;
+                        case "retinexGammaLow":
+                            gammaLow = SafeDouble(kv.Value, gammaLow);
+                            break;
+                        case "retinexEps":
+                            eps = SafeDouble(kv.Value, eps);
+                            break;
+                        case "retinexRobustNormalize":
+                            robustNormalize = SafeBool(kv.Value, robustNormalize);
+                            break;
+                        case "retinexPercentLow":
+                            percentLow = SafeDouble(kv.Value, percentLow);
+                            break;
+                        case "retinexPercentHigh":
+                            percentHigh = SafeDouble(kv.Value, percentHigh);
+                            break;
+                        case "retinexHistBins":
+                            histBins = SafeInt(kv.Value, histBins);
+                            break;
+                        case "retinexExpClamp":
+                            expClampAbs = SafeDouble(kv.Value, expClampAbs);
+                            break;
+                    }
+                }
+
+                percentLow = Math.Max(0.0, Math.Min(50.0, percentLow));
+                percentHigh = Math.Max(percentLow + 0.1, Math.Min(100.0, percentHigh));
+                histBins = Math.Max(32, Math.Min(8192, histBins));
+                expClampAbs = Math.Max(0.5, expClampAbs);
+
+                return Enhancer.HomomorphicRetinex(
+                    _token,
+                    src,
+                    outputMode,
+                    useLabL,
+                    Math.Max(0.1, sigma),
+                    Math.Max(0.1, gammaHigh),
+                    Math.Max(0.01, gammaLow),
+                    Math.Max(1e-8, eps),
+                    robustNormalize,
+                    percentLow,
+                    percentHigh,
+                    histBins,
+                    expClampAbs);
+            }
+
+            if (isLevels)
+            {
+                double blackPct = 1.0;
+                double whitePct = 95.0;
+                double levelsGamma = 0.85;
+                double targetWhite = 255.0;
+
+                foreach (var kv in parameters)
+                {
+                    switch (kv.Key)
+                    {
+                        case "levelsBlackPercent":
+                            blackPct = SafeDouble(kv.Value, blackPct);
+                            break;
+                        case "levelsWhitePercent":
+                            whitePct = SafeDouble(kv.Value, whitePct);
+                            break;
+                        case "levelsGamma":
+                            levelsGamma = SafeDouble(kv.Value, levelsGamma);
+                            break;
+                        case "levelsTargetWhite":
+                            targetWhite = SafeDouble(kv.Value, targetWhite);
+                            break;
+                    }
+                }
+
+                return ApplyLevelsAndGamma(src, blackPct, whitePct, levelsGamma, targetWhite);
+            }
+
+            double claheClipLimit = 4.0;
+            int claheGridSize = 8;
+
+            if (parameters.TryGetValue("claheClipLimit", out var clipObj))
+                claheClipLimit = SafeDouble(clipObj, claheClipLimit);
+            if (parameters.TryGetValue("claheGridSize", out var gridObj))
+                claheGridSize = SafeInt(gridObj, claheGridSize);
+
+            return Enhancer.ApplyClahe(
+                _token,
+                src,
+                Math.Max(0.1, claheClipLimit),
+                Math.Max(1, claheGridSize));
+        }
+
+        private Mat ApplyLevelsAndGamma(Mat src, double blackPct, double whitePct, double gamma, double targetWhite)
+        {
+            if (src == null || src.Empty())
+                return src?.Clone() ?? new Mat();
+
+            double clampedBlack = Math.Max(0.0, Math.Min(blackPct, 20.0));
+            double clampedWhite = Math.Max(clampedBlack + 0.1, Math.Min(whitePct, 100.0));
+            double clampedGamma = Math.Max(0.05, Math.Min(gamma, 5.0));
+            byte whiteTarget = (byte)Math.Max(1, Math.Min(255, Math.Round(targetWhite)));
+
+            if (src.Channels() == 1)
+            {
+                using var gray8 = new Mat();
+                if (src.Type() == MatType.CV_8UC1)
+                    src.CopyTo(gray8);
+                else
+                    src.ConvertTo(gray8, MatType.CV_8UC1);
+
+                var leveled = Enhancer.LevelsAndGamma8U(gray8, clampedBlack, clampedWhite, clampedGamma, whiteTarget);
+                gray8.Dispose();
+
+                var colored = new Mat();
+                Cv2.CvtColor(leveled, colored, ColorConversionCodes.GRAY2BGR);
+                leveled.Dispose();
+                return colored;
+            }
+
+            using var bgr = new Mat();
+            if (src.Type() == MatType.CV_8UC3)
+                src.CopyTo(bgr);
+            else if (src.Type() == MatType.CV_8UC4)
+                Cv2.CvtColor(src, bgr, ColorConversionCodes.BGRA2BGR);
+            else
+                src.ConvertTo(bgr, MatType.CV_8UC3);
+
+            using var lab = new Mat();
+            Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
+            var channels = lab.Split();
+            try
+            {
+                var leveledL = Enhancer.LevelsAndGamma8U(channels[0], clampedBlack, clampedWhite, clampedGamma, whiteTarget);
+                channels[0].Dispose();
+                channels[0] = leveledL;
+
+                using var merged = new Mat();
+                Cv2.Merge(channels, merged);
+
+                var result = new Mat();
+                Cv2.CvtColor(merged, result, ColorConversionCodes.Lab2BGR);
+                return result;
+            }
+            finally
+            {
+                foreach (var ch in channels)
+                {
+                    if (!ch.IsDisposed)
+                        ch.Dispose();
+                }
+            }
         }
 
         private Mat RemoveBorders_Integral(CancellationToken token,
@@ -3790,111 +3966,6 @@ namespace ImgViewer.Models
         //    return bin;
         //}
 
-        private sealed class Enhancer
-        {
-            public static Mat ApplyClahe(Mat src, double clipLimit = 4.0, int gridSize = 8)
-            {
-                if (src == null)
-                    throw new ArgumentNullException(nameof(src));
-
-                // --- 1) Одноканальное изображение (GRAY / бинарное) ---
-                if (src.Type() == MatType.CV_8UC1)
-                {
-                    // 1.1) Проверяем, бинарное ли оно (только 0 и 255)
-                    using (var midMask = new Mat())
-                    {
-                        // midMask = 255 там, где значение в диапазоне [1..254]
-                        Cv2.InRange(src, new Scalar(1), new Scalar(254), midMask);
-                        bool hasMidtones = Cv2.CountNonZero(midMask) > 0;
-
-                        if (!hasMidtones)
-                        {
-                            // Нет промежуточных значений → считаем изображение бинарным → CLAHE не нужен
-                            return src.Clone(); // безопаснее вернуть копию, чтобы не трогать src
-                        }
-                    }
-
-                    // 1.2) Нормальный GRAY (есть полутона) → применяем CLAHE и возвращаем gray
-                    using var clahe = Cv2.CreateCLAHE(clipLimit, new OpenCvSharp.Size(gridSize, gridSize));
-                    var enhancedGray = new Mat();
-                    clahe.Apply(src, enhancedGray);
-                    return enhancedGray;
-                }
-
-                // --- 2) Цветное изображение → работаем через Lab и L-канал ---
-                // Приводим к BGR 8UC3, если вдруг тип другой
-                Mat bgr = null;
-                bool needDisposeBgr = false;
-
-                try
-                {
-                    if (src.Type() == MatType.CV_8UC3)
-                    {
-                        // можем работать прямо с ним, не выделяя новый Mat
-                        bgr = src;
-                    }
-                    else if (src.Type() == MatType.CV_8UC4)
-                    {
-                        // есть альфа → выкинем её, работаем в BGR
-                        bgr = new Mat();
-                        Cv2.CvtColor(src, bgr, ColorConversionCodes.BGRA2BGR);
-                        needDisposeBgr = true;
-                    }
-                    else if (src.Type() == MatType.CV_8UC1)
-                    {
-                        // одноканальное (но не бинарное) → конвертим в BGR
-                        bgr = new Mat();
-                        Cv2.CvtColor(src, bgr, ColorConversionCodes.GRAY2BGR);
-                        needDisposeBgr = true;
-                    }
-                    else
-                    {
-                        throw new ArgumentException("ApplyClahe expects 1, 3, or 4 channel Mats", nameof(src));
-                    }
-
-                    // BGR → Lab
-                    using var lab = new Mat();
-                    Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
-
-                    // Разбиваем на каналы: L, a, b
-                    var labChannels = lab.Split();
-                    var l = labChannels[0]; // яркость
-
-                    // CLAHE только по L-каналу
-                    using (var clahe = Cv2.CreateCLAHE(clipLimit, new OpenCvSharp.Size(gridSize, gridSize)))
-                    {
-                        var lEnhanced = new Mat();
-                        clahe.Apply(l, lEnhanced);
-
-                        // старый L можно освободить
-                        l.Dispose();
-                        labChannels[0] = lEnhanced;
-                    }
-
-                    // Склеиваем L', a, b обратно
-                    using var labMerged = new Mat();
-                    Cv2.Merge(labChannels, labMerged);
-
-                    // каналы больше не нужны
-                    foreach (var ch in labChannels)
-                    {
-                        if (!ch.IsDisposed)
-                            ch.Dispose();
-                    }
-
-                    // Lab → BGR
-                    var dst = new Mat();
-                    Cv2.CvtColor(labMerged, dst, ColorConversionCodes.Lab2BGR);
-
-                    return dst;
-                }
-                finally
-                {
-                    if (needDisposeBgr && bgr != null && !bgr.IsDisposed)
-                        bgr.Dispose();
-                }
-            }
-
-        }
+        
     }
 }

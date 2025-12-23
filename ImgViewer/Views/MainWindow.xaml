@@ -837,6 +837,9 @@
                                                 <MenuItem Header="Binarize"
                                       Tag="{x:Static models:PipelineOperationType.Binarize}"
                                       Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Enhance"
+                                      Tag="{x:Static models:PipelineOperationType.Enhance}"
+                                      Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Punch holes"
                                       Tag="{x:Static models:PipelineOperationType.PunchHolesRemove}"
                                       Click="AddOperationMenuItem_Click" />
