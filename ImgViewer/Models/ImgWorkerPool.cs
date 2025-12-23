@@ -57,6 +57,7 @@ namespace ImgViewer.Models
         private readonly object _errorFileLock = new();
 
         private readonly bool _boundaryModelRequested = false;
+        private readonly bool _isSplitPipeline;
 
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
@@ -77,7 +78,9 @@ namespace ImgViewer.Models
                 _boundaryModelRequested = true;
             }
 
-            if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.PageSplit))
+            _isSplitPipeline = pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.PageSplit);
+
+            if (_isSplitPipeline)
             {
                 _outputFolder = Path.Combine(parentPath, sourceFolderName + "_splitted");
             }
@@ -263,6 +266,45 @@ namespace ImgViewer.Models
 
                 var finalPath = Path.Combine(_outputFolder, $"{baseName}_{i + 1}{originalExtension}");
                 SaveMatToFile(mat, encodeExt, finalPath);
+            }
+        }
+
+        private void RenumberSplitOutputs()
+        {
+            if (!_isSplitPipeline)
+                return;
+            if (!Directory.Exists(_outputFolder))
+                return;
+
+            var files = Directory.EnumerateFiles(_outputFolder, "*.*", SearchOption.TopDirectoryOnly)
+                                 .Where(path =>
+                                 {
+                                     var name = Path.GetFileName(path);
+                                     return !string.IsNullOrWhiteSpace(name) && !name.StartsWith("_", StringComparison.OrdinalIgnoreCase);
+                                 })
+                                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                                 .ToList();
+
+            if (files.Count == 0)
+                return;
+
+            var pendingMoves = new List<(string Temp, string Final)>(files.Count);
+            int index = 1;
+            foreach (var file in files)
+            {
+                var extension = Path.GetExtension(file);
+                var tempPath = file + ".renaming";
+                File.Move(file, tempPath);
+                var finalPath = Path.Combine(_outputFolder, index.ToString("D3") + extension);
+                pendingMoves.Add((tempPath, finalPath));
+                index++;
+            }
+
+            foreach (var move in pendingMoves)
+            {
+                if (File.Exists(move.Final))
+                    File.Delete(move.Final);
+                File.Move(move.Temp, move.Final);
             }
         }
 
@@ -730,6 +772,17 @@ namespace ImgViewer.Models
                     : "No errors.";
                 var plJsonMsg = _plJson;
                 SaveProcessingLog(logMsg, timeMsg, plOps, errors, cancelled);
+                if (_isSplitPipeline)
+                {
+                    try
+                    {
+                        RenumberSplitOutputs();
+                    }
+                    catch (Exception renameEx)
+                    {
+                        RegisterFileError("<Split rename>", "Failed to rename split outputs.", renameEx);
+                    }
+                }
                 if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
                 {
                     File.Delete(_batchErrorsPath);
@@ -760,6 +813,17 @@ namespace ImgViewer.Models
                 if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
                 {
                     File.Delete(_batchErrorsPath);
+                }
+                if (_isSplitPipeline)
+                {
+                    try
+                    {
+                        RenumberSplitOutputs();
+                    }
+                    catch (Exception renameEx)
+                    {
+                        RegisterFileError("<Split rename>", "Failed to rename split outputs.", renameEx);
+                    }
                 }
                 RegisterFileError("<ImgWorkerPool>", "Error in Batch processing.", ex);
             }

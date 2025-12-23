@@ -285,6 +285,9 @@ namespace ImgViewer.Models
         public async Task ResetWorkingImagePreview()
         {
             CancelImageProcessing();
+            ClearSplitPreviewImages();
+            if (_imageProcessor is OpenCvImageProcessor ocvProcessor)
+                ocvProcessor.ClearSplitResults();
             if (_mainViewModel.OriginalImage == null) return;
             await SetImageForProcessing(_mainViewModel.OriginalImage);
         }
