@@ -182,6 +182,7 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("Inpaint mode", "inpaintMode", new [] {"Fill", "Telea", "NS"}, 0),
                                 new PipeLineParameter("Border color variation", "borderColorVariation", 0.5, 0.05, 1.0, 0.05),
                                 new PipeLineParameter("Border safety offset px", "borderSafetyOffsetPx", 5, -30, 30, 1),
+                                new PipeLineParameter("Cut result", "integralCut", false),
                                 new PipeLineParameter("Auto max border width fraction", "autoMaxBorderDepthFrac", true),
                                 new PipeLineParameter("Max border depth Left (frac)", "maxBorderDepthFracLeft", 0.25, 0, 1, 0.01),
                                 new PipeLineParameter("Max border depth Right (frac)", "maxBorderDepthFracRight", 0.25, 0, 1, 0.01),
@@ -400,9 +401,6 @@ namespace ImgViewer.Models
             //op.Command = ProcessorCommand.Deskew;
             return operation;
         }
-
-
-
 
 
         public void LoadPipelineFromJson(string json)

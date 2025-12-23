@@ -946,6 +946,7 @@ namespace ImgViewer.Models
                                 double seedBrightnessStrictness = 1.0;
                                 double textureAllowance = 1.0;
                                 int kInterpolation = 0;
+                                bool integralCut = false;
 
 
                                 foreach (var kv in parameters)
@@ -1102,6 +1103,9 @@ namespace ImgViewer.Models
                                         case "kInterpolation":
                                             kInterpolation = SafeInt(kv.Value, kInterpolation);
                                             break;
+                                        case "integralCut":
+                                            integralCut = SafeBool(kv.Value, integralCut);
+                                            break;
                                         default:
                                             // ignore unknown key
                                             break;
@@ -1161,6 +1165,7 @@ namespace ImgViewer.Models
                                                         seedBrightnessStrictness,
                                                         textureAllowance,
                                                         kInterpolation,
+                                                        integralCut,
                                                         null);
                                                 break;
 
@@ -1774,6 +1779,7 @@ namespace ImgViewer.Models
                                                         double seedBrightnessStrictness,
                                                         double textureAllowance,
                                                         int kInterpolation,
+                                                        bool cutResult,
                                                         Scalar? fillColor = null)
         {
             
@@ -1791,7 +1797,10 @@ namespace ImgViewer.Models
                                                         seedBrightnessStrictness,
                                                         textureAllowance,
                                                         kInterpolation,
+                                                        out var depthStats,
                                                         fillColor);
+                if (cutResult && depthStats.HasAnyMeasurements)
+                    return CutByAverageDepth(src, depthStats);
                 return result;
             }
             catch (OperationCanceledException) when (!batchProcessing)
@@ -1815,6 +1824,24 @@ namespace ImgViewer.Models
 #endif
                 return src.Clone();
             }
+        }
+
+        private Mat CutByAverageDepth(Mat src, BordersRemover.BorderDepthStats stats)
+        {
+            int left = Math.Max(0, (int)Math.Round(stats.MinLeft > 0 ? stats.MinLeft : stats.AverageLeft));
+            int right = Math.Max(0, (int)Math.Round(stats.MinRight > 0 ? stats.MinRight : stats.AverageRight));
+            int top = Math.Max(0, (int)Math.Round(stats.MinTop > 0 ? stats.MinTop : stats.AverageTop));
+            int bottom = Math.Max(0, (int)Math.Round(stats.MinBottom > 0 ? stats.MinBottom : stats.AverageBottom));
+
+            int width = src.Cols - left - right;
+            int height = src.Rows - top - bottom;
+
+            if (width <= 0 || height <= 0)
+                return src.Clone();
+
+            var rect = new Rect(left, top, width, height);
+            using var roi = new Mat(src, rect);
+            return roi.Clone();
         }
 
         private Scalar GetBgColor(Mat src)

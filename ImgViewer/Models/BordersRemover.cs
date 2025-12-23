@@ -20,6 +20,21 @@ namespace ImgViewer.Models
         }
 
 
+        public struct BorderDepthStats
+        {
+            public double AverageLeft;
+            public double AverageRight;
+            public double AverageTop;
+            public double AverageBottom;
+            public double MinLeft;
+            public double MinRight;
+            public double MinTop;
+            public double MinBottom;
+
+            public bool HasAnyMeasurements =>
+                AverageLeft > 0 || AverageRight > 0 || AverageTop > 0 || AverageBottom > 0;
+        }
+
         public static Mat RemoveBorderArtifactsGeneric_Safe(
             CancellationToken token,
             Mat src,
@@ -1657,8 +1672,10 @@ namespace ImgViewer.Models
     double seedBrightnessFactor,
     double textureAllowanceFactor,
     int kInterpolation,
+    out BorderDepthStats depthStats,
     Scalar? fillColor = null)
         {
+            depthStats = default;
             Debug.WriteLine($"Bricj thickness: {brickThickness}");
 
             if (src == null) throw new ArgumentNullException(nameof(src));
@@ -2215,6 +2232,18 @@ namespace ImgViewer.Models
             UpsampleBricksToPixels(topBricks, topDepth, cols, brickThickness);
             UpsampleBricksToPixels(bottomBricks, bottomDepth, cols, brickThickness);
 
+            depthStats = new BorderDepthStats
+            {
+                AverageLeft = ComputeAverageDepth(leftDepth, rows),
+                AverageRight = ComputeAverageDepth(rightDepth, rows),
+                AverageTop = ComputeAverageDepth(topDepth, cols),
+                AverageBottom = ComputeAverageDepth(bottomDepth, cols),
+                MinLeft = ComputeMinDepth(leftDepth, rows),
+                MinRight = ComputeMinDepth(rightDepth, rows),
+                MinTop = ComputeMinDepth(topDepth, cols),
+                MinBottom = ComputeMinDepth(bottomDepth, cols)
+            };
+
 
             // 5.2) Строим borderMask по сглаженным глубинам
             borderMask.SetTo(Scalar.All(0));
@@ -2559,6 +2588,40 @@ namespace ImgViewer.Models
             }
         }
 
+
+        private static double ComputeAverageDepth(int[] depth, int length)
+        {
+            if (depth == null || depth.Length == 0) return 0;
+            double sum = 0;
+            int count = 0;
+            for (int i = 0; i < length && i < depth.Length; i++)
+            {
+                int val = depth[i];
+                if (val > 0)
+                {
+                    sum += val;
+                    count++;
+                }
+            }
+            return count > 0 ? sum / count : 0;
+        }
+
+        private static double ComputeMinDepth(int[] depth, int length)
+        {
+            if (depth == null || depth.Length == 0) return 0;
+            double min = double.MaxValue;
+            int count = 0;
+            for (int i = 0; i < length && i < depth.Length; i++)
+            {
+                int val = depth[i];
+                if (val > 0)
+                {
+                    min = Math.Min(min, val);
+                    count++;
+                }
+            }
+            return count > 0 ? min : 0;
+        }
 
     }
 }

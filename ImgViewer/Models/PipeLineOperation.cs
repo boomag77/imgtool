@@ -793,6 +793,7 @@ namespace ImgViewer.Models
                     case "borderSafetyOffsetPx":
                     case "autoMaxBorderDepthFrac":
                     case "kInterpolation":
+                    case "integralCut":
                         p.IsVisible = isIntegral;
                         break;
                     case "maxBorderDepthFracLeft":
