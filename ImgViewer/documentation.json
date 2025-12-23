@@ -29,7 +29,7 @@
       },
       {
         "heading": "Parameters",
-        "body": "- `Algorithm`: Auto handles most pages, ByBorders hunts for strong outer edges, Hough locks onto long rulers, and Projection/PCA follow text baselines. Choose the method first because each one shows different sliders.\n- `Canny Threshold 1/2` (ByBorders): lower the first value (30‑60) to pick up faint edges, keep the second higher (120‑200) so background noise is ignored.\n- `Morph Kernel` (ByBorders): widen this (5‑9) when border shadows are broken; smaller values protect delicate margins.\n- `Min Line Length` (Hough): start around 60% of page width for blueprints or engineering scans; reduce it for letter-size pages with shorter rulers.\n- `Hough Threshold`: raise it if the preview shows random skew lines, lower it when the page barely contains any straight edges."
+        "body": "- `Algorithm`: Auto handles most pages, ByBorders hunts for strong outer edges, Hough locks onto long rulers, and Projection/PCA follow text baselines. Choose the method first because each one shows different sliders.\n- `Canny Threshold 1/2` (ByBorders): lower the first value (30-60) to pick up faint edges, keep the second higher (120-200) so background noise is ignored.\n- `Morph Kernel` (ByBorders): widen this (5-9) when border shadows are broken; smaller values protect delicate margins.\n- `Min Line Length` (Hough): start around 60% of page width for blueprints or engineering scans; reduce it for letter-size pages with shorter rulers.\n- `Hough Threshold`: raise it if the preview shows random skew lines, lower it when the page barely contains any straight edges."
       },
       {
         "heading": "Use cases",
@@ -48,19 +48,19 @@
       },
       {
         "heading": "Auto mode parameters",
-        "body": "- `Auto Threshold`: keep this on unless you have extremely dark paper; turning it off exposes the `Dark Threshold` slider so you can force what counts as black.\n- `Margin %`: add 5‑15% when drawings have notes in the gutter; drop it toward 0 when you want a tight crop.\n- `Shift factor`: higher values let the detector push further into the page when the text hugs the edge; start at 0.2 and nudge up if shadows remain.\n- `Min Area Px` / `Span fraction` / `Solidity`: raise these when the detector mistakes logos for borders. For magazines, try 5000 px, 0.7 span, and 0.7 solidity so only long, thin strips qualify.\n- `Penetration depth fraction`: how far into the page the cut can travel (percent of the shorter side). Use 0.15 for notebooks, 0.25 for thick black frames.\n- `Feather` adds a blur to the cut edge; 4‑8 px hides gradients.\n- `Telea Hybrid`: leave on when you want missing pixels filled with nearby colors; turn off to simply crop."
+        "body": "- `Auto Threshold`: keep this on unless you have extremely dark paper; turning it off exposes the `Dark Threshold` slider so you can force what counts as black.\n- `Margin %`: add 5-15% when drawings have notes in the gutter; drop it toward 0 when you want a tight crop.\n- `Shift factor`: higher values let the detector push further into the page when the text hugs the edge; start at 0.2 and nudge up if shadows remain.\n- `Min Area Px` / `Span fraction` / `Solidity`: raise these when the detector mistakes logos for borders. For magazines, try 5000 px, 0.7 span, and 0.7 solidity so only long, thin strips qualify.\n- `Penetration depth fraction`: how far into the page the cut can travel (percent of the shorter side). Use 0.15 for notebooks, 0.25 for thick black frames.\n- `Feather` adds a blur to the cut edge; 4-8 px hides gradients.\n- `Telea Hybrid`: leave on when you want missing pixels filled with nearby colors; turn off to simply crop."
       },
       {
         "heading": "By Contrast mode parameters",
-        "body": "- `Threshold Fraction`: 0.35‑0.45 is a good starting point; raise it if the preview ignores obvious black frames, lower it for faint pencil borders.\n- `Contrast Threshold`: the minimum difference between the frame and the page. Try 40‑60 for office paper; go higher when the background is very bright.\n- `Central Sample`: increases the protected band in the middle of the page. Set it around 0.15 for books so the gutter never gets cropped.\n- `Max remove fraction`: caps how much width/height can disappear per side. Leave it near 0.45 for full-page frames, drop to 0.25 for postcards."
+        "body": "- `Threshold Fraction`: 0.35-0.45 is a good starting point; raise it if the preview ignores obvious black frames, lower it for faint pencil borders.\n- `Contrast Threshold`: the minimum difference between the frame and the page. Try 40-60 for office paper; go higher when the background is very bright.\n- `Central Sample`: increases the protected band in the middle of the page. Set it around 0.15 for books so the gutter never gets cropped.\n- `Max remove fraction`: caps how much width/height can disappear per side. Leave it near 0.45 for full-page frames, drop to 0.25 for postcards."
       },
       {
         "heading": "Manual mode parameters",
-        "body": "Manual offsets are read directly from the pipeline parameters.\n- Left/Right/Top/Bottom: pixels shaved off each edge. Increase while watching the preview; the numbers persist so you can reuse the same trim later.\n- Cut: when on, the preview shows the final cropped image; when off, you just see a guide overlay.\n- Preview cut: adds a translucent mask to confirm what will go away.\n- Apply to Left/Right Page: perfect for book spreads—disable the side you want to keep untouched."
+        "body": "Manual offsets are read directly from the pipeline parameters.\n- Left/Right/Top/Bottom: pixels shaved off each edge. Increase while watching the preview; the numbers persist so you can reuse the same trim later.\n- Cut: when on, the preview shows the final cropped image; when off, you just see a guide overlay.\n- Preview cut: adds a translucent mask to confirm what will go away.\n- Apply to Left/Right Page: perfect for book spreads-disable the side you want to keep untouched."
       },
       {
         "heading": "Integral mode (Lab bricks)",
-        "body": "Integral scans the border in Lab color space using bricks of `scanStepPx` height/width and compares them to an inner sampling window. Use it when Auto can’t tell the difference between a photo edge and the paper itself.\n- `Seed Contrast Strictness` / `Seed Brightness Strictness`: increase toward 1.5 when border shadows are only slightly darker than the page; lower toward 0.8 if nothing is detected.\n- `Texture allowance`: raise to 1.3‑1.6 for textured paper so the detector doesn’t skip grainy margins.\n- `Scan step px`: smaller steps (8‑12) trace wavy borders precisely; larger steps (18‑24) shorten processing time on clean scans.\n- `Inpaint radius` and `Inpaint mode`: choose Fill for solid backgrounds, or Telea/NS with a radius of 3‑5 when you need a more organic blend.\n- `Border color variation`: widen this (0.6‑0.8) when the border color changes along the edge; tighten to 0.4 for consistent frames.\n- `Border safety offset px`: add 2‑6 px to leave a guard band between content and the cut.\n- `Auto max border depth fraction`: leave on to let the app measure the maximum cut per side. Turn it off if you want to limit a side manually—set Left/Right/Top/Bottom to 0.10‑0.20 for moderate trims.\n- `K-interpolation`: smooths noisy detections. Values between 2 and 5 fill small gaps; use 0 to disable smoothing if the preview overreaches."
+        "body": "Integral scans the border in Lab color space using bricks of `scanStepPx` height/width and compares them to an inner sampling window. Use it when Auto can't tell the difference between a photo edge and the paper itself.\n- `Seed Contrast Strictness` / `Seed Brightness Strictness`: increase toward 1.5 when border shadows are only slightly darker than the page; lower toward 0.8 if nothing is detected.\n- `Texture allowance`: raise to 1.3-1.6 for textured paper so the detector doesn't skip grainy margins.\n- `Scan step px`: smaller steps (8-12) trace wavy borders precisely; larger steps (18-24) shorten processing time on clean scans.\n- `Inpaint radius` and `Inpaint mode`: choose Fill for solid backgrounds, or Telea/NS with a radius of 3-5 when you need a more organic blend.\n- `Border color variation`: widen this (0.6-0.8) when the border color changes along the edge; tighten to 0.4 for consistent frames.\n- `Border safety offset px`: add 2-6 px to leave a guard band between content and the cut.\n- `Auto max border depth fraction`: leave on to let the app measure the maximum cut per side. Turn it off if you want to limit a side manually-set Left/Right/Top/Bottom to 0.10-0.20 for moderate trims.\n- `K-interpolation`: smooths noisy detections. Values between 2 and 5 fill small gaps; use 0 to disable smoothing if the preview overreaches."
       },
       {
         "heading": "Tips",
@@ -75,19 +75,19 @@
     "paragraphs": [
       {
         "heading": "Threshold mode",
-        "body": "- `Threshold`: 0‑255 brightness cut. Raise it (130‑160) to throw away light stains, lower it (90‑110) so faint pencil and fax ink stay black. Use the histogram preview to find the sweet spot where the background is mostly white without erasing detail."
+        "body": "- `Threshold`: 0-255 brightness cut. Raise it (130-160) to throw away light stains, lower it (90-110) so faint pencil and fax ink stay black. Use the histogram preview to find the sweet spot where the background is mostly white without erasing detail."
       },
       {
         "heading": "Adaptive mode",
-        "body": "- `BlockSize`: odd numbers that define how big a neighborhood influences each pixel. 25‑45 keeps text intact on magazine pages; go smaller (11‑19) for notebooks with tight handwriting.\n- `Mean C`: subtracts from the local average. Lower values (-5 to -15) darken ink; higher values brighten the background.\n- `Use Gaussian`: smooths the neighborhood weighting. Turn it on for noisy scans, off for crisp laser printouts.\n- `Apply Morphology`: connect broken strokes. Start with kernel 2‑3 and 1 iteration; increase only if characters still look dotted."
+        "body": "- `BlockSize`: odd numbers that define how big a neighborhood influences each pixel. 25-45 keeps text intact on magazine pages; go smaller (11-19) for notebooks with tight handwriting.\n- `Mean C`: subtracts from the local average. Lower values (-5 to -15) darken ink; higher values brighten the background.\n- `Use Gaussian`: smooths the neighborhood weighting. Turn it on for noisy scans, off for crisp laser printouts.\n- `Apply Morphology`: connect broken strokes. Start with kernel 2-3 and 1 iteration; increase only if characters still look dotted."
       },
       {
         "heading": "Sauvola mode",
-        "body": "- `Window size`: odd-numbered box the algorithm uses to judge local contrast. 25‑35 works for most book pages; stretch to 51+ for newspapers with noisy halftones.\n- `K`: contrast sensitivity. Raise it above 0.35 to protect faint pencil and fountain ink; drop toward 0.2 when stains keep turning black.\n- `R`: expected dynamic range. Leave near 128 for typical 8-bit scans; lower it if the paper is extremely gray so Sauvola doesn’t overreact.\n- `Pencil stroke boost`: adds a gentle darkening pass to hairline strokes. Set 0.1‑0.2 to make marginalia stand out.\n- `CLAHE Clip` / `Grid size`: optional contrast equalization before Sauvola. Use Clip 2‑4 and Grid 8‑12 on uneven lighting to brighten dull corners.\n- `Morph radius`: smooths the binary result. Use 0 when you want exact output, increase to 1‑2 only if letters look speckled.\nTip: combine Sauvola with a light blur in Pre-Binarize when dealing with newsprint to avoid pepper noise."
+        "body": "- `Window size`: odd-numbered box the algorithm uses to judge local contrast. 25-35 works for most book pages; stretch to 51+ for newspapers with noisy halftones.\n- `K`: contrast sensitivity. Raise it above 0.35 to protect faint pencil and fountain ink; drop toward 0.2 when stains keep turning black.\n- `R`: expected dynamic range. Leave near 128 for typical 8-bit scans; lower it if the paper is extremely gray so Sauvola doesn't overreact.\n- `Pencil stroke boost`: adds a gentle darkening pass to hairline strokes. Set 0.1-0.2 to make marginalia stand out.\n- `CLAHE Clip` / `Grid size`: optional contrast equalization before Sauvola. Use Clip 2-4 and Grid 8-12 on uneven lighting to brighten dull corners.\n- `Morph radius`: smooths the binary result. Use 0 when you want exact output, increase to 1-2 only if letters look speckled.\nTip: combine Sauvola with a light blur in Pre-Binarize when dealing with newsprint to avoid pepper noise."
       },
       {
         "heading": "Majority mode",
-        "body": "- `Majority Offset`: shifts the voting result. Positive numbers (5‑15) darken the whole image, negative numbers lighten it. Use this when the preview is close but not quite white/black enough."
+        "body": "- `Majority Offset`: shifts the voting result. Positive numbers (5-15) darken the whole image, negative numbers lighten it. Use this when the preview is close but not quite white/black enough."
       }
     ]
   },
@@ -98,7 +98,7 @@
     "paragraphs": [
       {
         "heading": "Parameters",
-        "body": "- `Punch Shape`: Circle for classic binder holes, Rect for comb bindings, Both when you want every detector active.\n- `Diameter` / `Roundness`: match these to the physical hole. Roundness 0.8‑0.9 focuses on perfect circles; drop toward 0.6 for torn edges.\n- `Width` / `Height` / `Fill ratio`: used for rectangular punches. Fill ratio close to 1 only accepts solid holes; lower it if the hole contains leftover paper.\n- `Density`: how dark a hole must be. Raise it when logos share the same size but are lighter.\n- `Size tolerance`: broaden it (0.4‑0.6) if your scanner stretches shapes.\n- `Offsets`: limit removal to the margins so page numbers and logos remain untouched."
+        "body": "- `Punch Shape`: Circle for classic binder holes, Rect for comb bindings, Both when you want every detector active.\n- `Diameter` / `Roundness`: match these to the physical hole. Roundness 0.8-0.9 focuses on perfect circles; drop toward 0.6 for torn edges.\n- `Width` / `Height` / `Fill ratio`: used for rectangular punches. Fill ratio close to 1 only accepts solid holes; lower it if the hole contains leftover paper.\n- `Density`: how dark a hole must be. Raise it when logos share the same size but are lighter.\n- `Size tolerance`: broaden it (0.4-0.6) if your scanner stretches shapes.\n- `Offsets`: limit removal to the margins so page numbers and logos remain untouched."
       },
       {
         "heading": "Use cases",
@@ -113,7 +113,7 @@
     "paragraphs": [
       {
         "heading": "Parameters",
-        "body": "- `Small area relative`: when on, the tool sizes specks based on page area; ideal for mixed-size batches. Turn it off and use `Small area absolute` when every scan is the same resolution.\n- `Small area multiplier`: how aggressive the cleanup becomes. 0.3‑0.5 scrubs flyers, 0.6+ erases larger dust clumps.\n- `Small area absolute px`: direct pixel limit used when the relative flag is off—enter the largest speck you want removed.\n- `Max dot height fraction` / `Proximity radius fraction` / `Squareness tolerance`: tighten these to limit removal to round toner dots. Relax them if you need to catch streaks.\n- `Keep clusters`: leave on to preserve dotted shading; turn off when you want spotless margins.\n- `Use dilate before CC` (plus kernel/iterations): helps merge broken specks so the cleanup is more decisive. A kernel of 2 and one iteration is often enough.\n- `Size tolerance`: widen it if specks vary wildly in size, narrow it to focus on one class of dust.\n- `Show candidates`: overlay the detected specks so you can tweak the numbers with confidence."
+        "body": "- `Small area relative`: when on, the tool sizes specks based on page area; ideal for mixed-size batches. Turn it off and use `Small area absolute` when every scan is the same resolution.\n- `Small area multiplier`: how aggressive the cleanup becomes. 0.3-0.5 scrubs flyers, 0.6+ erases larger dust clumps.\n- `Small area absolute px`: direct pixel limit used when the relative flag is off-enter the largest speck you want removed.\n- `Max dot height fraction` / `Proximity radius fraction` / `Squareness tolerance`: tighten these to limit removal to round toner dots. Relax them if you need to catch streaks.\n- `Keep clusters`: leave on to preserve dotted shading; turn off when you want spotless margins.\n- `Use dilate before CC` (plus kernel/iterations): helps merge broken specks so the cleanup is more decisive. A kernel of 2 and one iteration is often enough.\n- `Size tolerance`: widen it if specks vary wildly in size, narrow it to focus on one class of dust.\n- `Show candidates`: overlay the detected specks so you can tweak the numbers with confidence."
       },
       {
         "heading": "Tips",
@@ -128,7 +128,7 @@
     "paragraphs": [
       {
         "heading": "Parameters",
-        "body": "- `Orientation`: Horizontal for ruled notebooks, Vertical for ledgers, Both for grids.\n- `Line width`: set this close to the printed line thickness (usually 2‑4 px). Wider widths lift watercolor wash along with lines.\n- `Min length fraction`: 0.6 keeps only long ruling; drop to 0.3 when forms use shorter tick marks.\n- `Offset start`: leave >0 to protect headings at the top of the page.\n- `Line color R/G/B`: enter the printed color. Leave all values at -1 to let the app auto-detect the darkest strokes.\n- `Color tolerance`: higher values grab a wider range of shades; increase it for faint colored paper."
+        "body": "- `Orientation`: Horizontal for ruled notebooks, Vertical for ledgers, Both for grids.\n- `Line width`: set this close to the printed line thickness (usually 2-4 px). Wider widths lift watercolor wash along with lines.\n- `Min length fraction`: 0.6 keeps only long ruling; drop to 0.3 when forms use shorter tick marks.\n- `Offset start`: leave >0 to protect headings at the top of the page.\n- `Line color R/G/B`: enter the printed color. Leave all values at -1 to let the app auto-detect the darkest strokes.\n- `Color tolerance`: higher values grab a wider range of shades; increase it for faint colored paper."
       },
       {
         "heading": "Use cases",
@@ -152,6 +152,100 @@
       {
         "heading": "Workflow",
         "body": "Run Smart Crop after Deskew and Borders Remove. When using EAST, run it before Binarize so the model still sees grayscale input; U-net can run before or after Binarize depending on preference."
+      }
+    ]
+  },
+  {
+    "id": "enhance",
+    "title": "Enhance",
+    "summary": "Boost contrast before binarizing or saving, using CLAHE, Homomorphic Retinex, or Levels & Gamma.",
+    "paragraphs": [
+      {
+        "heading": "When to use it",
+        "body": "- Run Enhance before Binarize when scans look washed out or uneven.\n- Use it on grayscale originals as a pre-step for Clean-up/Smart Crop; the preview updates instantly so you can dial in small corrections.\n- For color work, Enhance is non-destructive: cancel or disable the operation if you want to revert."
+      },
+      {
+        "heading": "Choosing a method",
+        "body": "- `CLAHE` (Contrast Limited Adaptive Histogram Equalization) is the fast global option; great for lightly faded laser prints.\n- `Homomorphic Retinex` evens out heavy lighting gradients and yellowed paper by operating in log space.\n- `Levels & Gamma` is the manual \"classic levels\" tool for users who like precise percentile control.\nTip: switch methods before tuning sliders because each method shows different controls."
+      },
+      {
+        "heading": "CLAHE recommendations",
+        "body": "- `Clip Limit`: 2.0-4.0 brightens gently. Go toward 6-8 when the scan is extremely flat, but higher values can introduce noise.\n- `Grid Size`: 8x8 tiles are a safe default. Smaller tiles (4-6) enhance local details but can amplify paper grain; larger tiles (12-16) give a smoother look.\nUse CLAHE when the only issue is mild dullness; it preserves edges without changing overall brightness too much."
+      },
+      {
+        "heading": "Homomorphic Retinex recommendations",
+        "body": "- `Output Mode`: `LogHighpass` is ideal for preparing binarization; `ReconstructExp` keeps more tonal range for archival exports.\n- `Use Lab L channel`: leave on to analyze the lightness channel only. Turn it off when dealing with monochrome scans that already live in gray.\n- `Sigma`: controls how wide the illumination blur is. 40-60 handles book pages; drop to 20 for small receipts, raise to 80 for ledger spreads.\n- `Gamma High/Low`: High boosts detail; keep it between 1.4-2.0. Low preserves background weight; 0.5-0.8 maintains paper texture without flattening everything.\n- `Robust Normalize`: keep enabled unless you need exact logarithmic values. When enabled, adjust `Percent Low/High` (0.5/99.5 default) to exclude stains or highlights from the histogram.\n- `Exp Clamp`: 3-5 prevents the exponential branch from clipping; raise it slightly (6) when using ReconstructExp on very dark originals.\nUse Retinex when the page has vignetting, lamp shadows, or strong gradients."
+      },
+      {
+        "heading": "Levels & Gamma recommendations",
+        "body": "- `Black %` and `White %`: represent how many pixels you are willing to sacrifice at the low/high end. 0.5 / 98 is conservative; 2 / 95 makes yellowed paper pop white quickly.\n- `Gamma`: values below 1.0 brighten midtones, above 1.0 darken them. Try 0.85 for faded paper, 1.2 for overexposed scans.\n- `Target White`: keep 255 for maximum range; lower it (200-230) when you need headroom before further editing.\nLevels works best on uniform scans where you simply need to shift the histogram without local contrast tricks."
+      },
+      {
+        "heading": "Practical workflow tips",
+        "body": "- Preview Enhance with split preview enabled so you can compare before/after instantly.\n- After you find a favorite setup, save the pipeline; Enhance parameters serialize cleanly, so future batches keep the same look.\n- When the image will be binarized anyway, favor Retinex with LogHighpass: it suppresses gradients, making thresholds consistent.\n- For final color exports, pair Levels & Gamma with Smart Crop at the end of the pipeline to avoid touching trimmed edges multiple times."
+      },
+      {
+        "heading": "Homomorphic Retinex purpose",
+        "body": "Use this stage when scans suffer from uneven lighting, gray or stained paper, or weak ink. Retinex splits the page into illumination (shadows) and detail (strokes) so the next Binarize step sees a stable background. Recommended order: Deskew/Borders, then Enhance (Retinex), then Binarize, followed by any cleanup filters."
+      },
+      {
+        "heading": "Inputs and channel choice",
+        "body": "Input can be BGR/BGRA or Gray; output is always an 8-bit gray Mat. `Use Lab L` keeps only the lightness channel, which is usually best for paper. Disable it only when the source is already monochrome and Lab conversion hurts contrast."
+      },
+      {
+        "heading": "Sigma and detail boost",
+        "body": "`Sigma` defines how large the illumination blur is. Scans usually flatten with sigma 40-90 while photos with strong shadows may need 80-160. A quick auto estimate is min(width, height) * 0.015 for scans or 0.03 for photos, clamped to 20-160. `Gamma High` boosts high-frequency strokes; keep it near 1.6-2.0, push toward 2.4 for very faint ink, and lower it if paper texture starts turning into noise."
+      },
+      {
+        "heading": "Output modes and gamma low",
+        "body": "`LogHighpass` is the preferred pre-binarization output: it returns the detail layer and almost never collapses to solid black. `ReconstructExp` is optional and more sensitive; when you pick it, keep `Gamma Low` around 0.5-0.85 so some illumination comes back, enable `Exp Clamp` (~4.0), and leave `Robust Normalize` on so a few bright pixels do not force the preview dark."
+      },
+      {
+        "heading": "Robust normalization and Levels",
+        "body": "Keep `Robust Normalize` enabled with pLow/pHigh around 0.5/99.5. Lower pHigh to 95-98 if the background still looks gray. To push the background even whiter, optionally follow Retinex with `Levels & Gamma`: Black % 1, White % 94-96, Gamma 0.8-0.9 are safe defaults."
+      },
+      {
+        "heading": "Quick presets",
+        "body": "Photo page: Use Lab L, LogHighpass, sigma 80-140, gammaHigh 1.8-2.2, Robust Normalize on (0.5/99.5), optional Levels White 94-96 & Gamma 0.85. Gray scan: Use Lab L, LogHighpass, sigma 60-110, gammaHigh 1.4-1.8, Robust Normalize 0.5/99.5, Levels White 95 & Gamma 0.85."
+      },
+      {
+        "heading": "Troubleshooting",
+        "body": "Almost black preview: switch to LogHighpass or enable Robust Normalize + Exp Clamp when staying on ReconstructExp. Gray background: lower pHigh or add Levels with White 94-96 / Gamma 0.8-0.9. Paper texture showing as ink: raise sigma, reduce gammaHigh, or run your usual speckle filter after binarization."
+      }
+    ]
+  },
+  {
+    "id": "pagesplit",
+    "title": "Split Page",
+    "summary": "Detect the gutter and split two-up scans into separate left/right pages.",
+    "paragraphs": [
+      {
+        "heading": "When to use",
+        "body": "Enable Split Page when you scan book spreads or double pages and need two individual outputs. The operation finds the gutter, pads each side, and feeds both halves to the preview as separate panels."
+      },
+      {
+        "heading": "Pipeline order",
+        "body": "Run it after Deskew and Borders Remove so the gutter is vertical and borders are trimmed. When Split Page is active, later operations apply to each half independently, so keep it near the end of the pipeline."
+      },
+      {
+        "heading": "Key parameters",
+        "body": "- `Pad Px`: extra pixels copied from the gutter into each half so you do not cut words. Start at 24 and raise it to 40-60 for thick bindings.\n- `Min confidence`: if the final confidence drops below this value the page is left unsplit; typical values are 0.25-0.35.\n- `Use Lab confirmation`: compares brightness and texture in Lab space around the gutter to avoid false positives on handwriting or photos. Leave it on unless you work with strictly monochrome pages."
+      },
+      {
+        "heading": "How detection works",
+        "body": "The detector converts the page to BGR, builds an ink mask, smooths the vertical projection, and searches for the valley inside the central band (35-65 percent of the width). Lab confirmation then checks that the gutter is brighter and less textured than the neighbors. Confidence is a weighted mix of projection and Lab scores, so large stains reduce the final confidence."
+      },
+      {
+        "heading": "Preview behavior",
+        "body": "When Split Page succeeds both halves appear in split preview mode. Selecting a half promotes it to the large preview while the other stays blurred. Errors and low-confidence skips still go to the batch log so you can review them later."
+      },
+      {
+        "heading": "Batch output",
+        "body": "During batch save the worker emits two files per source page inside the `_splitted` folder. Naming follows `original_1.ext` for the left page and `original_2.ext` for the right, and the format matches the input (JPEG, PNG, TIFF, etc.)."
+      },
+      {
+        "heading": "Troubleshooting",
+        "body": "- Gutter missed: lower `Min confidence` slightly or make sure Borders Remove cleaned the center shadows first.\n- Words clipped: increase `Pad Px` or add a small manual border margin before this step.\n- False splits on diagrams: disable Lab confirmation temporarily or move the operation to the end so other steps do not distort the gutter."
       }
     ]
   },

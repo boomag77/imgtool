@@ -226,11 +226,11 @@ namespace ImgViewer.Models
         }
 
         private static Mat RobustNormalizeTo8U(
-    CancellationToken token,
-    Mat src32f,
-    bool robust,
-    double pLow, double pHigh,
-    int histBins)
+                                    CancellationToken token,
+                                    Mat src32f,
+                                    bool robust,
+                                    double pLow, double pHigh,
+                                    int histBins)
         {
             //token.ThrowIfCancellationRequested();
 
