@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using OpenCvSharp;
 using Size = OpenCvSharp.Size;
 
@@ -262,6 +262,36 @@ namespace ImgViewer.Models
             }
 
             // Histogram for percentiles
+            //using var hist = new Mat();
+            //var images = new[] { sample };
+            //var channels = new[] { 0 };
+            //var histSize = new[] { histBins };
+            //var ranges = new[] { new Rangef((float)minV, (float)maxV) };
+
+            //Cv2.CalcHist(images, channels, null, hist, 1, histSize, ranges, uniform: true, accumulate: false);
+
+            //double total = 0;
+            //for (int i = 0; i < histBins; i++) total += hist.Get<float>(i);
+
+            //double targetLow = total * (pLow / 100.0);
+            //double targetHigh = total * (pHigh / 100.0);
+
+            //double csum = 0;
+            //int idxLow = 0, idxHigh = histBins - 1;
+
+            //for (int i = 0; i < histBins; i++)
+            //{
+            //    csum += hist.Get<float>(i);
+            //    if (csum >= targetLow) { idxLow = i; break; }
+            //}
+
+            //csum = 0;
+            //for (int i = 0; i < histBins; i++)
+            //{
+            //    csum += hist.Get<float>(i);
+            //    if (csum >= targetHigh) { idxHigh = i; break; }
+            //}
+
             using var hist = new Mat();
             var images = new[] { sample };
             var channels = new[] { 0 };
@@ -270,26 +300,45 @@ namespace ImgViewer.Models
 
             Cv2.CalcHist(images, channels, null, hist, 1, histSize, ranges, uniform: true, accumulate: false);
 
-            double total = 0;
-            for (int i = 0; i < histBins; i++) total += hist.Get<float>(i);
+            // Быстрые проверки (полезно в debug)
+            if (hist.Type() != MatType.CV_32F)
+                throw new InvalidOperationException($"CalcHist returned {hist.Type()}, expected CV_32F.");
 
+            if (!hist.IsContinuous())
+                throw new InvalidOperationException("Histogram Mat is not continuous; pointer walk would be unsafe.");
+
+            // total = количество выборок (пикселей) в sample, т.к. mask=null
+            double total = (double)sample.Total();
+
+            // целевые квантили
             double targetLow = total * (pLow / 100.0);
             double targetHigh = total * (pHigh / 100.0);
 
-            double csum = 0;
+            // один проход по бинам
             int idxLow = 0, idxHigh = histBins - 1;
+            double csum = 0;
+            bool gotLow = false;
 
-            for (int i = 0; i < histBins; i++)
+            unsafe
             {
-                csum += hist.Get<float>(i);
-                if (csum >= targetLow) { idxLow = i; break; }
-            }
+                float* h = (float*)hist.DataPointer;
 
-            csum = 0;
-            for (int i = 0; i < histBins; i++)
-            {
-                csum += hist.Get<float>(i);
-                if (csum >= targetHigh) { idxHigh = i; break; }
+                for (int i = 0; i < histBins; i++)
+                {
+                    csum += h[i];
+
+                    if (!gotLow && csum >= targetLow)
+                    {
+                        idxLow = i;
+                        gotLow = true;
+                    }
+
+                    if (csum >= targetHigh)
+                    {
+                        idxHigh = i;
+                        break;
+                    }
+                }
             }
 
             double span = (maxV - minV);

@@ -200,7 +200,7 @@ namespace ImgViewer.Models
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 _mainViewModel.ImageOnPreview = bmp;
-            }, System.Windows.Threading.DispatcherPriority.Render);
+            }, System.Windows.Threading.DispatcherPriority.Background);
         }
 
         public void SetSplitPreviewImages(ImageSource left, ImageSource right)
@@ -218,7 +218,7 @@ namespace ImgViewer.Models
             else
             {
                 dispatcher.InvokeAsync(() => _mainViewModel.SetSplitPreviewImages(left, right),
-                    System.Windows.Threading.DispatcherPriority.Render);
+                    System.Windows.Threading.DispatcherPriority.Normal);
             }
         }
 
@@ -232,7 +232,7 @@ namespace ImgViewer.Models
             else
             {
                 dispatcher.InvokeAsync(() => _mainViewModel.ClearSplitPreviewImages(),
-                    System.Windows.Threading.DispatcherPriority.Render);
+                    System.Windows.Threading.DispatcherPriority.Normal);
             }
         }
 
@@ -244,7 +244,7 @@ namespace ImgViewer.Models
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 _mainViewModel.OriginalImage = bmp;
-            }, System.Windows.Threading.DispatcherPriority.Render);
+            }, System.Windows.Threading.DispatcherPriority.Background);
             UpdateStatus("Standby");
         }
 
