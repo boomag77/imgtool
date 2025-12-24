@@ -123,7 +123,7 @@ namespace ImgViewer.Models
                             buttonText,
                             new[]
                             {
-                                new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA" }, 0),
+                                new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments" }, 0),
                                 new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
                                 new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
                                 new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),

@@ -13,7 +13,8 @@ public class Deskewer
         ByBorders,
         Hough,
         Projection,
-        PCA
+        PCA,
+        Moments
     }
     private static double GetSkewAngleByBorders(CancellationToken token, Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150,
                                int morphKernel = 5, double minAreaFraction = 0.2)
@@ -194,8 +195,21 @@ public class Deskewer
         else if (method == DeskewMethod.PCA)
         {
             double pcaAngle = GetSkewAngleByPCA(token, src);
+            pcaAngle = -pcaAngle;
             Debug.WriteLine($"Deskew: angle by PCA = {pcaAngle:F3}");
             finalAngle = pcaAngle;
+            if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
+                return src.Clone();
+        }
+        else if (method == DeskewMethod.Moments)
+        {
+            double momentsAngle;
+            using (var momentsMask = BinarizeToMask(src))
+            {
+                momentsAngle = GetSkewAngleByMoments(token, momentsMask);
+            }
+            Debug.WriteLine($"Deskew: angle by Moments = {momentsAngle:F3}");
+            finalAngle = momentsAngle;
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
                 return src.Clone();
         }
@@ -213,11 +227,20 @@ public class Deskewer
 
             
             double pcaAngle = GetSkewAngleByPCA(token, src);
+            pcaAngle = -pcaAngle;
             Debug.WriteLine($"Deskew: angle by PCA = {pcaAngle:F3}");
+
+            double momentsAngle = double.NaN;
+            using (var momentsMask = BinarizeToMask(src))
+            {
+                momentsAngle = GetSkewAngleByMoments(token, momentsMask);
+            }
+            Debug.WriteLine($"Deskew: angle by Moments = {momentsAngle:F3}");
 
             //double finalAngle = double.NaN;
             if (!double.IsNaN(houghAngle)) finalAngle = houghAngle;
             if (double.IsNaN(finalAngle) && !double.IsNaN(pcaAngle)) finalAngle = pcaAngle;
+            if (double.IsNaN(finalAngle) && !double.IsNaN(momentsAngle)) finalAngle = momentsAngle;
             if (double.IsNaN(finalAngle)) finalAngle = projAngle;
 
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
@@ -275,7 +298,9 @@ public class Deskewer
         using var big = new Mat(new OpenCvSharp.Size(bigW, bigH), MatType.CV_8UC3, bgScalar);
         int offX = (bigW - src.Width) / 2;
         int offY = (bigH - src.Height) / 2;
-        src.CopyTo(new Mat(big, new Rect(offX, offY, src.Width, src.Height)));
+        var srcRect = new Rect(offX, offY, src.Width, src.Height);
+        src.CopyTo(new Mat(big, srcRect));
+        FeatherEdges(big, srcRect, bgScalar, featherPx: 6);
 
         var M = Cv2.GetRotationMatrix2D(centerBig, rotation, 1.0);
         using var rotatedBig = new Mat();
@@ -423,11 +448,37 @@ public class Deskewer
         return fallback;
     }
 
+    private static double GetSkewAngleByMoments(CancellationToken token, Mat mask)
+    {
+        token.ThrowIfCancellationRequested();
+
+        // binaryImage:true => OpenCV считает non-zero как 1 (не важно 1 или 255)
+        var m = Cv2.Moments(mask, binaryImage: true);
+
+        // если слишком мало пикселей (маска пустая) — не доверяем углу
+        if (m.M00 < 50) return double.NaN;
+
+        // orientation of second central moments:
+        // theta = 0.5 * atan2(2*mu11, mu20 - mu02)
+        double mu11 = m.Mu11;
+        double mu20 = m.Mu20;
+        double mu02 = m.Mu02;
+
+        double angleRad = 0.5 * Math.Atan2(2.0 * mu11, (mu20 - mu02));
+        double angle = angleRad * 180.0 / Math.PI;
+
+        // normalize to [-90, 90)
+        if (angle > 90) angle -= 180;
+        if (angle <= -90) angle += 180;
+
+        return angle;
+    }
+
 
     private static Mat BinarizeToMask(Mat src)
     {
         // возвращаем CV_8UC1 маску (0/255)
-        Mat gray = new Mat();
+        var gray = new Mat();
         if (src.Channels() == 3) Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
         else if (src.Channels() == 4) Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
         else gray = src.Clone(); // 1 канал
@@ -441,6 +492,47 @@ public class Deskewer
         // gray может быть удалён вызывающим кодом, вернём bin
         return bin;
     }
+
+    private static void FeatherEdges(Mat img, Rect roi, Scalar bg, int featherPx)
+    {
+        if (featherPx <= 0)
+            return;
+        if (img.Type() != MatType.CV_8UC3)
+            return;
+
+        int x0 = roi.X;
+        int y0 = roi.Y;
+        int x1 = roi.X + roi.Width - 1;
+        int y1 = roi.Y + roi.Height - 1;
+        if (x0 < 0 || y0 < 0 || x1 >= img.Cols || y1 >= img.Rows)
+            return;
+
+        byte bb = (byte)ClampByte((int)Math.Round(bg.Val0));
+        byte bgG = (byte)ClampByte((int)Math.Round(bg.Val1));
+        byte br = (byte)ClampByte((int)Math.Round(bg.Val2));
+
+        var idx = img.GetGenericIndexer<Vec3b>();
+        for (int y = y0; y <= y1; y++)
+        {
+            int dy = Math.Min(y - y0, y1 - y);
+            for (int x = x0; x <= x1; x++)
+            {
+                int dx = Math.Min(x - x0, x1 - x);
+                int d = Math.Min(dx, dy);
+                if (d >= featherPx)
+                    continue;
+
+                double a = (d + 1.0) / (featherPx + 1.0);
+                var v = idx[y, x];
+                v.Item0 = (byte)ClampByte((int)Math.Round(v.Item0 * a + bb * (1.0 - a)));
+                v.Item1 = (byte)ClampByte((int)Math.Round(v.Item1 * a + bgG * (1.0 - a)));
+                v.Item2 = (byte)ClampByte((int)Math.Round(v.Item2 * a + br * (1.0 - a)));
+                idx[y, x] = v;
+            }
+        }
+    }
+
+    private static int ClampByte(int v) => v < 0 ? 0 : (v > 255 ? 255 : v);
 
     private static Mat CropOrPadToOriginal(Mat bigImg, int targetW, int targetH, Point2f keepCenter)
     {
@@ -608,6 +700,7 @@ public class Deskewer
         float vy = eigenvectors.At<float>(0, 1);
 
         double angle = Math.Atan2(vy, vx) * 180.0 / Math.PI;
+        angle = -angle;
         if (angle > 90) angle -= 180;
         if (angle <= -90) angle += 180;
         return angle;

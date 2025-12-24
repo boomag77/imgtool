@@ -3160,6 +3160,11 @@ namespace ImgViewer.Models
                                 result.Method = Deskewer.DeskewMethod.PCA;
                                 result.byBorders = false;
                             }
+                            else if (s.Equals("Moments", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Method = Deskewer.DeskewMethod.Moments;
+                                result.byBorders = false;
+                            }
                             else
                             {
                                 result.Method = Deskewer.DeskewMethod.Auto;
