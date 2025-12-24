@@ -237,9 +237,13 @@ public class Despeckler
                 //int projThr = Math.Max(1, binCols / 100);
                 int projThr = Math.Max(10, binCols / 40); // ~2.5% заполняемости строки
 
-                var textRows = new HashSet<int>(
-                    Enumerable.Range(0, binRows).Where(y => horProj[y] > projThr)
-                );
+                //var textRows = new HashSet<int>(
+                //    Enumerable.Range(0, binRows).Where(y => horProj[y] > projThr)
+                //);
+
+                var textRowFlags = new bool[binRows];
+                for (int y = 0; y < binRows; y++)
+                    textRowFlags[y] = horProj[y] > projThr;
 
                 Point Center(Rect r) => new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
 
@@ -270,9 +274,48 @@ public class Despeckler
                 int rowCheckRange = Math.Max(1, medianHeight / 3);
                 int clusterHoriz = Math.Max(3, (int)(medianHeight * 0.6));
 
-                foreach (var c in smallComps)
+                // ---- Precompute centers once (huge win even without grid) ----
+                var smallCenters = new Point[smallComps.Length];
+                for (int i = 0; i < smallComps.Length; i++)
+                    smallCenters[i] = Center(smallComps[i].bbox);
+
+                // ---- Build grid buckets only if KeepClusters enabled ----
+                List<int>[]? buckets = null;
+                int cellW = 0, cellH = 0, gridW = 0, gridH = 0;
+
+                if (settings.KeepClusters && smallComps.Length > 1)
                 {
-                    token.ThrowIfCancellationRequested();
+                    // Cell sizes: pick thresholds so neighbors are in same/adjacent buckets
+                    cellW = Math.Max(1, clusterHoriz);     // horizontal threshold
+                    cellH = Math.Max(1, rowCheckRange);    // vertical threshold
+
+                    gridW = (binCols + cellW - 1) / cellW;
+                    gridH = (binRows + cellH - 1) / cellH;
+
+                    buckets = new List<int>[gridW * gridH];
+                    for (int k = 0; k < buckets.Length; k++)
+                        buckets[k] = new List<int>();
+
+                    for (int i = 0; i < smallCenters.Length; i++)
+                    {
+                        var p = smallCenters[i];
+
+                        int gx = p.X / cellW;
+                        int gy = p.Y / cellH;
+
+                        if (gx < 0) gx = 0; else if (gx >= gridW) gx = gridW - 1;
+                        if (gy < 0) gy = 0; else if (gy >= gridH) gy = gridH - 1;
+
+                        buckets[gx + gy * gridW].Add(i); // store index of smallComps
+                    }
+                }
+
+                double radiusSq = proximityRadius * proximityRadius;
+                for (int i = 0; i < smallComps.Length; i++)
+                {
+                    if ((i & 127) == 0) token.ThrowIfCancellationRequested();
+
+                    var c = smallComps[i];
                     var rect = c.bbox;
                     var center = Center(rect);
 
@@ -285,7 +328,7 @@ public class Despeckler
                     //}
                     //bool nearBig = minDistToBig < proximityRadius;
 
-                    double radiusSq = proximityRadius * proximityRadius;
+                    
 
                     double minD2 = double.MaxValue;
                     foreach (var br in bigBoxes)
@@ -300,13 +343,14 @@ public class Despeckler
 
                     // --- 2. попадает ли компонент в текстовую полосу по horProj/textRows ---
                     bool onTextLine = false;
-                    if (textRows.Count > 0)
+                    if (textRowFlags.Length > 0)
                     {
                         for (int ry = Math.Max(0, center.Y - rowCheckRange);
                              ry <= Math.Min(binRows - 1, center.Y + rowCheckRange);
                              ry++)
                         {
-                            if (textRows.Contains(ry)) { onTextLine = true; break; }
+                            //if (textRows.Contains(ry)) { onTextLine = true; break; }
+                            if (textRowFlags[ry]) { onTextLine = true; break; }
                         }
                     }
 
@@ -325,22 +369,65 @@ public class Despeckler
 
                     bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
 
-                    bool partOfCluster = false;
-                    if (settings.KeepClusters)
-                    {
-                        foreach (var c2 in smallComps)
-                        {
-                            if (c2.label == c.label) continue;
+                    //bool partOfCluster = false;
+                    //if (settings.KeepClusters)
+                    //{
+                    //    foreach (var c2 in smallComps)
+                    //    {
+                    //        if (c2.label == c.label) continue;
 
-                            var c2Center = Center(c2.bbox);
-                            if (Math.Abs(c2Center.Y - center.Y) <= rowCheckRange &&
-                                Math.Abs(c2Center.X - center.X) <= clusterHoriz)
+                    //        var c2Center = Center(c2.bbox);
+                    //        if (Math.Abs(c2Center.Y - center.Y) <= rowCheckRange &&
+                    //            Math.Abs(c2Center.X - center.X) <= clusterHoriz)
+                    //        {
+                    //            partOfCluster = true;
+                    //            break;
+                    //        }
+                    //    }
+                    //}
+                    bool partOfCluster = false;
+
+                    if (buckets != null) // значит KeepClusters == true и индекс построен
+                    {
+                        int gx = center.X / cellW;
+                        int gy = center.Y / cellH;
+
+                        if (gx < 0) gx = 0; else if (gx >= gridW) gx = gridW - 1;
+                        if (gy < 0) gy = 0; else if (gy >= gridH) gy = gridH - 1;
+
+                        // Проверяем текущую клетку и 8 соседних (3x3)
+                        for (int yy = Math.Max(0, gy - 1); yy <= Math.Min(gridH - 1, gy + 1) && !partOfCluster; yy++)
+                        {
+                            for (int xx = Math.Max(0, gx - 1); xx <= Math.Min(gridW - 1, gx + 1) && !partOfCluster; xx++)
                             {
-                                partOfCluster = true;
-                                break;
+                                var list = buckets[xx + yy * gridW];
+                                for (int t = 0; t < list.Count; t++)
+                                {
+                                    int j = list[t];
+                                    if (j == i) continue; // тот же компонент
+
+                                    // сравнение по label (как у тебя было)
+                                    if (smallComps[j].label == c.label) continue;
+
+                                    var p2 = smallCenters[j];
+
+                                    if (Math.Abs(p2.Y - center.Y) <= rowCheckRange &&
+                                        Math.Abs(p2.X - center.X) <= clusterHoriz)
+                                    {
+                                        partOfCluster = true;
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
+                    else if (settings.KeepClusters)
+                    {
+                        // fallback (на случай если smallComps.Length <= 1 или индекс не построен)
+                        // можно оставить пустым: partOfCluster останется false
+                    }
+
+
 
                     // Более строгая защита: только в текстовой зоне
                     if (nearBig || (onTextLine && squareLike) || (onTextLine && partOfCluster))
