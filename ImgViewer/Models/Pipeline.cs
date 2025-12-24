@@ -382,7 +382,7 @@ namespace ImgViewer.Models
                             buttonText,
                             new[]
                             {
-                                new PipeLineParameter("Padding (px)", "padPx", 100, 0, 200, 1),
+                                new PipeLineParameter("Padding (%)", "padPercent", 1.0, 0.0, 20.0, 0.1),
                                 new PipeLineParameter("Min confidence", "minConfidence", 0.01, 0.0, 1.0, 0.01),
                                 new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true)
                             },

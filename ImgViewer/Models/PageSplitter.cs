@@ -17,8 +17,12 @@ public sealed class PageSplitter
         public double CentralBandStart = 0.35; // 35% of width
         public double CentralBandEnd = 0.65; // 65% of width
 
-        // Extra pixels added to each side from the split line (to avoid cutting near-gutter text)
-        public int PadPx = 24;
+        // Extra padding added to each side from the split line (to avoid cutting near-gutter text)
+        // Percent of original width (e.g., 1.0 = 1%).
+        public double PadPercent = 1.0;
+
+        // Legacy: absolute pixels, used only when PadPercent is not provided.
+        public int PadPx = 0;
 
         // Performance: downscale for analysis only (cropping is done on original)
         public int AnalysisMaxWidth = 1400;
@@ -164,7 +168,9 @@ public sealed class PageSplitter
         int splitX_Orig = scale == 1.0 ? splitX_A : (int)Math.Round(splitX_A / scale);
 
         // 11) Crop from ORIGINAL src (not analysis!) with padding
-        int pad = Math.Max(0, _s.PadPx);
+        int pad = _s.PadPercent > 0
+            ? (int)Math.Round(origW * (_s.PadPercent / 100.0))
+            : Math.Max(0, _s.PadPx);
         int leftW = Clamp(splitX_Orig + pad, 1, origW);
         int rightX = Clamp(splitX_Orig - pad, 0, origW - 1);
         int rightW = Clamp(origW - rightX, 1, origW);
@@ -466,6 +472,8 @@ public sealed class PageSplitter
 
         s.CloseKernelWidthFrac = Clamp(s.CloseKernelWidthFrac, 0.005, 0.12);
         s.CloseKernelHeightPx = Clamp(s.CloseKernelHeightPx, 1, 25);
+
+        s.PadPercent = Clamp(s.PadPercent, 0.0, 20.0);
 
         s.WeightProjection = Math.Max(0, s.WeightProjection);
         s.WeightLab = Math.Max(0, s.WeightLab);

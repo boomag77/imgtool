@@ -2255,15 +2255,25 @@ namespace ImgViewer.Models
         {
             var settings = new PageSplitter.Settings
             {
-                PadPx = 24,
+                PadPercent = 1.0,
                 MinConfidence = 0.30,
                 UseLabConfirmation = true
             };
 
             if (parameters != null)
             {
-                if (parameters.TryGetValue("padPx", out var padObj))
+                bool hasPadPercent = false;
+                if (parameters.TryGetValue("padPercent", out var padPercentObj))
+                {
+                    settings.PadPercent = SafeDouble(padPercentObj, settings.PadPercent);
+                    hasPadPercent = true;
+                }
+
+                if (!hasPadPercent && parameters.TryGetValue("padPx", out var padObj))
+                {
                     settings.PadPx = SafeInt(padObj, settings.PadPx);
+                    settings.PadPercent = 0.0;
+                }
 
                 if (parameters.TryGetValue("minConfidence", out var confObj))
                     settings.MinConfidence = SafeDouble(confObj, settings.MinConfidence);
