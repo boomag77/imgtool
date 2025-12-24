@@ -887,8 +887,9 @@ namespace ImgViewer.Models
                             return Binarizer.Binarize(src, binParams.Method, binParams);
 
                         case ProcessorCommand.Enhance:
-                            return ApplyEnhanceCommand(src, parameters ?? new Dictionary<string, object>());
-
+                            if (TryApplyEnhanceCommand(src, _token, parameters ?? new Dictionary<string, object>(), out Mat? result))
+                                return result!;
+                            break;
                         case ProcessorCommand.Deskew:
 
                             //foreach (var kv in parameters)
@@ -1570,142 +1571,162 @@ namespace ImgViewer.Models
             return src.Clone();
         }
 
-        private Mat ApplyEnhanceCommand(Mat src, Dictionary<string, object> parameters)
+        private bool TryApplyEnhanceCommand(Mat src, CancellationToken token, Dictionary<string, object> parameters, out Mat? result)
         {
-            string? method = null;
-            if (parameters.TryGetValue("enhanceMethod", out var methodObj))
-                method = methodObj?.ToString();
-
-            string methodName = method?.Trim() ?? string.Empty;
-            bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
-            bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
-                            methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
-
-            if (isRetinex)
+            try
             {
-                var outputMode = Enhancer.RetinexOutputMode.LogHighpass;
-                bool useLabL = true;
-                double sigma = 50.0;
-                double gammaHigh = 1.6;
-                double gammaLow = 0.7;
-                double eps = 1e-6;
-                bool robustNormalize = true;
-                double percentLow = 0.5;
-                double percentHigh = 99.5;
-                int histBins = 2048;
-                double expClampAbs = 4.0;
+                string? method = null;
+                if (parameters.TryGetValue("enhanceMethod", out var methodObj))
+                    method = methodObj?.ToString();
 
-                foreach (var kv in parameters)
+                string methodName = method?.Trim() ?? string.Empty;
+                bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
+                bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
+                                methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
+
+                if (isRetinex)
                 {
-                    switch (kv.Key)
+                    var outputMode = Enhancer.RetinexOutputMode.LogHighpass;
+                    bool useLabL = true;
+                    double sigma = 50.0;
+                    double gammaHigh = 1.6;
+                    double gammaLow = 0.7;
+                    double eps = 1e-6;
+                    bool robustNormalize = true;
+                    double percentLow = 0.5;
+                    double percentHigh = 99.5;
+                    int histBins = 2048;
+                    double expClampAbs = 4.0;
+
+                    foreach (var kv in parameters)
                     {
-                        case "retinexOutputMode":
-                            var modeStr = kv.Value?.ToString();
-                            if (!string.IsNullOrWhiteSpace(modeStr) &&
-                                Enum.TryParse(modeStr, true, out Enhancer.RetinexOutputMode parsedMode))
-                            {
-                                outputMode = parsedMode;
-                            }
-                            break;
-                        case "retinexUseLabL":
-                            useLabL = SafeBool(kv.Value, useLabL);
-                            break;
-                        case "retinexSigma":
-                            sigma = SafeDouble(kv.Value, sigma);
-                            break;
-                        case "retinexGammaHigh":
-                            gammaHigh = SafeDouble(kv.Value, gammaHigh);
-                            break;
-                        case "retinexGammaLow":
-                            gammaLow = SafeDouble(kv.Value, gammaLow);
-                            break;
-                        case "retinexEps":
-                            eps = SafeDouble(kv.Value, eps);
-                            break;
-                        case "retinexRobustNormalize":
-                            robustNormalize = SafeBool(kv.Value, robustNormalize);
-                            break;
-                        case "retinexPercentLow":
-                            percentLow = SafeDouble(kv.Value, percentLow);
-                            break;
-                        case "retinexPercentHigh":
-                            percentHigh = SafeDouble(kv.Value, percentHigh);
-                            break;
-                        case "retinexHistBins":
-                            histBins = SafeInt(kv.Value, histBins);
-                            break;
-                        case "retinexExpClamp":
-                            expClampAbs = SafeDouble(kv.Value, expClampAbs);
-                            break;
+                        switch (kv.Key)
+                        {
+                            case "retinexOutputMode":
+                                var modeStr = kv.Value?.ToString();
+                                if (!string.IsNullOrWhiteSpace(modeStr) &&
+                                    Enum.TryParse(modeStr, true, out Enhancer.RetinexOutputMode parsedMode))
+                                {
+                                    outputMode = parsedMode;
+                                }
+                                break;
+                            case "retinexUseLabL":
+                                useLabL = SafeBool(kv.Value, useLabL);
+                                break;
+                            case "retinexSigma":
+                                sigma = SafeDouble(kv.Value, sigma);
+                                break;
+                            case "retinexGammaHigh":
+                                gammaHigh = SafeDouble(kv.Value, gammaHigh);
+                                break;
+                            case "retinexGammaLow":
+                                gammaLow = SafeDouble(kv.Value, gammaLow);
+                                break;
+                            case "retinexEps":
+                                eps = SafeDouble(kv.Value, eps);
+                                break;
+                            case "retinexRobustNormalize":
+                                robustNormalize = SafeBool(kv.Value, robustNormalize);
+                                break;
+                            case "retinexPercentLow":
+                                percentLow = SafeDouble(kv.Value, percentLow);
+                                break;
+                            case "retinexPercentHigh":
+                                percentHigh = SafeDouble(kv.Value, percentHigh);
+                                break;
+                            case "retinexHistBins":
+                                histBins = SafeInt(kv.Value, histBins);
+                                break;
+                            case "retinexExpClamp":
+                                expClampAbs = SafeDouble(kv.Value, expClampAbs);
+                                break;
+                        }
                     }
+
+                    percentLow = Math.Max(0.0, Math.Min(50.0, percentLow));
+                    percentHigh = Math.Max(percentLow + 0.1, Math.Min(100.0, percentHigh));
+                    histBins = Math.Max(32, Math.Min(8192, histBins));
+                    expClampAbs = Math.Max(0.5, expClampAbs);
+
+                    result = Enhancer.HomomorphicRetinex(
+                        token,
+                        src,
+                        outputMode,
+                        useLabL,
+                        Math.Max(0.1, sigma),
+                        Math.Max(0.1, gammaHigh),
+                        Math.Max(0.01, gammaLow),
+                        Math.Max(1e-8, eps),
+                        robustNormalize,
+                        percentLow,
+                        percentHigh,
+                        histBins,
+                        expClampAbs);
+                    return true;
                 }
 
-                percentLow = Math.Max(0.0, Math.Min(50.0, percentLow));
-                percentHigh = Math.Max(percentLow + 0.1, Math.Min(100.0, percentHigh));
-                histBins = Math.Max(32, Math.Min(8192, histBins));
-                expClampAbs = Math.Max(0.5, expClampAbs);
+                if (isLevels)
+                {
+                    double blackPct = 1.0;
+                    double whitePct = 95.0;
+                    double levelsGamma = 0.85;
+                    double targetWhite = 255.0;
 
-                return Enhancer.HomomorphicRetinex(
-                    _token,
+                    foreach (var kv in parameters)
+                    {
+                        switch (kv.Key)
+                        {
+                            case "levelsBlackPercent":
+                                blackPct = SafeDouble(kv.Value, blackPct);
+                                break;
+                            case "levelsWhitePercent":
+                                whitePct = SafeDouble(kv.Value, whitePct);
+                                break;
+                            case "levelsGamma":
+                                levelsGamma = SafeDouble(kv.Value, levelsGamma);
+                                break;
+                            case "levelsTargetWhite":
+                                targetWhite = SafeDouble(kv.Value, targetWhite);
+                                break;
+                        }
+                    }
+
+                    result = ApplyLevelsAndGamma(src, token, blackPct, whitePct, levelsGamma, targetWhite);
+                    return true;
+                }
+
+                double claheClipLimit = 4.0;
+                int claheGridSize = 8;
+
+                if (parameters.TryGetValue("claheClipLimit", out var clipObj))
+                    claheClipLimit = SafeDouble(clipObj, claheClipLimit);
+                if (parameters.TryGetValue("claheGridSize", out var gridObj))
+                    claheGridSize = SafeInt(gridObj, claheGridSize);
+
+                result = Enhancer.ApplyClahe(
+                    token,
                     src,
-                    outputMode,
-                    useLabL,
-                    Math.Max(0.1, sigma),
-                    Math.Max(0.1, gammaHigh),
-                    Math.Max(0.01, gammaLow),
-                    Math.Max(1e-8, eps),
-                    robustNormalize,
-                    percentLow,
-                    percentHigh,
-                    histBins,
-                    expClampAbs);
+                    Math.Max(0.1, claheClipLimit),
+                    Math.Max(1, claheGridSize));
+                return true;
             }
-
-            if (isLevels)
+            catch (OperationCanceledException)
             {
-                double blackPct = 1.0;
-                double whitePct = 95.0;
-                double levelsGamma = 0.85;
-                double targetWhite = 255.0;
-
-                foreach (var kv in parameters)
-                {
-                    switch (kv.Key)
-                    {
-                        case "levelsBlackPercent":
-                            blackPct = SafeDouble(kv.Value, blackPct);
-                            break;
-                        case "levelsWhitePercent":
-                            whitePct = SafeDouble(kv.Value, whitePct);
-                            break;
-                        case "levelsGamma":
-                            levelsGamma = SafeDouble(kv.Value, levelsGamma);
-                            break;
-                        case "levelsTargetWhite":
-                            targetWhite = SafeDouble(kv.Value, targetWhite);
-                            break;
-                    }
-                }
-
-                return ApplyLevelsAndGamma(src, blackPct, whitePct, levelsGamma, targetWhite);
+#if DEBUG
+                Debug.WriteLine("Enhance process cancelled!");
+#endif
+                result = null;
+                return false;
             }
-
-            double claheClipLimit = 4.0;
-            int claheGridSize = 8;
-
-            if (parameters.TryGetValue("claheClipLimit", out var clipObj))
-                claheClipLimit = SafeDouble(clipObj, claheClipLimit);
-            if (parameters.TryGetValue("claheGridSize", out var gridObj))
-                claheGridSize = SafeInt(gridObj, claheGridSize);
-
-            return Enhancer.ApplyClahe(
-                _token,
-                src,
-                Math.Max(0.1, claheClipLimit),
-                Math.Max(1, claheGridSize));
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Error in Enhance module: {ex.Message}");
+                result = null;
+                return false;
+            }
         }
 
-        private Mat ApplyLevelsAndGamma(Mat src, double blackPct, double whitePct, double gamma, double targetWhite)
+        private Mat ApplyLevelsAndGamma(Mat src, CancellationToken token, double blackPct, double whitePct, double gamma, double targetWhite)
         {
             if (src == null || src.Empty())
                 return src?.Clone() ?? new Mat();
@@ -1723,7 +1744,7 @@ namespace ImgViewer.Models
                 else
                     src.ConvertTo(gray8, MatType.CV_8UC1);
 
-                var leveled = Enhancer.LevelsAndGamma8U(gray8, clampedBlack, clampedWhite, clampedGamma, whiteTarget);
+                var leveled = Enhancer.LevelsAndGamma8U( gray8, _token, clampedBlack, clampedWhite, clampedGamma, whiteTarget);
                 gray8.Dispose();
 
                 var colored = new Mat();
@@ -1745,7 +1766,7 @@ namespace ImgViewer.Models
             var channels = lab.Split();
             try
             {
-                var leveledL = Enhancer.LevelsAndGamma8U(channels[0], clampedBlack, clampedWhite, clampedGamma, whiteTarget);
+                var leveledL = Enhancer.LevelsAndGamma8U(channels[0], _token, clampedBlack, clampedWhite, clampedGamma, whiteTarget);
                 channels[0].Dispose();
                 channels[0] = leveledL;
 

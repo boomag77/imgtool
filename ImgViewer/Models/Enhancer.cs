@@ -44,6 +44,7 @@ namespace ImgViewer.Models
 
             // --- 2) ??????? ??????????? ? ???????? ????? Lab ? L-????? ---
             // ???????? ? BGR 8UC3, ???? ????? ??? ??????
+            token.ThrowIfCancellationRequested();
             Mat bgr = null;
             bool needDisposeBgr = false;
 
@@ -158,7 +159,7 @@ namespace ImgViewer.Models
             using var high = new Mat();
             Cv2.Subtract(logI, low, high);
 
-            //token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
 
             if (outputMode == RetinexOutputMode.LogHighpass)
             {
@@ -232,7 +233,7 @@ namespace ImgViewer.Models
                                     double pLow, double pHigh,
                                     int histBins)
         {
-            //token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
 
             var dst8u = new Mat();
 
@@ -325,6 +326,7 @@ namespace ImgViewer.Models
 
                 for (int i = 0; i < histBins; i++)
                 {
+                    token.ThrowIfCancellationRequested();
                     csum += h[i];
 
                     if (!gotLow && csum >= targetLow)
@@ -368,6 +370,7 @@ namespace ImgViewer.Models
 
         public static Mat LevelsAndGamma8U(
                             Mat src8u,
+                            CancellationToken token,
                             double blackPct = 1.0,
                             double whitePct = 95.0,
                             double gamma = 0.85,      // <1 => brighten mids (background whiter)
@@ -411,7 +414,7 @@ namespace ImgViewer.Models
             }
 
             if (white <= black) { black = 0; white = 255; }
-
+            token.ThrowIfCancellationRequested();
             // build LUT
             var lut = new byte[256];
             double denom = Math.Max(1.0, white - black);
