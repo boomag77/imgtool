@@ -128,7 +128,12 @@ namespace ImgViewer.Models
                                 new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
                                 new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
                                 new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
-                                new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1)
+                                new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1),
+                                new PipeLineParameter("Hough max line gap", "maxLineGap", 20, 0, 500, 1),
+                                new PipeLineParameter("Projection min angle", "projMinAngle", -15.0, -45.0, 0.0, 0.5),
+                                new PipeLineParameter("Projection max angle", "projMaxAngle", 15.0, 0.0, 45.0, 0.5),
+                                new PipeLineParameter("Projection coarse step", "projCoarseStep", 1.0, 0.1, 5.0, 0.1),
+                                new PipeLineParameter("Projection refine step", "projRefineStep", 0.2, 0.05, 2.0, 0.05)
                             },
                             op => ExecuteManagerCommand(
                                 ProcessorCommand.Deskew,
@@ -155,7 +160,7 @@ namespace ImgViewer.Models
                                 // Auto
                                 new PipeLineParameter("Auto Threshold", "autoThresh", true),
                                 new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
-                                new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 1.0, 0.01),
+                                new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 3.0, 0.01),
                                 new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 0, 255, 1),
                                 new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
                                 new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 0, 2_000_000, 1),

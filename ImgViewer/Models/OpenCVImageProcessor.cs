@@ -3065,14 +3065,31 @@ namespace ImgViewer.Models
 
         public static Deskewer.Parameters ParseParametersSimple(Dictionary<string, object>? parameters)
         {
+            const int defaultCanny1 = 50;
+            const int defaultCanny2 = 150;
+            const int defaultMorphKernel = 5;
+            const int defaultHoughThreshold = 80;
+            const int defaultMinLineLength = 200;
+            const int defaultMaxLineGap = 20;
+            const double defaultProjMinAngle = -15.0;
+            const double defaultProjMaxAngle = 15.0;
+            const double defaultProjCoarseStep = 1.0;
+            const double defaultProjRefineStep = 0.2;
+
             var result = new Deskewer.Parameters
             {
+                Method = Deskewer.DeskewMethod.Auto,
                 byBorders = false,
-                cTresh1 = 50,
-                cTresh2 = 150,
-                morphKernel = 5,
-                houghTreshold = 80,
-                minLineLength = 200
+                cTresh1 = defaultCanny1,
+                cTresh2 = defaultCanny2,
+                morphKernel = defaultMorphKernel,
+                houghTreshold = defaultHoughThreshold,
+                minLineLength = defaultMinLineLength,
+                maxLineGap = defaultMaxLineGap,
+                projMinAngle = defaultProjMinAngle,
+                projMaxAngle = defaultProjMaxAngle,
+                projCoarseStep = defaultProjCoarseStep,
+                projRefineStep = defaultProjRefineStep
             };
 
             if (parameters == null || parameters.Count == 0) return result;
@@ -3099,6 +3116,21 @@ namespace ImgViewer.Models
                 }
             }
 
+            double SafeDouble(object? v, double def)
+            {
+                if (v == null) return def;
+                try
+                {
+                    return Convert.ToDouble(v, CultureInfo.InvariantCulture);
+                }
+                catch
+                {
+                    if (double.TryParse(v.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                        return d;
+                    return def;
+                }
+            }
+
             foreach (var kv in parameters)
             {
                 if (kv.Key == null) continue;
@@ -3108,9 +3140,31 @@ namespace ImgViewer.Models
                     case "deskewAlgorithm":
                         {
                             var s = kv.Value?.ToString() ?? "Auto";
-                            // original logic: treat anything that is not "Auto" as byBorders=true
-                            // If you want only explicit "ByBorders" to set true, change the condition accordingly.
-                            result.byBorders = !s.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+                            if (s.Equals("ByBorders", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Method = Deskewer.DeskewMethod.ByBorders;
+                                result.byBorders = true;
+                            }
+                            else if (s.Equals("Hough", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Method = Deskewer.DeskewMethod.Hough;
+                                result.byBorders = false;
+                            }
+                            else if (s.Equals("Projection", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Method = Deskewer.DeskewMethod.Projection;
+                                result.byBorders = false;
+                            }
+                            else if (s.Equals("PCA", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Method = Deskewer.DeskewMethod.PCA;
+                                result.byBorders = false;
+                            }
+                            else
+                            {
+                                result.Method = Deskewer.DeskewMethod.Auto;
+                                result.byBorders = false;
+                            }
                         }
                         break;
 
@@ -3137,10 +3191,45 @@ namespace ImgViewer.Models
                         result.houghTreshold = SafeInt(kv.Value, result.houghTreshold);
                         break;
 
+                    case "maxLineGap":
+                        result.maxLineGap = SafeInt(kv.Value, result.maxLineGap);
+                        break;
+
+                    case "projMinAngle":
+                        result.projMinAngle = SafeDouble(kv.Value, result.projMinAngle);
+                        break;
+
+                    case "projMaxAngle":
+                        result.projMaxAngle = SafeDouble(kv.Value, result.projMaxAngle);
+                        break;
+
+                    case "projCoarseStep":
+                        result.projCoarseStep = SafeDouble(kv.Value, result.projCoarseStep);
+                        break;
+
+                    case "projRefineStep":
+                        result.projRefineStep = SafeDouble(kv.Value, result.projRefineStep);
+                        break;
+
                     default:
                         // unknown key: ignore
                         break;
                 }
+            }
+
+            if (result.Method == Deskewer.DeskewMethod.Auto)
+            {
+                result.byBorders = false;
+                result.cTresh1 = defaultCanny1;
+                result.cTresh2 = defaultCanny2;
+                result.morphKernel = defaultMorphKernel;
+                result.houghTreshold = defaultHoughThreshold;
+                result.minLineLength = defaultMinLineLength;
+                result.maxLineGap = defaultMaxLineGap;
+                result.projMinAngle = defaultProjMinAngle;
+                result.projMaxAngle = defaultProjMaxAngle;
+                result.projCoarseStep = defaultProjCoarseStep;
+                result.projRefineStep = defaultProjRefineStep;
             }
 
             return result;
@@ -3156,7 +3245,7 @@ namespace ImgViewer.Models
             p = ParseParametersSimple(parameters);
             try
             {
-                Mat result = Deskewer.Deskew(_token, src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold);
+                Mat result = Deskewer.Deskew(_token, p.Method, src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold, p.maxLineGap, p.projMinAngle, p.projMaxAngle, p.projCoarseStep, p.projRefineStep);
                 return result;
             }
             catch (OperationCanceledException)

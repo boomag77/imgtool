@@ -455,6 +455,10 @@ namespace ImgViewer.Models
         {
             // default to Auto if null
             var selected = (selectedOption ?? "Auto").Trim();
+            bool isAuto = selected.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+            bool isByBorders = selected.Equals("ByBorders", StringComparison.OrdinalIgnoreCase);
+            bool isHough = selected.Equals("Hough", StringComparison.OrdinalIgnoreCase);
+            bool isProjection = selected.Equals("Projection", StringComparison.OrdinalIgnoreCase);
 
             foreach (var p in _parameters)
             {
@@ -464,22 +468,52 @@ namespace ImgViewer.Models
                         p.IsVisible = true; // algorithm selector always visible
                         break;
 
-                    // show these only for ByBorders
+                    // Auto uses defaults; no extra parameters shown
                     case "cannyTresh1":
                     case "cannyTresh2":
                     case "morphKernel":
-                        p.IsVisible = selected.Equals("ByBorders", StringComparison.OrdinalIgnoreCase);
-                        break;
-
-                    // show these only for Hough
                     case "minLineLength":
                     case "houghTreshold":
-                        p.IsVisible = selected.Equals("Hough", StringComparison.OrdinalIgnoreCase);
+                    case "maxLineGap":
+                    case "projMinAngle":
+                    case "projMaxAngle":
+                    case "projCoarseStep":
+                    case "projRefineStep":
+                        p.IsVisible = false;
                         break;
 
                     default:
-                        // keep other parameters visible by default
                         p.IsVisible = true;
+                        break;
+                }
+            }
+
+            if (isAuto)
+                return;
+
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "cannyTresh1":
+                    case "cannyTresh2":
+                        p.IsVisible = isByBorders || isHough;
+                        break;
+                    case "morphKernel":
+                        p.IsVisible = isByBorders;
+                        break;
+                    case "minLineLength":
+                    case "houghTreshold":
+                    case "maxLineGap":
+                        p.IsVisible = isHough;
+                        break;
+                    case "projMinAngle":
+                    case "projMaxAngle":
+                    case "projCoarseStep":
+                    case "projRefineStep":
+                        p.IsVisible = isProjection;
+                        break;
+                    default:
                         break;
                 }
             }
@@ -554,7 +588,7 @@ namespace ImgViewer.Models
             }
             else
             {
-                // fallback if binAlgo missing — keep previous behaviour
+                // fallback if binAlgo missing ï¿½ keep previous behaviour
                 isAdaptive = (selectedOption ?? "").Trim().Equals("Adaptive", StringComparison.OrdinalIgnoreCase);
             }
 
@@ -733,7 +767,7 @@ namespace ImgViewer.Models
             }
             else
             {
-                // fallback if bordersAlgo missing — keep previous behaviour
+                // fallback if bordersAlgo missing ï¿½ keep previous behaviour
                 isAuto = (selectedOption ?? "").Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
             }
 
