@@ -136,7 +136,7 @@ namespace ImgViewer.Models
             if (orig == null || orig.Empty()) return orig;
 
             // работаем с копией
-            using var src0 = orig; // не клонируем лишний раз, но ниже приведём к нужному типу
+            var src0 = orig; // do not dispose caller-owned Mat
                                    // приводим src к CV_8UC3 (BGR) — это безопаснее для дальнейшей обработки/копирования
             using var src = EnsureBgr(src0);
 

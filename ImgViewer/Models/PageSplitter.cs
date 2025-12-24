@@ -14,8 +14,8 @@ public sealed class PageSplitter
     public sealed class Settings
     {
         // --- Search band (fraction of width) where we expect the gutter ---
-        public double CentralBandStart = 0.35; // 35% of width
-        public double CentralBandEnd = 0.65; // 65% of width
+        public double CentralBandStart = 0.40; // 40% of width
+        public double CentralBandEnd = 0.60; // 60% of width
 
         // Extra padding added to each side from the split line (to avoid cutting near-gutter text)
         // Percent of original width (e.g., 1.0 = 1%).

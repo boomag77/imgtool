@@ -710,8 +710,41 @@ namespace ImgViewer.Models
         {
             if (operation.Type == PipelineOperationType.SplitPage)
             {
+                PipelineOperation? deskew = null;
+                foreach (var op in _operations)
+                {
+                    if (op.Type == PipelineOperationType.Deskew)
+                    {
+                        deskew = op;
+                        break;
+                    }
+                }
+
                 _operations.Clear();
+                if (deskew != null)
+                    _operations.Add(deskew);
+
                 _operations.Add(operation);
+                return;
+            }
+
+            if (operation.Type == PipelineOperationType.Deskew && ContainsSplitPageOperation_NoLock(operation))
+            {
+                if (ContainsDeskewOperation_NoLock(operation))
+                    return;
+
+                int splitIndex = _operations.Count;
+                for (int i = 0; i < _operations.Count; i++)
+                {
+                    if (_operations[i].Type == PipelineOperationType.SplitPage)
+                    {
+                        splitIndex = i;
+                        break;
+                    }
+                }
+
+                index = Math.Max(0, Math.Min(index, splitIndex));
+                _operations.Insert(index, operation);
                 return;
             }
 
@@ -741,7 +774,10 @@ namespace ImgViewer.Models
             if (type == PipelineOperationType.SplitPage)
                 return !hasSplit;
 
-            return !hasSplit;
+            if (hasSplit)
+                return type == PipelineOperationType.Deskew && !ContainsDeskewOperation_NoLock(except);
+
+            return true;
         }
 
         private bool ContainsSplitPageOperation_NoLock(PipelineOperation? except = null)
@@ -752,6 +788,20 @@ namespace ImgViewer.Models
                     continue;
 
                 if (op.Type == PipelineOperationType.SplitPage)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool ContainsDeskewOperation_NoLock(PipelineOperation? except = null)
+        {
+            foreach (var op in _operations)
+            {
+                if (ReferenceEquals(op, except))
+                    continue;
+
+                if (op.Type == PipelineOperationType.Deskew)
                     return true;
             }
 
