@@ -1,10 +1,5 @@
 ﻿using OpenCvSharp;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Point = OpenCvSharp.Point;
 using Size = OpenCvSharp.Size;
 
@@ -20,15 +15,15 @@ namespace ImgViewer.Models
                                             bool inputIsBinary = false,
                                             bool applyMaskToSource = true)    // <-- new parameter
         {
-            Debug.WriteLine($"Small Area mult: {settings.SmallAreaMultiplier}");
-            Debug.WriteLine($"Radius fraction: {settings.ProximityRadiusFraction}");
+            //Debug.WriteLine($"Small Area mult: {settings.SmallAreaMultiplier}");
+            //Debug.WriteLine($"Radius fraction: {settings.ProximityRadiusFraction}");
 
             try
             {
                 token.ThrowIfCancellationRequested();
 
                 if (src == null) throw new ArgumentNullException(nameof(src));
-                if (src.Empty()) return src.Clone();
+                if (src.Empty()) return src.Clone(); // TODO: check if this is correct
 
                 // helpers
                 static int ClampInt(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
@@ -210,7 +205,7 @@ namespace ImgViewer.Models
                         labelingMat.Dispose();
                         textMask.Dispose();
                         var retEmpty = applyMaskToSource ? src.Clone() : bin.Clone();
-                        if (localBinCreated) bin.Dispose();
+                        //if (localBinCreated) bin.Dispose();
                         return retEmpty;
                     }
 
@@ -537,22 +532,22 @@ namespace ImgViewer.Models
                         }
 
                         labelingMat.Dispose();
-                        removeMask.Dispose();
-                        intersect.Dispose();
-                        textMask.Dispose();
-                        if (localBinCreated) bin.Dispose();
+                        //removeMask.Dispose();
+                        //intersect.Dispose();
+                        //textMask.Dispose();
+                        //if (localBinCreated) bin.Dispose();
 
                         return outMat;
                     }
                     else
                     {
                         labelingMat.Dispose();
-                        removeMask.Dispose();
-                        intersect.Dispose();
-                        textMask.Dispose();
+                        //removeMask.Dispose();
+                        //intersect.Dispose();
+                        //textMask.Dispose();
                         var ret = cleanedBinary.Clone();
                         cleanedBinary.Dispose();
-                        if (localBinCreated) bin.Dispose();
+                        //if (localBinCreated) bin.Dispose();
                         return ret;
                     }
                 }
@@ -560,7 +555,7 @@ namespace ImgViewer.Models
                 {
                     if (localBinCreated && bin != null && !bin.IsDisposed) bin.Dispose();
                 }
-            
+
             }
             catch (OperationCanceledException)
             {
@@ -568,7 +563,7 @@ namespace ImgViewer.Models
                 return null;
             }
             return null;
-        }    
+        }
 
     }
 }
