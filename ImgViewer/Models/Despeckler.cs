@@ -222,15 +222,27 @@ public class Despeckler
                 double proximityRadius = Math.Max(1.0, settings.ProximityRadiusFraction * medianHeight);
                 double squarenessTolerance = ClampDouble(settings.SquarenessTolerance, 0.0, 1.0);
 
+                //int binRows = bin.Rows, binCols = bin.Cols;
+                //var horProj = new int[binRows];
+                //for (int y = 0; y < binRows; y++)
+                //{
+                //    if (y % 32 == 0)
+                //        token.ThrowIfCancellationRequested();
+                //    horProj[y] = Cv2.CountNonZero(bin.Row(y)); // text px per row
+                //}
+
                 int binRows = bin.Rows, binCols = bin.Cols;
+
+                // ONE OpenCV pass instead of binRows calls:
+                using var projSum = new Mat(); // (binRows x 1) int32
+                Cv2.Reduce(bin, projSum, dim: ReduceDimension.Column, rtype: ReduceTypes.Sum, dtype: MatType.CV_32S);
+
                 var horProj = new int[binRows];
                 for (int y = 0; y < binRows; y++)
                 {
-                    if (y % 32 == 0)
-                        token.ThrowIfCancellationRequested();
-                    horProj[y] = Cv2.CountNonZero(bin.Row(y)); // text px per row
+                    if ((y & 63) == 0) token.ThrowIfCancellationRequested();
+                    horProj[y] = projSum.Get<int>(y, 0) / 255; // bin is 0/255
                 }
-
 
 
 
@@ -317,7 +329,7 @@ public class Despeckler
 
                     var c = smallComps[i];
                     var rect = c.bbox;
-                    var center = Center(rect);
+                    var center = smallCenters[i];
 
                     // --- 1. минимальная дистанция до крупных компонент (bigBoxes) ---
                     //double minDistToBig = double.MaxValue;
@@ -328,7 +340,7 @@ public class Despeckler
                     //}
                     //bool nearBig = minDistToBig < proximityRadius;
 
-                    
+
 
                     double minD2 = double.MaxValue;
                     foreach (var br in bigBoxes)
@@ -411,8 +423,11 @@ public class Despeckler
 
                                     var p2 = smallCenters[j];
 
-                                    if (Math.Abs(p2.Y - center.Y) <= rowCheckRange &&
-                                        Math.Abs(p2.X - center.X) <= clusterHoriz)
+                                    int dy = p2.Y - center.Y;
+                                    int dx = p2.X - center.X;
+
+                                    if ((uint)(dy + rowCheckRange) <= (uint)(2 * rowCheckRange) &&
+                                        (uint)(dx + clusterHoriz) <= (uint)(2 * clusterHoriz))
                                     {
                                         partOfCluster = true;
                                         break;
