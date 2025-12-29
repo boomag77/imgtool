@@ -3250,7 +3250,7 @@ namespace ImgViewer.Models
             p = ParseParametersSimple(parameters);
             try
             {
-                Mat result = Deskewer.Deskew(_token, p.Method, src, p.byBorders, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold, p.maxLineGap, p.projMinAngle, p.projMaxAngle, p.projCoarseStep, p.projRefineStep);
+                Mat result = Deskewer.Deskew(_token, p.Method, src, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold, p.maxLineGap, p.projMinAngle, p.projMaxAngle, p.projCoarseStep, p.projRefineStep);
                 return result;
             }
             catch (OperationCanceledException)

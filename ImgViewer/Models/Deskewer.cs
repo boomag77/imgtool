@@ -1,11 +1,13 @@
 ﻿using OpenCvSharp;
+using Point = OpenCvSharp.Point;
 
 using System.Diagnostics;
+using System.IO;
 
 namespace ImgViewer.Models;
 
 
-public class Deskewer
+public static class Deskewer
 {
     public enum DeskewMethod
     {
@@ -16,10 +18,17 @@ public class Deskewer
         PCA,
         Moments
     }
-    private static double GetSkewAngleByBorders(CancellationToken token, Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150,
-                               int morphKernel = 5, double minAreaFraction = 0.2)
+    private static double GetSkewAngleByBorders(CancellationToken token,
+                                                Mat src,
+                                                out double confidence,
+                                                int cannyThresh1 = 50,
+                                                int cannyThresh2 = 150,
+                                                int morphKernel = 5,
+                                                double minAreaFraction = 0.2)
     {
+        confidence = 0.0;
         if (src == null || src.Empty()) return double.NaN;
+        
 
         token.ThrowIfCancellationRequested();
         // 1. grayscale
@@ -68,7 +77,9 @@ public class Deskewer
 
         // Если площадь слишком мала по сравнению с картинкой — возможно нет рамки
         double imageArea = src.Width * (double)src.Height;
-        if (maxArea < imageArea * (minAreaFraction * 0.01)) // minAreaFraction в процентах (например 20 = 20%)
+        double areaFrac = maxArea / imageArea;
+
+        if (areaFrac < minAreaFraction)
             return double.NaN;
 
         var biggest = contours[maxIdx];
@@ -124,6 +135,13 @@ public class Deskewer
         // Финальная валидация: если угол слишком мал — можно вернуть NaN (нет смысла)
         if (double.IsNaN(angle) || Math.Abs(angle) < 0.02) return double.NaN;
 
+        double rectLike = (approx.Length == 4) ? 1.0 : 0.7;
+
+        // чем ближе areaFrac к 0.55, тем увереннее (под документы)
+        double lo = minAreaFraction;         // обычно 0.2
+        double hi = Math.Max(lo + 0.05, 0.55);
+        confidence = Clamp01((areaFrac - lo) / (hi - lo)) * rectLike;
+
         return angle;
     }
 
@@ -146,7 +164,7 @@ public class Deskewer
     }
 
 
-    public static Mat Deskew(CancellationToken token, DeskewMethod method, Mat orig, bool byBorders, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh, int maxLineGap, double projMinAngle, double projMaxAngle, double projCoarseStep, double projRefineStep)
+    public static Mat Deskew(CancellationToken token, DeskewMethod method, Mat orig, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh, int maxLineGap, double projMinAngle, double projMaxAngle, double projCoarseStep, double projRefineStep)
     {
         if (orig == null || orig.Empty()) return orig;
 
@@ -155,19 +173,23 @@ public class Deskewer
                                // приводим src к CV_8UC3 (BGR) — это безопаснее для дальнейшей обработки/копирования
         using var src = EnsureBgr(src0);
 
+        using var signMask = BinarizeToMask(src); // один раз на весь Deskew
+        bool canFixSign = signMask != null && !signMask.Empty();
+
         double finalAngle = double.NaN;
 
-        if (method == DeskewMethod.Auto && byBorders)
-            method = DeskewMethod.ByBorders;
 
         if (method == DeskewMethod.ByBorders)
         {
-            double borderAngle = GetSkewAngleByBorders(token, src,
+            double borderRawAngle = GetSkewAngleByBorders(token, src,
+                out double confidence,
                 cannyThresh1: cTresh1,
                 cannyThresh2: cTresh2,
                 morphKernel: morphK,
                 minAreaFraction: 0.2);
-
+            double borderAngle = NormalizeAngle(borderRawAngle);
+            if (canFixSign) borderAngle = FixSignByProjection(token, signMask, borderAngle);
+            borderAngle = NormalizeAngle(borderAngle);
             Debug.WriteLine($"Deskew: angle by Borders = {borderAngle:F3}");
 
             finalAngle = borderAngle;
@@ -178,7 +200,17 @@ public class Deskewer
         }
         else if (method == DeskewMethod.Hough)
         {
-            double houghAngle = GetSkewAngleByHough(token, src, cannyThresh1: cTresh1, cannyThresh2: cTresh2, houghThreshold: houghTresh, minLineLength: minLL, maxLineGap: maxLineGap);
+            double houghRawAngle = GetSkewAngleByHough(token,
+                                                        src,
+                                                        out double confidence,
+                                                        cannyThresh1: cTresh1,
+                                                        cannyThresh2: cTresh2,
+                                                        houghThreshold: houghTresh,
+                                                        minLineLength: minLL,
+                                                        maxLineGap: maxLineGap);
+            double houghAngle = NormalizeAngle(houghRawAngle);
+            if (canFixSign) houghAngle = FixSignByProjection(token, signMask, houghAngle);
+            houghAngle = NormalizeAngle(houghAngle);
             Debug.WriteLine($"Deskew: angle by Hough = {houghAngle:F3}");
             finalAngle = houghAngle;
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
@@ -186,7 +218,10 @@ public class Deskewer
         }
         else if (method == DeskewMethod.Projection)
         {
-            double projAngle = GetSkewAngleByProjection(token, src, minAngle: projMinAngle, maxAngle: projMaxAngle, coarseStep: projCoarseStep, refineStep: projRefineStep);
+            double projRawAngle = GetSkewAngleByProjection(token, src, out double confidence, minAngle: projMinAngle, maxAngle: projMaxAngle, coarseStep: projCoarseStep, refineStep: projRefineStep);
+            double projAngle = NormalizeAngle(projRawAngle);
+            if (canFixSign) projAngle = FixSignByProjection(token, signMask, projAngle);
+            projAngle = NormalizeAngle(projAngle);
             Debug.WriteLine($"Deskew: angle by Projection = {projAngle:F3}");
             finalAngle = projAngle;
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
@@ -194,8 +229,10 @@ public class Deskewer
         }
         else if (method == DeskewMethod.PCA)
         {
-            double pcaAngle = GetSkewAngleByPCA(token, src);
-            pcaAngle = -pcaAngle;
+            double pcaRawAngle = GetSkewAngleByPCA(token, src, out double confidence);
+            double pcaAngle = NormalizeAngle(pcaRawAngle);
+            if (canFixSign) pcaAngle = FixSignByProjection(token, signMask, pcaAngle);
+            pcaAngle = NormalizeAngle(pcaAngle);
             Debug.WriteLine($"Deskew: angle by PCA = {pcaAngle:F3}");
             finalAngle = pcaAngle;
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
@@ -203,11 +240,10 @@ public class Deskewer
         }
         else if (method == DeskewMethod.Moments)
         {
-            double momentsAngle;
-            using (var momentsMask = BinarizeToMask(src))
-            {
-                momentsAngle = GetSkewAngleByMoments(token, momentsMask);
-            }
+            double momentsRawAngle = GetSkewAngleByMoments(token, signMask, out double confidence);
+            double momentsAngle = NormalizeAngle(momentsRawAngle);
+            if (canFixSign) momentsAngle = FixSignByProjection(token, signMask, momentsAngle);
+            momentsAngle = NormalizeAngle(momentsAngle);
             Debug.WriteLine($"Deskew: angle by Moments = {momentsAngle:F3}");
             finalAngle = momentsAngle;
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
@@ -215,38 +251,92 @@ public class Deskewer
         }
         else
         {
-            
+
+            var cands = new List<AngleCandidate>(5);
             // 1) candidate angles
-            double houghAngle = GetSkewAngleByHough(token, src, cannyThresh1: cTresh1, cannyThresh2: cTresh2, houghThreshold: houghTresh, minLineLength: minLL, maxLineGap: maxLineGap);
+            double houghRawAngle = GetSkewAngleByHough(token, src,
+                                                        out double houghConfidence, 
+                                                        cannyThresh1: cTresh1,
+                                                        cannyThresh2: cTresh2,
+                                                        houghThreshold: houghTresh,
+                                                        minLineLength: minLL,
+                                                        maxLineGap: maxLineGap);
+            
+            double houghAngle = NormalizeAngle(houghRawAngle);
+            if (canFixSign) houghAngle = FixSignByProjection(token, signMask, houghAngle);
+            houghAngle = NormalizeAngle(houghAngle);
             Debug.WriteLine($"Deskew: angle by Hough = {houghAngle:F3}");
+            TryAddCandidate(cands, DeskewMethod.Hough, houghAngle, houghConfidence);
 
-
-            
-            double projAngle = GetSkewAngleByProjection(token, src, minAngle: projMinAngle, maxAngle: projMaxAngle, coarseStep: projCoarseStep, refineStep: projRefineStep);
+            double projRawAngle = GetSkewAngleByProjection(token, src,
+                                                        out double projConfidence,
+                                                        minAngle: projMinAngle,
+                                                        maxAngle: projMaxAngle,
+                                                        coarseStep: projCoarseStep,
+                                                        refineStep: projRefineStep);
+            double projAngle = NormalizeAngle(projRawAngle);
+            if (canFixSign) projAngle = FixSignByProjection(token, signMask, projAngle);
+            projAngle = NormalizeAngle(projAngle);
             Debug.WriteLine($"Deskew: angle by Projection = {projAngle:F3}");
+            TryAddCandidate(cands, DeskewMethod.Projection, projAngle, projConfidence);
 
-            
-            double pcaAngle = GetSkewAngleByPCA(token, src);
-            pcaAngle = -pcaAngle;
+
+            double pcaRawAngle = GetSkewAngleByPCA(token, src, out double pcaConfidence);
+            double pcaAngle = NormalizeAngle(pcaRawAngle);
+            if (canFixSign) pcaAngle = FixSignByProjection(token, signMask, pcaAngle);
+            pcaAngle = NormalizeAngle(pcaAngle);
             Debug.WriteLine($"Deskew: angle by PCA = {pcaAngle:F3}");
+            //TryAddCandidate(cands, DeskewMethod.PCA, pcaAngle, pcaConfidence);
 
-            double momentsAngle = double.NaN;
-            using (var momentsMask = BinarizeToMask(src))
-            {
-                momentsAngle = GetSkewAngleByMoments(token, momentsMask);
-            }
+            double momentsRawAngle = GetSkewAngleByMoments(token, signMask, out double momentsConfidence);
+            double momentsAngle = NormalizeAngle(momentsRawAngle);
+            if (canFixSign) momentsAngle = FixSignByProjection(token, signMask, momentsAngle);
+            momentsAngle = NormalizeAngle(momentsAngle);
             Debug.WriteLine($"Deskew: angle by Moments = {momentsAngle:F3}");
+            //TryAddCandidate(cands, DeskewMethod.Moments, momentsAngle, momentsConfidence);
+
+            double borderRawAngle = GetSkewAngleByBorders(token, src,
+                    out double bordersConfidence,
+                    cannyThresh1: cTresh1,
+                    cannyThresh2: cTresh2,
+                    morphKernel: morphK,
+                    minAreaFraction: 0.2);
+
+            double borderAngle = NormalizeAngle(borderRawAngle);
+            if (canFixSign) borderAngle = FixSignByProjection(token, signMask, borderAngle);
+            borderAngle = NormalizeAngle(borderAngle);
+
+            Debug.WriteLine($"Deskew: angle by Borders = {borderAngle:F3}");
+            //TryAddCandidate(cands, DeskewMethod.ByBorders, borderAngle, bordersConfidence);
 
             //double finalAngle = double.NaN;
-            if (!double.IsNaN(houghAngle)) finalAngle = houghAngle;
-            if (double.IsNaN(finalAngle) && !double.IsNaN(pcaAngle)) finalAngle = pcaAngle;
-            if (double.IsNaN(finalAngle) && !double.IsNaN(momentsAngle)) finalAngle = momentsAngle;
-            if (double.IsNaN(finalAngle)) finalAngle = projAngle;
+            //if (!double.IsNaN(houghAngle)) finalAngle = houghAngle;
+            //if (double.IsNaN(finalAngle) || (finalAngle == 0 && !double.IsNaN(pcaAngle))) finalAngle = pcaAngle;
+            //if (double.IsNaN(finalAngle) && !double.IsNaN(momentsAngle)) finalAngle = momentsAngle;
+            //if (double.IsNaN(finalAngle)) finalAngle = projAngle;
+
+
+            // 3) голосование (consensus)
+            finalAngle = PickFinalAngleByConsensus(cands, tolDeg: 1.5, out string consensusDbg);
+            Debug.WriteLine(consensusDbg);
+
+            if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
+            {
+                Debug.WriteLine($"Deskew: angle is zero or NaN ({finalAngle}), skipping rotation.");
+                return src.Clone();
+            }
+
+            Debug.WriteLine($"Deskew: angle selected = {finalAngle:F3}");
+
 
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
             {
                 Debug.WriteLine($"Deskew: angle is zero or NaN ({finalAngle}), skipping rotation.");
                 return src.Clone(); // возвращаем копию BGR
+            }
+            else
+            {
+                Debug.WriteLine($"Deskew: angle selected = {finalAngle:F3}");
             }
         }
 
@@ -270,7 +360,7 @@ public class Deskewer
         byte bb = (byte)(borderRgb & 0xFF);
         var bgScalar = new Scalar(bb, gb, rb); // OpenCV uses BGR order
 
-        bgScalar = Scalar.All(0);
+        //bgScalar = Scalar.All(0);
 
         int rws = src.Rows;
         int cls = src.Cols;
@@ -318,31 +408,31 @@ public class Deskewer
 
         token.ThrowIfCancellationRequested();
 
-        using var nonZeroMat = new Mat();
-        Cv2.FindNonZero(mask, nonZeroMat);
-        if (nonZeroMat.Empty())
-        {
-            return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, centerBig);
-        }
+        //using var nonZeroMat = new Mat();
+        //Cv2.FindNonZero(mask, nonZeroMat);
+        //if (nonZeroMat.Empty())
+        //{
+        //    return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, centerBig);
+        //}
 
-        // конвертируем в Point[]
-        OpenCvSharp.Point[] nzPoints;
-        int rows = nonZeroMat.Rows;
-        nzPoints = new OpenCvSharp.Point[rows];
-        for (int i = 0; i < rows; i++)
-        {
-            var v = nonZeroMat.At<Vec2i>(i, 0);
-            nzPoints[i] = new OpenCvSharp.Point(v.Item0, v.Item1);
-        }
+        //конвертируем в Point[]
+        //Point[] nzPoints;
+        //int rows = nonZeroMat.Rows;
+        //nzPoints = new Point[rows];
+        //for (int i = 0; i < rows; i++)
+        //{
+        //    var v = nonZeroMat.At<Vec2i>(i, 0);
+        //    nzPoints[i] = new Point(v.Item0, v.Item1);
+        //}
 
-        if (nzPoints == null || nzPoints.Length == 0)
-        {
-            return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, centerBig);
-        }
+        //if (nzPoints == null || nzPoints.Length == 0)
+        //{
+        //    return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, centerBig);
+        //}
 
         // bounding rect должен принимть Point[] — так безопаснее
-        var contentRect = Cv2.BoundingRect(nzPoints);
-        var contentCenter = new Point2f(contentRect.X + contentRect.Width / 2f, contentRect.Y + contentRect.Height / 2f);
+        //var contentRect = Cv2.BoundingRect(nonZeroMat);
+        //var contentCenter = new Point2f(contentRect.X + contentRect.Width / 2f, contentRect.Y + contentRect.Height / 2f);
 
         // кадрируем / дополняем до исходного размера, центрируя по содержимому
         //return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, contentCenter);
@@ -448,8 +538,11 @@ public class Deskewer
         return fallback;
     }
 
-    private static double GetSkewAngleByMoments(CancellationToken token, Mat mask)
+    private static double GetSkewAngleByMoments(CancellationToken token,
+                                                Mat mask,
+                                                out double confidence)
     {
+        confidence = 0.0;
         token.ThrowIfCancellationRequested();
 
         // binaryImage:true => OpenCV считает non-zero как 1 (не важно 1 или 255)
@@ -467,9 +560,17 @@ public class Deskewer
         double angleRad = 0.5 * Math.Atan2(2.0 * mu11, (mu20 - mu02));
         double angle = angleRad * 180.0 / Math.PI;
 
+        double strength = Math.Abs(mu20 - mu02) / (mu20 + mu02 + 1e-9); // 0..1
+        double cStrength = (strength - 0.05) / 0.25;                    // ниже 0.05 — шум
+        double cPixels = (m.M00 - 200) / 5000.0;                      // “сколько данных”
+
+        confidence = Clamp01(cStrength) * Clamp01(cPixels);
+
+
         // normalize to [-90, 90)
         if (angle > 90) angle -= 180;
         if (angle <= -90) angle += 180;
+
 
         return angle;
     }
@@ -558,8 +659,16 @@ public class Deskewer
         return new Mat(bigImg, roi).Clone();
     }
 
-    private static double GetSkewAngleByHough(CancellationToken token, Mat src, int cannyThresh1 = 50, int cannyThresh2 = 150, int houghThreshold = 80, int minLineLength = 100, int maxLineGap = 20)
+    private static double GetSkewAngleByHough(CancellationToken token,
+                                                Mat src,
+                                                out double confidence,
+                                                int cannyThresh1 = 50,
+                                                int cannyThresh2 = 150,
+                                                int houghThreshold = 80,
+                                                int minLineLength = 100,
+                                                int maxLineGap = 20)
     {
+        confidence = 0.0;
         using var gray = new Mat();
 
         token.ThrowIfCancellationRequested();
@@ -601,12 +710,33 @@ public class Deskewer
         token.ThrowIfCancellationRequested();
         Array.Sort(useAngles);
         double median = useAngles[useAngles.Length / 2];
+
+        int n = useAngles.Length;
+        double devSum = 0;
+        for (int k = 0; k < n; k++)
+            devSum += Math.Abs(useAngles[k] - median);
+
+        double mad = devSum / n; // “разброс” в градусах (чем меньше, тем лучше)
+
+        double cCount = Math.Log(1 + n) / Math.Log(1 + 30); // насыщается к ~30
+        double cSpread = (3.0 - mad) / 3.0;                 // mad<=3° хорошо
+
+        confidence = Clamp01(cCount) * Clamp01(cSpread);
+
+
         return median;
     }
 
 
-    private static double GetSkewAngleByProjection(CancellationToken token, Mat src, double minAngle = -15, double maxAngle = 15, double coarseStep = 1.0, double refineStep = 0.2)
+    private static double GetSkewAngleByProjection(CancellationToken token,
+                                                    Mat src,
+                                                    out double confidence,
+                                                    double minAngle = -15,
+                                                    double maxAngle = 15,
+                                                    double coarseStep = 1.0,
+                                                    double refineStep = 0.2)
     {
+        confidence = 0.0;
         // метод проекций: для каждого угла вычисляем variance / entropy горизонтального проекционного профиля,
         // выберем угол с наибольшей "пиковостью" (max variance)
         using var mask = BinarizeToMask(src);
@@ -614,12 +744,22 @@ public class Deskewer
 
         double best = double.NaN;
         double bestScore = double.MinValue;
+        double secondBestScore = double.MinValue;
 
         for (double a = minAngle; a <= maxAngle; a += coarseStep)
         {
             token.ThrowIfCancellationRequested();
             double score = ProjectionScore(token, mask, a);
-            if (score > bestScore) { bestScore = score; best = a; }
+            if (score > bestScore)
+            {
+                secondBestScore = bestScore;
+                bestScore = score;
+                best = a;
+            }
+            else if (score > secondBestScore)
+            {
+                secondBestScore = score;
+            }
         }
 
         // refine вокруг best
@@ -629,15 +769,35 @@ public class Deskewer
         {
             token.ThrowIfCancellationRequested();
             double score = ProjectionScore(token, mask, a);
-            if (score > bestScore) { bestScore = score; best = a; }
+            if (score > bestScore)
+            {
+                secondBestScore = bestScore;
+                bestScore = score;
+                best = a;
+            }
+            else if (score > secondBestScore)
+            {
+                secondBestScore = score;
+            }
         }
+
+        if (secondBestScore > double.MinValue / 2)
+        {
+            double peak = (bestScore - secondBestScore) / (Math.Abs(bestScore) + 1e-9);
+            confidence = Clamp01(peak / 0.25); // 0.25 = “достаточно острый пик”
+        }
+        else
+        {
+            confidence = 0.15; // fallback, если второго кандидата почти не было
+        }
+
 
         return best;
     }
 
     private static double ProjectionScore(CancellationToken token, Mat mask, double angle)
     {
-        double rotation = -angle;
+        double rotation = angle;
         double rad = rotation * Math.PI / 180.0;
         double absCos = Math.Abs(Math.Cos(rad));
         double absSin = Math.Abs(Math.Sin(rad));
@@ -669,8 +829,9 @@ public class Deskewer
     }
 
 
-    private static double GetSkewAngleByPCA(CancellationToken token, Mat src)
+    private static double GetSkewAngleByPCA(CancellationToken token, Mat src, out double confidence)
     {
+        confidence = 0.0;
         using var mask = BinarizeToMask(src);
         if (mask.Empty()) return double.NaN;
 
@@ -700,9 +861,16 @@ public class Deskewer
         float vy = eigenvectors.At<float>(0, 1);
 
         double angle = Math.Atan2(vy, vx) * 180.0 / Math.PI;
-        angle = -angle;
+        //angle = -angle;
         if (angle > 90) angle -= 180;
         if (angle <= -90) angle += 180;
+
+        double cN = Math.Log(1 + n) / Math.Log(1 + 20000);   // насыщение по количеству точек
+        double cA = (25.0 - Math.Abs(angle)) / 25.0;         // большие углы реже, чуть штрафуем
+
+        confidence = 0.35 * Clamp01(cN) * (0.5 + 0.5 * Clamp01(cA)); // PCA всегда “легкий вес”
+
+
         return angle;
 
     }
@@ -828,5 +996,179 @@ public class Deskewer
         static int ClampToByte(int v) => v < 0 ? 0 : (v > 255 ? 255 : v);
         static int PackRgb(int r, int g, int b) => (r << 16) | (g << 8) | b;
     }
+
+    private static double NormalizeAngle(double angle, double zeroEps = 0.005)
+    {
+        // 1) отсекаем мусор
+        if (double.IsNaN(angle) || double.IsInfinity(angle))
+            return double.NaN;
+
+        // 2) слишком маленький угол считаем "нет поворота"
+        if (Math.Abs(angle) < zeroEps)
+            return 0.0;
+
+        // 3) нормализация в (-90..90]
+        while (angle > 90) angle -= 180;
+        while (angle <= -90) angle += 180;
+
+        // 4) приводим к диапазону [-45..45], как у тебя уже сделано в конце
+        if (angle > 45) angle -= 90;
+        if (angle < -45) angle += 90;
+
+        return angle;
+    }
+
+    private static double FixSignByProjection(CancellationToken token, Mat mask, double angle, double minAbsAngle = 0.3)
+    {
+        // Смысл: знак часто "плавает" у Hough/PCA/Moments/Borders.
+        // Проверяем, какой знак даёт лучшее качество проекции.
+
+        if (double.IsNaN(angle) || double.IsInfinity(angle))
+            return double.NaN;
+
+        double a = Math.Abs(angle);
+        if (a < minAbsAngle) // чтобы не тратить время на микроскопические углы
+            return angle;
+
+        // Важно: ProjectionScore уже использует rotation = angle (мы исправили выше),
+        // значит мы можем сравнивать "как есть".
+        double sPlus = ProjectionScore(token, mask, +a);
+        double sMinus = ProjectionScore(token, mask, -a);
+
+        return (sMinus > sPlus) ? -a : +a;
+    }
+
+    private readonly struct AngleCandidate
+    {
+        public readonly DeskewMethod Method;
+        public readonly double Angle;
+        public readonly double Weight; // пока = 1.0, confidence добавим на следующем шаге
+
+        public AngleCandidate(DeskewMethod method, double angle, double weight)
+        {
+            Method = method;
+            Angle = angle;
+            Weight = weight;
+        }
+    }
+
+    private static int MethodPriority(DeskewMethod m) => m switch
+    {
+        DeskewMethod.ByBorders => 2,
+        DeskewMethod.Hough => 1,
+        DeskewMethod.Projection => 0,
+        DeskewMethod.Moments => 99,
+        DeskewMethod.PCA => 99,
+        _ => 99
+    };
+
+    private static void TryAddCandidate(List<AngleCandidate> list, DeskewMethod method, double angle, double weight)
+    {
+        if (double.IsNaN(angle) || double.IsInfinity(angle))
+            return;
+
+        // нули можно либо оставлять, либо выкидывать.
+        // я предлагаю выкидывать "почти ноль", чтобы не мешал голосованию:
+        if (Math.Abs(angle) < 0.005)
+            return;
+
+        list.Add(new AngleCandidate(method, angle, weight));
+    }
+
+    /// <summary>
+    /// Выбираем итоговый угол через "consensus":
+    /// 1) сортируем по углу
+    /// 2) группируем в кластеры, где соседние углы отличаются <= tolDeg
+    /// 3) выбираем лучший кластер по:
+    ///    - max support (сколько методов согласны)
+    ///    - затем max суммарный Weight
+    ///    - затем лучший priority (наличие более приоритетного метода)
+    ///    - затем меньшая ширина кластера
+    /// 4) итог угла = weighted mean внутри кластера
+    /// </summary>
+    private static double PickFinalAngleByConsensus(List<AngleCandidate> cands, double tolDeg, out string debug)
+    {
+        debug = "Deskew: consensus: no candidates";
+        if (cands == null || cands.Count == 0)
+            return double.NaN;
+
+        // сортируем по углу
+        cands.Sort((a, b) => a.Angle.CompareTo(b.Angle));
+
+        int bestSupport = -1;
+        double bestWeightSum = double.NegativeInfinity;
+        int bestPriority = int.MaxValue;
+        double bestWidth = double.PositiveInfinity;
+        double bestAngle = double.NaN;
+
+        int i = 0;
+        while (i < cands.Count)
+        {
+            // начинаем кластер
+            int j = i;
+            int support = 0;
+            double wSum = 0;
+            double aSum = 0;
+
+            double clusterMin = cands[i].Angle;
+            double clusterMax = cands[i].Angle;
+
+            int clusterBestPriority = int.MaxValue;
+
+            // критерий кластера: соседние элементы отличаются <= tolDeg
+            // (для отсортированного списка это надёжно)
+            while (j < cands.Count)
+            {
+                if (j > i)
+                {
+                    double prev = cands[j - 1].Angle;
+                    double cur = cands[j].Angle;
+                    if (Math.Abs(cur - prev) > tolDeg)
+                        break;
+                }
+
+                var c = cands[j];
+                support++;
+
+                double w = c.Weight <= 0 ? 1.0 : c.Weight;
+                wSum += w;
+                aSum += c.Angle * w;
+
+                clusterMin = Math.Min(clusterMin, c.Angle);
+                clusterMax = Math.Max(clusterMax, c.Angle);
+
+                int p = MethodPriority(c.Method);
+                if (p < clusterBestPriority) clusterBestPriority = p;
+
+                j++;
+            }
+
+            double mean = (wSum > 0) ? (aSum / wSum) : double.NaN;
+            double width = clusterMax - clusterMin;
+
+            bool better =
+                (support > bestSupport) ||
+                (support == bestSupport && wSum > bestWeightSum) ||
+                (support == bestSupport && Math.Abs(wSum - bestWeightSum) < 1e-9 && clusterBestPriority < bestPriority) ||
+                (support == bestSupport && Math.Abs(wSum - bestWeightSum) < 1e-9 && clusterBestPriority == bestPriority && width < bestWidth);
+
+            if (better)
+            {
+                bestSupport = support;
+                bestWeightSum = wSum;
+                bestPriority = clusterBestPriority;
+                bestWidth = width;
+                bestAngle = mean;
+            }
+
+            i = j;
+        }
+
+        debug = $"Deskew: consensus selected={bestAngle:F3} support={bestSupport} wSum={bestWeightSum:F2} tol={tolDeg:F2}";
+        return bestAngle;
+    }
+
+    private static double Clamp01(double x) => x < 0 ? 0 : (x > 1 ? 1 : x);
+
 
 }
