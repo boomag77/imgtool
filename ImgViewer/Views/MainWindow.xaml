@@ -957,6 +957,7 @@
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition/>
                                                         <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
 
                                                     <ItemsControl Grid.Row="0"
@@ -1127,6 +1128,27 @@
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
+
+                                                    <StackPanel Grid.Row="2"
+                                                                Orientation="Horizontal"
+                                                                VerticalAlignment="Center"
+                                                                Margin="0,6,0,0">
+                                                        <CheckBox Margin="0,0,8,0"
+                                                                  VerticalAlignment="Center"
+                                                                  Content="Breakpoint"
+                                                                  Foreground="{StaticResource PipelineTextBrush}"
+                                                                  IsChecked="{Binding IsCheckpoint}" />
+                                                        <TextBox VerticalAlignment="Center"
+                                                                 Background="{StaticResource PipelineTextboxBackgroundBrush}"
+                                                                 Foreground="{StaticResource PipelineTextBrush}"
+                                                                 BorderBrush="{StaticResource PipelineCardBorderBrush}"
+                                                                 BorderThickness="1"
+                                                                 Padding="4,2"
+                                                                 Width="80"
+                                                                 MaxLength="10"
+                                                                 Text="{Binding BreakpointName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Visibility="{Binding IsCheckpoint, Converter={StaticResource BoolToVis}}" />
+                                                    </StackPanel>
                                                     <Button Grid.Row="1"
                                                             Margin="0,12,0,0"
                                                             Content="?"

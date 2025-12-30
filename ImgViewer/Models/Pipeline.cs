@@ -21,11 +21,17 @@ public class Pipeline
 
 
     private readonly IAppManager _manager;
-
+    private string _name = "Full pipeline";
 
     private readonly object _operationsLock = new();
 
     private ObservableCollection<PipelineOperation> _operations = new();
+
+    public string Name 
+    { 
+        get => _name; 
+        set => _name = value; 
+    }
 
     public ObservableCollection<PipelineOperation> Operations
     {
@@ -403,6 +409,48 @@ public class Pipeline
 
         //op.Command = ProcessorCommand.Deskew;
         return operation;
+    }
+
+    public Queue<Pipeline> CreatePipelinesForBatchProcessing()
+    {
+        var pipelines = new Queue<Pipeline>();
+        var branchPipeline = new Pipeline(_manager);
+        branchPipeline.Operations.Clear();
+        foreach (var op in this.Operations)
+        {
+            if (op.IsBreakpoint)
+            {
+                branchPipeline.Operations.Add(op);
+                branchPipeline.Name = op.BreakpointName;
+                pipelines.Enqueue(branchPipeline);
+                var newBranchPipeline = new Pipeline(_manager);
+                newBranchPipeline.Operations.Clear();
+                var ops = branchPipeline.Operations;
+                foreach (var existingOp in ops)
+                {
+                    newBranchPipeline.Operations.Add(existingOp);
+                }
+                branchPipeline = newBranchPipeline;
+            }
+            else
+            {
+                branchPipeline.Operations.Add(op);
+            }
+        }
+        branchPipeline.Name = "Full pipeline";
+        pipelines.Enqueue(branchPipeline);
+        // print pipelines info
+        Debug.WriteLine($"Created {pipelines.Count} pipelines for batch processing:");
+        foreach (var p in pipelines)
+        {
+            // print all operations in the pipeline
+            Debug.WriteLine($"Pipeline '{p.Name}' with {p.Operations.Count} operations:");
+            foreach (var op in p.Operations)
+            {
+                Debug.WriteLine($" - {op.DisplayName}");
+            }
+        }
+        return pipelines;
     }
 
 

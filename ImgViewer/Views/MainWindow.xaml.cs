@@ -130,10 +130,8 @@ namespace ImgViewer.Views
         // for xaml binding
         public Pipeline Pipeline => _manager.CurrentPipeline;
 
-        //public ObservableCollection<PipeLineOperation> PipeLineOperations => _pipeLineOperations;
-
         private readonly IAppManager _manager;
-        //private readonly Pipeline _pipeline;
+
         private IViewModel _viewModel;
 
 
@@ -214,7 +212,6 @@ namespace ImgViewer.Views
 
         private void ScheduleLivePipelineRun()
         {
-            // ???????? ?????????? ??????????????? ??????
             _liveDebounceCts?.Cancel();
 
             var cts = new CancellationTokenSource();
@@ -1352,7 +1349,6 @@ namespace ImgViewer.Views
                     return;
                 }
 
-                // ???????????: ???????? ????????????? ? ????????????
                 var res = System.Windows.MessageBox.Show($"Apply current pipeline to all images in:\n\n{folder} ?",
                                                          "Confirm",
                                                          MessageBoxButton.OKCancel,
@@ -1360,12 +1356,7 @@ namespace ImgViewer.Views
                 if (res != MessageBoxResult.OK) return;
 
 
-
-
-
-
-                // ???????? ????????, ????????? ???????
-                await _manager.ProcessFolder(folder, Pipeline);
+                await _manager.ProcessFolder(folder);
 
 
                 //_manager.ProcessFolder(folder);

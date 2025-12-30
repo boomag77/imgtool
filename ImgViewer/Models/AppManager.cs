@@ -559,17 +559,24 @@ namespace ImgViewer.Models
             }
         }
 
-        public Task ProcessFolder(string srcFolder, Pipeline pipeline)
+        public async Task ProcessFolder(string srcFolder)
         {
             _rootFolderCts?.Cancel();
             _rootFolderCts?.Dispose();
             _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
 
-            return ProcessFolder(srcFolder, pipeline, _rootFolderCts.Token);
+            var token = _rootFolderCts.Token;
+            var pipelines = CurrentPipeline.CreatePipelinesForBatchProcessing();
+
+            foreach (var pipeline in pipelines)
+            {
+                token.ThrowIfCancellationRequested();
+                await ProcessFolder(srcFolder, pipeline, token);
+            }
         }
 
 
-        public async Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken)
+        private async Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken)
         {
             if (pipeline == null) return;
 

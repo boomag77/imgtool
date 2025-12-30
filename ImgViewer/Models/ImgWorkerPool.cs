@@ -86,7 +86,16 @@ namespace ImgViewer.Models
             }
             else
             {
-                _outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
+                if (pipeline.Name == "Full pipeline")
+                {
+                    _outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
+                }
+                else
+                {
+                    _outputFolder = Path.Combine(parentPath, sourceFolderName + "_" + pipeline.Name);
+                }
+                //_outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
+                //_outputFolder = Path.Combine(parentPath, sourceFolderName + "_" + pipeline.Name);
             }
 
                 Directory.CreateDirectory(_outputFolder);
@@ -149,7 +158,7 @@ namespace ImgViewer.Models
             _tokenRegistration = _token.Register(() =>
             {
                 try { _filesQueue.CompleteAdding(); } catch { }
-                //try { _saveQueue.CompleteAdding(); } catch { } gracefull cancel
+                try { _saveQueue.CompleteAdding(); } catch { }
             });
             _processedCount = 0;
             //_totalCount = sourceFolder.Files.Length;
@@ -475,7 +484,7 @@ namespace ImgViewer.Models
                     {
                         Interlocked.Decrement(ref _currentSavingWorkers);
                     }
-                }, CancellationToken.None);
+                }, _token);
 
                 _savingTasks.Add(workerTask);
 
@@ -497,7 +506,7 @@ namespace ImgViewer.Models
             {
                 foreach (var saveTask in _saveQueue.GetConsumingEnumerable())
                 {
-                    //token.ThrowIfCancellationRequested();
+                    token.ThrowIfCancellationRequested();
                     //using (var stream = saveTask.ImageStream)
                     //{
                     //    if (stream.CanSeek) stream.Position = 0;
@@ -746,12 +755,13 @@ namespace ImgViewer.Models
                 }
                 for (int i = 0; i < _workersCount; i++)
                 {
+                    _token.ThrowIfCancellationRequested();
                     if (_cts.IsCancellationRequested) throw new OperationCanceledException();
-                    processingTasks.Add(Task.Run(() => ImageProcessingWorker(), CancellationToken.None));
+                    processingTasks.Add(Task.Run(() => ImageProcessingWorker(), _token));
                 }
 
                 // in parallel enqueing que
-                var enqueueTask = Task.Run(() => EnqueueFiles(), CancellationToken.None);
+                var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
                 processingTasks.Add(enqueueTask);
                 StartSavingWorkerIfNeeded();
                 await Task.WhenAll(processingTasks);

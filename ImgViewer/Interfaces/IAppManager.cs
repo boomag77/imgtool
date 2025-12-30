@@ -36,8 +36,8 @@ namespace ImgViewer.Interfaces
         public Task SaveProcessedImageToTiff(string outputPath, ImageFormat format);
         public void SetSplitPreviewImages(ImageSource left, ImageSource right);
         public void ClearSplitPreviewImages();
-        public Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken);
-        public Task ProcessFolder(string srcFolder, Pipeline pipeline);
+        //private Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken);
+        public Task ProcessFolder(string srcFolder);
 
         public Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree);
 
