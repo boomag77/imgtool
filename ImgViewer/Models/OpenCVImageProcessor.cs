@@ -67,19 +67,29 @@ namespace ImgViewer.Models
 
             }
         }
-        public ImageSource CurrentImage
+        public object CurrentImage
         {
             set
             {
                 try
                 {
                     ClearSplitResults();
-                    var mat = BitmapSourceToMat((BitmapSource)value);
+                    // if value is raw pixels
+                    Mat? mat = null;
+                    if (value is byte[] rawPixels)
+                    {
+                        mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
+                    }
+                    else if (value is BitmapSource bmp)
+                    {
+                        mat = BitmapSourceToMat(bmp);
+                    }
                     if (mat == null || mat.Empty())
                     {
                         mat?.Dispose();
                         return;
                     }
+
                     WorkingImage = mat;
                 }
                 
@@ -379,25 +389,30 @@ namespace ImgViewer.Models
                 case TiffCompression.CCITTG3:
                 case TiffCompression.CCITTG4:
                     // for CCITTG3/G4 we need binary image
-                    var (binPixels, width, height) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: false);
-                    tiffInfo.Pixels = binPixels;
-                    tiffInfo.Width = width;
-                    tiffInfo.Height = height;
-                    tiffInfo.Dpi = dpi;
-                    tiffInfo.BitsPerPixel = 1; // binary
-                    tiffInfo.Compression = compression;
-                    tiffInfo.IsMultiPage = false;
-                    break;
+                    {
+                        var (binPixels, width, height, strideBytes, bitsPerPixel) = GetBinPixelsFromMat(compression, photometricMinIsWhite: false, useOtsu: false);
+                        tiffInfo.Pixels = binPixels;
+                        tiffInfo.StrideBytes = strideBytes;
+                        tiffInfo.Width = width;
+                        tiffInfo.Height = height;
+                        tiffInfo.Dpi = dpi;
+                        tiffInfo.BitsPerPixel = bitsPerPixel; // binary
+                        tiffInfo.Compression = compression;
+                        tiffInfo.IsMultiPage = false;
+                        break;
+                    }
                 case TiffCompression.LZW:
-                    var (lzwPixels, lzwWidth, lzwHeight) = GetBinPixelsFromMat(photometricMinIsWhite: false, useOtsu: true);
-                    tiffInfo.Pixels = lzwPixels;
-                    tiffInfo.Width = lzwWidth;
-                    tiffInfo.Height = lzwHeight;
-                    tiffInfo.Dpi = dpi;
-                    tiffInfo.BitsPerPixel = 8;
-                    tiffInfo.Compression = compression; // added line to set compression for LZW
-                    tiffInfo.IsMultiPage = false;
-                    break;
+                    {
+                        var (lzwPixels, lzwWidth, lzwHeight, _, bitsPerPixel) = GetBinPixelsFromMat(compression, photometricMinIsWhite: false, useOtsu: true);
+                        tiffInfo.Pixels = lzwPixels;
+                        tiffInfo.Width = lzwWidth;
+                        tiffInfo.Height = lzwHeight;
+                        tiffInfo.Dpi = dpi;
+                        tiffInfo.BitsPerPixel = bitsPerPixel; // updated to use lzwBitsPerPixel correctly
+                        tiffInfo.Compression = compression; // added line to set compression for LZW
+                        tiffInfo.IsMultiPage = false;
+                        break;
+                    }
                 default:
                     // for other compressions we can use grayscale or color
                     tiffInfo.Compression = compression; // added line to set compression for default case
@@ -406,7 +421,8 @@ namespace ImgViewer.Models
             return tiffInfo;
         }
 
-        private (byte[] binPixels, int width, int height) GetBinPixelsFromMat(bool photometricMinIsWhite = false,
+        private (byte[] binPixels, int width, int height, int strideBytes, int bitsPerPixel) GetBinPixelsFromMat(TiffCompression compression,
+                                                                             bool photometricMinIsWhite = false,
                                                                              bool useOtsu = true,
                                                                              double manualThreshold = 128)
         {
@@ -426,9 +442,39 @@ namespace ImgViewer.Models
 
             Cv2.Threshold(gray, bin, useOtsu ? 0 : manualThreshold, 255, thrType);
 
+            
+
             int width = bin.Cols;
             int height = bin.Rows;
+            int strideBytes = width;
+
+            if (compression == TiffCompression.CCITTG3 || compression == TiffCompression.CCITTG4)
+            {
+                // для G3/G4 нужно 1-битное изображение
+                strideBytes = (width + 7) >> 3;
+                var packed = new byte[strideBytes * height];
+                unsafe
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        byte* srcRow = (byte*)bin.Ptr(y).ToPointer();
+                        int dstOff = y * strideBytes;
+
+                        for (int x = 0; x < width; x++)
+                        {
+                            // ставим бит = 1 если пиксель != 0 (обычно 255)
+                            if (srcRow[x] != 0)
+                                packed[dstOff + (x >> 3)] |= (byte)(0x80 >> (x & 7));
+                        }
+                    }
+                }
+                return (packed, width, height, strideBytes, 1);
+            }
+
+
+
             int bufferSize = width * height;
+
             var binPixels = new byte[bufferSize];
 
             //var binPixels = new byte[width * height];
@@ -439,7 +485,7 @@ namespace ImgViewer.Models
                 Marshal.Copy(bin.Ptr(y), binPixels, y * width, width);
             }
 
-            return (binPixels, width, height);
+            return (binPixels, width, height, strideBytes, 8);
         }
 
         private Mat ToGray8u(Mat src)
@@ -2593,26 +2639,26 @@ namespace ImgViewer.Models
             return BitmapSourceToStream(bmpSource);
         }
 
-        public Stream? LoadAsPNGStream(string path, int targetBPP)
-        {
-            try
-            {
-                using var mat = Cv2.ImRead(path, ImreadModes.Color);
-                BitmapSource bmpSource = MatToBitmapSource(mat);
-                // Сохраняем в MemoryStream как PNG
-                var encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(bmpSource));
-                var ms = new MemoryStream();
-                encoder.Save(ms);
-                ms.Position = 0;
-                return ms;
-            }
-            catch (Exception ex)
-            {
-                ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
-                return null;
-            }
-        }
+        //public Stream? LoadAsPNGStream(string path, int targetBPP)
+        //{
+        //    try
+        //    {
+        //        using var mat = Cv2.ImRead(path, ImreadModes.Color);
+        //        BitmapSource bmpSource = MatToBitmapSource(mat);
+        //        // Сохраняем в MemoryStream как PNG
+        //        var encoder = new PngBitmapEncoder();
+        //        encoder.Frames.Add(BitmapFrame.Create(bmpSource));
+        //        var ms = new MemoryStream();
+        //        encoder.Save(ms);
+        //        ms.Position = 0;
+        //        return ms;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
+        //        return null;
+        //    }
+        //}
 
         // Safe Mat -> BitmapSource conversion (no use of .Depth or non-existent members)
         private BitmapSource MatToBitmapSource(Mat matOrg)

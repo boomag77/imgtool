@@ -297,7 +297,6 @@ namespace ImgViewer.Models
                             BitsPerSample = bitsPerSample,
                             IsRawCompressed = isRaw,
                             Data = data
-                            
                         };
 
 
@@ -597,13 +596,70 @@ namespace ImgViewer.Models
             return CreateImageSource(tiffStream);
         }
 
+        public static async Task<byte[]?> LoadPixelsFromTiff(string filePath)
+        {
+            var tiffInfo = await ReadTiff(filePath);
+            if (tiffInfo == null)
+                return null;
+            var rawData = tiffInfo.Value.Data;
+            if (rawData.Length == 0)
+                return null;
+
+            if (tiffInfo.Value.Compression == (int)TiffCompression.JPEG)
+            {
+                return rawData;
+            }
+
+            if (tiffInfo.Value.PhotoMetric == (int)Photometric.SEPARATED &&
+                                                    tiffInfo.Value.SamplesPerPixel == 4)
+            {
+                Debug.WriteLine("Detected CMYK TIFF — converting to RGB");
+                var rgbData = ConvertCmykToRgb(tiffInfo.Value.Data);
+
+                // Обновим поля для RGB-варианта
+                var rgbInfo = tiffInfo.Value;
+                rgbInfo.Data = rgbData;
+                rgbInfo.PhotoMetric = (int)Photometric.RGB;
+                rgbInfo.SamplesPerPixel = 3;
+
+                using var rgbTiffStream = TiffMemoryStream(rgbInfo);
+                return rgbTiffStream.ToArray();
+            }
+
+            if (tiffInfo.Value.PhotoMetric == (int)Photometric.PALETTE)
+            {
+                using (var tiff = Tiff.Open(filePath, "r"))
+                {
+                    if (tiff == null)
+                        return null;
+
+                    var rgbData = ConvertPaletteToRgb(tiff, tiffInfo.Value.Data, tiffInfo.Value.BitsPerSample);
+
+                    // создаём RGB-вариант
+                    var rgbInfo = tiffInfo.Value;
+                    rgbInfo.Data = rgbData;
+                    rgbInfo.PhotoMetric = (int)Photometric.RGB;
+                    rgbInfo.SamplesPerPixel = 3;
+
+                    using var rgbTiffStream = TiffMemoryStream(rgbInfo);
+                    return rgbTiffStream.ToArray();
+                }
+            }
+
+            using var tiffStream = TiffMemoryStream(tiffInfo.Value);
+            return tiffStream.ToArray();
+        }
+
+
+
         private static ImageSource LoadImageSourceFromJpeg(byte[] jpegData)
         {
             using var ms = new MemoryStream(jpegData);
             var decoder = new JpegBitmapDecoder(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             var frame = decoder.Frames[0];
-            frame.Freeze();
-            return frame;
+            var copy = new WriteableBitmap(frame);
+            copy.Freeze();
+            return copy;
 
             //using var ms = new MemoryStream(jpegData);
             //using var img = System.Drawing.Image.FromStream(ms);
@@ -629,8 +685,9 @@ namespace ImgViewer.Models
                 tiffStream.Position = 0;
                 var decoder = new TiffBitmapDecoder(tiffStream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
                 var frame = decoder.Frames[0];
-                frame.Freeze();
-                return frame;
+                var copy = new WriteableBitmap(frame);
+                copy.Freeze();
+                return copy;
             }
             catch (Exception ex)
             {

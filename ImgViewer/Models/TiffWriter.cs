@@ -18,17 +18,11 @@ public enum TiffCompression
 
 namespace ImgViewer.Models
 {
-    public class TiffWriter : IDisposable
+    public static class TiffWriter
     {
 
-
-        public void Dispose()
-        {
-            // nothing to dispose
-
-        }
         // public entry point
-        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true, string? metadataJson = null)
+        public static void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true, string? metadataJson = null)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
@@ -69,15 +63,25 @@ namespace ImgViewer.Models
 
                     // convert to binary 0/255 bytes (grayscale + Otsu)
                     var binPixels = ConvertBitmapToBinary(bmp, out int width, out int height);
-
                     // detect if need to invert (we want background white, foreground black typical for fax)
                     bool invert = ShouldInvertBinary(binPixels, width, height);
                     if (invert)
                         InvertBinary(binPixels);
-
+                    var strideBytes = (width + 7) >> 3; // 1 byte per pixel before packing
+                    var packedBinPixels = new byte[strideBytes * height];
+                    // pack to 1-bit
+                    for (int y = 0; y < height; y++)
+                    {
+                        PackRowTo1BitInto(
+                            srcRow: binPixels.AsSpan(y * width, width),
+                            width: width,
+                            dstPacked: packedBinPixels.AsSpan(y * strideBytes, strideBytes));
+                    }
                     // write via LibTiff.NET
                     SaveBinaryBytesAsCcitt(
-                        binPixels,
+                        packedBinPixels,
+                        strideBytes,
+                        bitsPerPixel: 1,
                         width, height,
                         path,
                         dpi,
@@ -92,6 +96,7 @@ namespace ImgViewer.Models
                     // Simpler: write the decoded image to disk using Image.Save with requested encoder params if available.
 
                     // decode to Bitmap and use Magick if present; otherwise save PNG or TIFF
+
                     ms.Position = 0;
                     using var bmp = (Bitmap)Image.FromStream(ms);
                     // try Magick.NET write if present (optional) - but simplest: save as tiff using GDI+ (no compression)
@@ -230,35 +235,69 @@ namespace ImgViewer.Models
         }
 
         // pack row 0/255 -> 1-bit MSB-first
-        private static byte[] PackRowTo1Bit(byte[] srcRow, int width)
+        //private static byte[] PackRowTo1Bit(byte[] srcRow, int width)
+        //{
+        //    int dstStride = (width + 7) / 8;
+        //    byte[] dst = new byte[dstStride];
+        //    for (int x = 0; x < width; x++)
+        //    {
+        //        int byteIndex = x >> 3;
+        //        int bitIndex = 7 - (x & 7);
+        //        if (srcRow[x] != 0) // 255 => black(1)
+        //            dst[byteIndex] |= (byte)(1 << bitIndex);
+        //    }
+        //    return dst;
+        //}
+
+        private static void PackRowTo1BitInto(ReadOnlySpan<byte> srcRow, int width, Span<byte> dstPacked)
         {
-            int dstStride = (width + 7) / 8;
-            byte[] dst = new byte[dstStride];
-            for (int x = 0; x < width; x++)
+            int stride = (width + 7) >> 3;
+            if (srcRow.Length < width)
+                throw new ArgumentException("srcRow length < width");
+            if (dstPacked.Length < stride)
+                throw new ArgumentException("dstPacked length < stride");
+
+            int x = 0;
+            int bi = 0;
+
+            // Пакуем по 8 пикселей в байт (MSB2LSB)
+            while (x + 8 <= width)
             {
-                int byteIndex = x >> 3;
-                int bitIndex = 7 - (x & 7);
-                if (srcRow[x] != 0) // 255 => black(1)
-                    dst[byteIndex] |= (byte)(1 << bitIndex);
+                byte b = 0;
+                if (srcRow[x + 0] != 0) b |= 0x80;
+                if (srcRow[x + 1] != 0) b |= 0x40;
+                if (srcRow[x + 2] != 0) b |= 0x20;
+                if (srcRow[x + 3] != 0) b |= 0x10;
+                if (srcRow[x + 4] != 0) b |= 0x08;
+                if (srcRow[x + 5] != 0) b |= 0x04;
+                if (srcRow[x + 6] != 0) b |= 0x02;
+                if (srcRow[x + 7] != 0) b |= 0x01;
+
+                dstPacked[bi++] = b;
+                x += 8;
             }
-            return dst;
+
+            // Хвост (если width не кратна 8)
+            if (x < width)
+            {
+                byte b = 0;
+                byte mask = 0x80;
+                for (; x < width; x++, mask >>= 1)
+                {
+                    if (srcRow[x] != 0) b |= mask;
+                }
+                dstPacked[bi] = b;
+            }
         }
 
-        private static void PackRowTo1BitInto(byte[] srcRow, int width, byte[] dstPacked)
-        {
-            Array.Clear(dstPacked, 0, dstPacked.Length);
-            for (int x = 0; x < width; x++)
-            {
-                int byteIndex = x >> 3;
-                int bitIndex = 7 - (x & 7);
-                if (srcRow[x] != 0)
-                    dstPacked[byteIndex] |= (byte)(1 << bitIndex);
-            }
-        }
+
+
 
         // Save binary via LibTiff.NET with chosen compression (CCITT G3/G4)
-        public void SaveBinaryBytesAsCcitt(
-            byte[] binPixels,
+        public static void SaveBinaryBytesAsCcitt(
+            byte[] packedBinPixels,
+            int strideBytes,
+            int bitsPerPixel,
             int width, int height,
             string outPath,
             int dpi,
@@ -266,8 +305,10 @@ namespace ImgViewer.Models
             bool photometricMinIsWhite = true,
             string? metadataJson = null)
         {
-            if (binPixels.Length != width * height)
+            if (packedBinPixels.Length != strideBytes * height)
                 throw new ArgumentException("binPixels length mismatch");
+            if (bitsPerPixel != 1)
+                throw new ArgumentException("Only 1 bit per pixel supported for CCITT saving.");
 
             // Open TIFF
             using var tif = Tiff.Open(outPath, "w");
@@ -295,16 +336,18 @@ namespace ImgViewer.Models
                 tif.SetField(TiffTag.IMAGEDESCRIPTION, metadataJson);
             }
 
-            int packedStride = (width + 7) / 8;
-            var srcRow = new byte[width];
-            var packedRow = new byte[packedStride];
+            //int packedStride = strideBytes;
+            //var srcRow = new byte[width];
+            //var packedRow = new byte[packedStride];
 
             for (int y = 0; y < height; y++)
             {
-                Buffer.BlockCopy(binPixels, y * width, srcRow, 0, width);
-                PackRowTo1BitInto(srcRow, width, packedRow); // версия, пишущая в переданный packedRow
-                bool res = tif.WriteScanline(packedRow, y);
-                if (!res) throw new IOException($"WriteScanline failed at row {y}");
+                //Buffer.BlockCopy(binPixels, y * width, srcRow, 0, width);
+                //PackRowTo1BitInto(srcRow, width, packedRow); // версия, пишущая в переданный packedRow
+                int offset = y * strideBytes;
+
+                bool ok = tif.WriteScanline(packedBinPixels, offset, y, 0);
+                if (!ok) throw new IOException($"WriteScanline failed at row {y}");
             }
 
             tif.WriteDirectory();

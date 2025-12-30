@@ -549,10 +549,10 @@ namespace ImgViewer.Models
                 foreach (var file in _filesQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
-                    (ImageSource, byte[]) loaded;
+                    (ImageSource?, byte[]?) loaded;
                     try
                     {
-                        loaded = fileProc.LoadImageSource(file.Path);
+                        loaded = fileProc.LoadImageSource(file.Path, isBatch: true);
                     }
                     catch (OperationCanceledException)
                     {
@@ -564,7 +564,7 @@ namespace ImgViewer.Models
                         continue;
                     }
 
-                    if (loaded.Item1 == null)
+                    if (loaded.Item2 == null)
                     {
                         // если здесь токен отменён — просто выходим/продолжаем без ошибки
                         if (token.IsCancellationRequested) throw new OperationCanceledException(token);
@@ -572,8 +572,9 @@ namespace ImgViewer.Models
                         continue;
                     }
 
-                    imgProc.CurrentImage = loaded.Item1;
+                    imgProc.CurrentImage = loaded.Item2;
                     //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
+                    
 
                     foreach (var op in _plOperations)
                     {

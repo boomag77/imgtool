@@ -12,7 +12,6 @@ namespace ImgViewer.Models
     internal class FileProcessor : IFileProcessor, IDisposable
     {
         private CancellationToken _token;
-        private readonly TiffWriter _tiffWriter;
 
         private static int _magickConfigured = 0;
         private static readonly SemaphoreSlim _magickGate = new(1, 1);
@@ -23,12 +22,10 @@ namespace ImgViewer.Models
         public FileProcessor(CancellationToken token)
         {
             _token = token;
-            _tiffWriter = new TiffWriter();
         }
 
         public void Dispose()
         {
-            _tiffWriter?.Dispose();
             // Dispose of unmanaged resources here if needed
         }
 
@@ -40,7 +37,7 @@ namespace ImgViewer.Models
             ResourceLimits.Thread = 1; // снижает шанс race/AV в batch
         }
 
-        private (ImageSource, byte[]) LoadWithMagickFallback(string path, uint? decodePixelWidth)
+        private (ImageSource?, byte[]?) LoadWithMagickFallback(bool isBatch, string path, uint? decodePixelWidth)
         {
             ConfigureMagickOnce();
 
@@ -53,7 +50,11 @@ namespace ImgViewer.Models
                 using var fs = OpenReadShared(path);
                 using var image = new MagickImage(fs);
 
+
+
                 image.AutoOrient();
+
+
 
                 // decodePixelWidth: делаем resize после чтения (самый надёжный путь)
                 if (decodePixelWidth.HasValue && decodePixelWidth.Value > 0 && image.Width > decodePixelWidth.Value)
@@ -71,6 +72,12 @@ namespace ImgViewer.Models
                 using var pixels = image.GetPixels();
                 byte[] pixelData = pixels.ToByteArray(0, 0, width, height, map);
 
+                if (isBatch)
+                {
+                    return (null, pixelData);
+                }
+
+
                 var bmpSource = BitmapSource.Create(
                     (int)width, (int)height, 96, 96,
                     bpp == 4 ? PixelFormats.Bgra32 : PixelFormats.Bgr24,
@@ -79,9 +86,15 @@ namespace ImgViewer.Models
                 bmpSource.Freeze();
 
                 // для совместимости оставим BMP bytes
-                byte[] bytes = EncodeToBmpBytes(bmpSource);
+                byte[] bytes = Array.Empty<byte>();
+                if (isBatch)
+                {
+                    bytes = EncodeToBmpBytes(bmpSource);
+                    bmpSource = null; // освобождаем память, если не нужно
+                }
+                    
 
-                return (bmpSource, bytes);
+                return isBatch ? (null, bytes) : (bmpSource, null);
             }
             catch (OperationCanceledException)
             {
@@ -108,7 +121,7 @@ namespace ImgViewer.Models
                                                     4096,
                                                     FileOptions.SequentialScan);
 
-        private bool TryLoadWithWic(string path, uint? decodePixelWidth,
+        private bool TryLoadWithWic(bool isBatch, string path, uint? decodePixelWidth,
                                   out BitmapSource? bmp, out byte[] bytes, out string? fail)
         {
             bmp = null;
@@ -119,6 +132,18 @@ namespace ImgViewer.Models
             {
                 _token.ThrowIfCancellationRequested();
                 using var fs = OpenReadShared(path);
+
+                if (isBatch)
+                {
+                    // return only byte[] in batch mode
+                    bmp = null;
+                    using var ms = new MemoryStream();
+                    fs.CopyTo(ms);
+
+                    bytes = ms.ToArray();
+                    return true; // raw file bytes
+
+                }
 
                 // Важно: OnLoad, чтобы не держать файл
                 var decoder = BitmapDecoder.Create(
@@ -143,7 +168,11 @@ namespace ImgViewer.Models
                 bmp = src;
 
                 // Если тебе реально нужен byte[] (как сейчас): оставим BMP-энкодинг для совместимости
-                bytes = EncodeToBmpBytes(src);
+                if (isBatch)
+                {
+                    bytes = EncodeToBmpBytes(src);
+                }
+                    
 
                 return true;
             }
@@ -252,7 +281,7 @@ namespace ImgViewer.Models
 
 
 
-        public (ImageSource, byte[]) LoadImageSource(string path, uint? decodePixelWidth = null)
+        public (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null)
         {
 
 
@@ -260,30 +289,40 @@ namespace ImgViewer.Models
             string extension = Path.GetExtension(path).ToLowerInvariant();
             if (extension == ".tif" || extension == ".tiff")
             {
+                if (isBatch)
+                {
+                    // In batch mode, return raw bytes
+                    var tiffBytes = TiffReader.LoadPixelsFromTiff(path).GetAwaiter().GetResult();
+                    if (tiffBytes != null)
+                    {
+                        return (null, tiffBytes);
+                    }
+                }
                 // Try to load TIFF via LibTiff
                 var bmp = TiffReader.LoadImageSourceFromTiff(path).GetAwaiter().GetResult();
                 if (bmp != null)
                 {
                     if (bmp is BitmapSource bs && !bs.IsFrozen)
                         bs.Freeze();
-                    return (bmp, Array.Empty<byte>());
+                    return (bmp, null);
                 }
                 // If failed, fallback to Magick.NET
             }
 
-            if (TryLoadWithWic(path, decodePixelWidth, out var wicBmp, out var wicBytes, out var wicFail))
+            if (TryLoadWithWic(isBatch, path, decodePixelWidth, out var wicBmp, out var wicBytes, out var wicFail))
             {
 #if DEBUG
                 Debug.WriteLine($"Loaded {path} via WIC.");
 #endif
-                return (wicBmp!, wicBytes);
+                return isBatch ? (null, wicBytes) : (wicBmp!, null);
             }
 
 
             try
             {
                 Debug.WriteLine($"WIC failed to load {path}: {wicFail}. Falling back to Magick.NET.");
-                return LoadWithMagickFallback(path, decodePixelWidth);
+                var (bmp, bytes) = LoadWithMagickFallback(isBatch, path, decodePixelWidth);
+                return isBatch ? (null, bytes) : (bmp, null);
 
             }
             catch (OperationCanceledException)
@@ -294,8 +333,9 @@ namespace ImgViewer.Models
             catch (Exception ex2)
             {
                 ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
+
                 //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
-                return (new BitmapImage(), Array.Empty<byte>());
+                return (null, null);
             }
 
         }
@@ -324,14 +364,16 @@ namespace ImgViewer.Models
             try
             {
                 //using var tiffSaver = new TiffWriter();
-                _tiffWriter.SaveBinaryBytesAsCcitt(
+                TiffWriter.SaveBinaryBytesAsCcitt(
                     tiffInfo.Pixels,
+                    tiffInfo.StrideBytes,
+                    tiffInfo.BitsPerPixel,
                     tiffInfo.Width,
                     tiffInfo.Height,
                     path,
                     tiffInfo.Dpi,
                     tiffInfo.Compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
-                    photometricMinIsWhite: false,
+                    false,
                     metadataJson);
             }
             catch (OperationCanceledException)
@@ -355,8 +397,7 @@ namespace ImgViewer.Models
             }
             try
             {
-                using var tiffSaver = new TiffWriter();
-                tiffSaver.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
+                TiffWriter.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
             }
             catch (OperationCanceledException)
             {

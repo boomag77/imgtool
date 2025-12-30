@@ -1017,23 +1017,23 @@ namespace ImgViewer.Views
             base.OnClosing(e);
         }
 
-        private BitmapSource streamToBitmapSource(Stream stream)
-        {
-            if (stream == null || stream == Stream.Null)
-                return null!;
+        //private BitmapSource streamToBitmapSource(Stream stream)
+        //{
+        //    if (stream == null || stream == Stream.Null)
+        //        return null!;
 
-            if (stream.CanSeek)
-                stream.Position = 0;
+        //    if (stream.CanSeek)
+        //        stream.Position = 0;
 
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.StreamSource = stream;
-            bitmap.EndInit();
-            bitmap.Freeze();
+        //    var bitmap = new BitmapImage();
+        //    bitmap.BeginInit();
+        //    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        //    bitmap.StreamSource = stream;
+        //    bitmap.EndInit();
+        //    bitmap.Freeze();
 
-            return bitmap;
-        }
+        //    return bitmap;
+        //}
 
 
         private async void OpenFile_Click(object sender, RoutedEventArgs e)

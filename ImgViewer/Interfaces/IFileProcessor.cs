@@ -6,7 +6,7 @@ namespace ImgViewer.Interfaces
 {
     public interface IFileProcessor
     {
-        (ImageSource, byte[]) LoadImageSource(string path, uint? decodePixelWidth = null);
+        (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null);
         //BitmapSource? LoadTemp(string path);
         //byte[] LoadBmpBytes(string path, uint? decodePixelWidth = null);
         SourceImageFolder? GetImageFilesPaths(string folderPath, CancellationToken token);

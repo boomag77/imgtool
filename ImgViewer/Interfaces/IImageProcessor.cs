@@ -10,7 +10,7 @@ namespace ImgViewer.Interfaces
     public interface IImageProcessor
     {
         
-        public ImageSource CurrentImage { set; }
+        public object CurrentImage { set; }
 
         
 
@@ -18,7 +18,7 @@ namespace ImgViewer.Interfaces
 
         public void UpdateCancellationToken(CancellationToken token);
 
-        Stream? LoadAsPNGStream(string path, int targetBPP);
+        //Stream? LoadAsPNGStream(string path, int targetBPP);
         //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
 
