@@ -4,814 +4,811 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using ImgViewer.Models;
 
-namespace ImgViewer.Models
+public class Pipeline
 {
+    public event Action<string>? ErrorOccured;
+
+    private sealed class PipelineSaveItem
+    {
+        public PipelineOperationType Type { get; set; }
+        public string? DisplayName { get; set; }
+        public Dictionary<string, object?>? Parameters { get; set; }
+    }
+
+    
 
 
-    public class Pipeline
+    private readonly IAppManager _manager;
+
+
+    private readonly object _operationsLock = new();
+
+    private ObservableCollection<PipelineOperation> _operations = new();
+
+    public ObservableCollection<PipelineOperation> Operations
+    {
+        get
+        {
+            lock (_operationsLock)
+                return _operations;
+        }
+        set
+        {
+            Debug.WriteLine($"Operations: {_operations.Count}");
+        }
+    }
+
+    public int Count
+    {
+        get
+        {
+            lock (_operationsLock)
+                return _operations.Count;
+        }
+    }
+
+    public Pipeline(IAppManager manager)
+    {
+        _manager = manager;
+        InitializeDefault();
+    }
+
+    public void Clear()
+    {
+        lock (_operationsLock)
+            _operations.Clear();
+    }
+
+    public void Add(PipelineOperationType operationType)
+    {
+        lock (_operationsLock)
+        {
+            var op = CreatePipelineOperation(operationType);
+            InsertInternal(_operations.Count, op);
+        }
+
+    }
+
+    public void Insert(int index, PipelineOperation operation)
+    {
+        lock (_operationsLock)
+        {
+            InsertInternal(index, operation);
+        }
+
+    }
+
+    public void Remove(PipelineOperation operation)
+    {
+        lock (_operationsLock)
+            _operations.Remove(operation);
+    }
+
+    public bool Contains(PipelineOperation operation)
+    {
+        lock (_operationsLock)
+            return _operations.Contains(operation);
+    }
+
+    public int IndexOf(PipelineOperation operation)
+    {
+        lock (_operationsLock)
+            return _operations.IndexOf(operation);
+    }
+
+    private void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
+    {
+        _manager.ApplyCommandToProcessingImage(command, parameters);
+    }
+
+    public PipelineOperation CreatePipelineOperation(PipelineOperationType type, string? nameSuffix = null)
     {
 
-        public event Action<string>? ErrorOccured;
+        PipelineOperation operation;
+        string displayName = nameSuffix == null ? type.ToString() : $"{type.ToString()} {nameSuffix}";
+        string buttonText = "Preview"; // или возьми из поля/ресурса
 
-        private sealed class PipelineSaveItem
+        switch (type)
         {
-            public PipelineOperationType Type { get; set; }
-            public string? DisplayName { get; set; }
-            public Dictionary<string, object?>? Parameters { get; set; }
-        }
-
-
-        private readonly IAppManager _manager;
-
-
-        private readonly object _operationsLock = new();
-
-        private ObservableCollection<PipelineOperation> _operations = new();
-
-        public ObservableCollection<PipelineOperation> Operations
-        {
-            get
-            {
-                lock (_operationsLock)
-                    return _operations;
-            }
-            set
-            {
-                Debug.WriteLine($"Operations: {_operations.Count}");
-            }
-        }
-
-        public int Count
-        {
-            get
-            {
-                lock (_operationsLock)
-                    return _operations.Count;
-            }
-        }
-
-        public Pipeline(IAppManager manager)
-        {
-            _manager = manager;
-            InitializeDefault();
-        }
-
-        public void Clear()
-        {
-            lock (_operationsLock)
-                _operations.Clear();
-        }
-
-        public void Add(PipelineOperationType operationType)
-        {
-            lock (_operationsLock)
-            {
-                var op = CreatePipelineOperation(operationType);
-                InsertInternal(_operations.Count, op);
-            }
-
-        }
-
-        public void Insert(int index, PipelineOperation operation)
-        {
-            lock (_operationsLock)
-            {
-                InsertInternal(index, operation);
-            }
-
-        }
-
-        public void Remove(PipelineOperation operation)
-        {
-            lock (_operationsLock)
-                _operations.Remove(operation);
-        }
-
-        public bool Contains(PipelineOperation operation)
-        {
-            lock (_operationsLock)
-                return _operations.Contains(operation);
-        }
-
-        public int IndexOf(PipelineOperation operation)
-        {
-            lock (_operationsLock)
-                return _operations.IndexOf(operation);
-        }
-
-        private void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
-        {
-            _manager.ApplyCommandToProcessingImage(command, parameters);
-        }
-
-        public PipelineOperation CreatePipelineOperation(PipelineOperationType type, string? nameSuffix = null)
-        {
-
-            PipelineOperation operation;
-            string displayName = nameSuffix == null ? type.ToString() : $"{type.ToString()} {nameSuffix}";
-            string buttonText = "Preview"; // или возьми из поля/ресурса
-
-            switch (type)
-            {
-                case PipelineOperationType.Deskew:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.Deskew,
+            case PipelineOperationType.Deskew:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.Deskew,
+                        ProcessorCommand.Deskew,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments" }, 0),
+                            new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
+                            new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
+                            new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
+                            new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
+                            new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1),
+                            new PipeLineParameter("Hough max line gap", "maxLineGap", 20, 0, 500, 1),
+                            new PipeLineParameter("Projection min angle", "projMinAngle", -15.0, -45.0, 0.0, 0.5),
+                            new PipeLineParameter("Projection max angle", "projMaxAngle", 15.0, 0.0, 45.0, 0.5),
+                            new PipeLineParameter("Projection coarse step", "projCoarseStep", 1.0, 0.1, 5.0, 0.1),
+                            new PipeLineParameter("Projection refine step", "projRefineStep", 0.2, 0.05, 2.0, 0.05)
+                        },
+                        op => ExecuteManagerCommand(
                             ProcessorCommand.Deskew,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments" }, 0),
-                                new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
-                                new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
-                                new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
-                                new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
-                                new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1),
-                                new PipeLineParameter("Hough max line gap", "maxLineGap", 20, 0, 500, 1),
-                                new PipeLineParameter("Projection min angle", "projMinAngle", -15.0, -45.0, 0.0, 0.5),
-                                new PipeLineParameter("Projection max angle", "projMaxAngle", 15.0, 0.0, 45.0, 0.5),
-                                new PipeLineParameter("Projection coarse step", "projCoarseStep", 1.0, 0.1, 5.0, 0.1),
-                                new PipeLineParameter("Projection refine step", "projRefineStep", 0.2, 0.05, 2.0, 0.05)
-                            },
-                            op => ExecuteManagerCommand(
-                                ProcessorCommand.Deskew,
-                                op.CreateParameterDictionary())
-                        );
-                    }
+                            op.CreateParameterDictionary())
+                    );
+                }
 
-                    break;
-                case PipelineOperationType.BordersRemove:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.BordersRemove,
-                            ProcessorCommand.BordersRemove,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "Integral", "By Contrast", "Manual"}, 0),
-                                // By contrast
-                                new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
-                                new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 255, 1),
-                                new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
-                                new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
-                                // Auto
-                                new PipeLineParameter("Auto Threshold", "autoThresh", true),
-                                new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
-                                new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 3.0, 0.01),
-                                new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 0, 255, 1),
-                                new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
-                                new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 0, 2_000_000, 1),
-                                new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.20, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 200, 1),
-                                new PipeLineParameter("Use TeleaHybrid", "useTeleaHybrid", true),
-                                // Manual
-                                new PipeLineParameter("Left", "manualLeft", 0, 0, 10000, 1),
-                                new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),
-                                new PipeLineParameter("Top", "manualTop", 0, 0, 10000, 1),
-                                new PipeLineParameter("Bottom", "manualBottom", 0, 0, 10000, 1),
-                                new PipeLineParameter("Cut", "cutMethod", false),
-                                new PipeLineParameter("Preview cut", "manualCutDebug", false),
-                                new PipeLineParameter("Apply to Left Page", "applyToLeftPage", true),
-                                new PipeLineParameter("Apply to Right Page", "applyToRightPage", true),
-                                // Integral
-                                new PipeLineParameter("Seed contrast strickness", "seedContrastStrictness", 1.0, 0.05, 3.0, 0.05),
-                                new PipeLineParameter("Seed brightness strickness", "seedBrightnessStrictness", 1.0, 0.05, 3.0, 0.05),
-                                new PipeLineParameter("Texture allowance", "textureAllowance", 1.0, 0.05, 2.0, 0.05),
-                                new PipeLineParameter("Scan step px", "scanStepPx", 16, 1, 100, 1),
-                                new PipeLineParameter("Inpaint radius", "inpaintRadius", 3, 1, 50, 1),
-                                new PipeLineParameter("Inpaint mode", "inpaintMode", new [] {"Fill", "Telea", "NS"}, 0),
-                                new PipeLineParameter("Border color variation", "borderColorVariation", 0.5, 0.05, 1.0, 0.05),
-                                new PipeLineParameter("Border safety offset px", "borderSafetyOffsetPx", 5, -30, 30, 1),
-                                new PipeLineParameter("Cut result", "integralCut", false),
-                                new PipeLineParameter("Auto max border width fraction", "autoMaxBorderDepthFrac", true),
-                                new PipeLineParameter("Max border depth Left (frac)", "maxBorderDepthFracLeft", 0.25, 0, 1, 0.01),
-                                new PipeLineParameter("Max border depth Right (frac)", "maxBorderDepthFracRight", 0.25, 0, 1, 0.01),
-                                new PipeLineParameter("Max border depth Top (frac)", "maxBorderDepthFracTop", 0.25, 0, 1, 0.01),
-                                new PipeLineParameter("Max border depth Bottom (frac)", "maxBorderDepthFracBottom", 0.25, 0, 1, 0.01),
-                                new PipeLineParameter("K-interpolation", "kInterpolation", 0, 0, 50, 1)
-
-                            },
-                            operation => ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.Binarize:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.Binarize,
-                            ProcessorCommand.Binarize,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Method", "method", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
-                                // Treshold alg
-                                new PipeLineParameter("Threshold", "threshold", 128, 0, 255, 1),
-                                // Adaptive alg
-                                new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
-                                new PipeLineParameter("Mean C", "meanC", 14, -50.0, 50.0, 1),
-
-                                // Sauvola
-                                new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
-                                new PipeLineParameter("K: ", "sauvolaK", 0.30, 0.01, 1.00, 0.01),
-                                new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 256.0, 1.00),
-                                new PipeLineParameter("Pencil strokes boost", "pencilStrokeBoost", 0, 0, 30, 1),
-                                new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
-                                new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 2.0, 0.01, 255.0, 1.0),
-                                new PipeLineParameter("CLAHE grid size", "sauvolaClaheGridSize", 8, 8, 64, 8),
-                                new PipeLineParameter("Morph radius", "sauvolaMorphRadius", 0, 0, 7, 1),
-                                // Majority
-                                new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
-
-                                 // new boolean checkbox parameters:
-                                new PipeLineParameter("Use Gaussian", "useGaussian", false),
-                                new PipeLineParameter("Apply Morphology", "useMorphology", false),
-
-                                // morphology-specific numeric params (visible only if Apply Morphology == true — see ниже how to hide/show)
-                                new PipeLineParameter("Morph kernel", "morphKernelBinarize", 3, 1, 21, 2),
-                                new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
-
-                            },
-                            operation => ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.PunchHolesRemove:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.PunchHolesRemove,
-                            ProcessorCommand.PunchHolesRemove,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect", "Both"}, 0),
-                                // Circle
-                                new PipeLineParameter("Diameter", "diameter",50, 1, 500, 1),
-                                new PipeLineParameter("Roundness", "roundness", 0.9, 0.01, 1.00, 0.01),
-                                // Rect
-                                new PipeLineParameter("Height", "height", 80, 1, 500, 1),
-                                new PipeLineParameter("Width", "width", 50, 1, 500, 1),
-                                new PipeLineParameter("Fill ratio", "fillRatio", 0.9, 0.01, 1.0, 0.01),
-                   
-                                // common
-                                new PipeLineParameter("Density", "density", 1.00, 0.00, 1.00, 0.05),
-                                new PipeLineParameter("Size tolerance", "sizeTolerance", 0.8, 0.0, 2.0, 0.1),
-                                new PipeLineParameter("Left Offset", "leftOffset", 100, 0, 1500, 1),
-                                new PipeLineParameter("Right Offset", "rightOffset", 100, 0, 1500, 1),
-                                new PipeLineParameter("Top Offset", "topOffset", 100, 0, 1500, 1),
-                                new PipeLineParameter("Bottom Offset", "bottomOffset", 100, 0, 1500, 1),
-
-                                 // new boolean checkbox parameters:
-                                //new PipeLineParameter("Use Gaussian", "useGaussian", false),
-                   
-
-
-                            },
-                            operation => ExecuteManagerCommand(ProcessorCommand.PunchHolesRemove, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.Despeckle:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.Despeckle,
-                            ProcessorCommand.Despeckle,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
-                                new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 5, 0.01),
-                                new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
-                                new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 5.00, 0.01),
-                                new PipeLineParameter("Proximity Radius Fraction", "proximityRadiusFraction", 0.80, 0.01, 5.00, 0.01),
-                                new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 3.00, 0.05),
-                                new PipeLineParameter("KeepClusters", "keepClusters", true),
-                                new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", false),
-                                new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
-                                new PipeLineParameter("Dilate Iterations", "dilateIter", 1, 1, 5, 1),
-                                new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
-                                new PipeLineParameter("Show candidates", "showDespeckleDebug", true)
-                            },
-                            operation => ExecuteManagerCommand(ProcessorCommand.Despeckle, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.LinesRemove:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.LinesRemove,
-                            ProcessorCommand.LinesRemove,
+                break;
+            case PipelineOperationType.BordersRemove:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.BordersRemove,
+                        ProcessorCommand.BordersRemove,
                         displayName,
                         buttonText,
                         new[]
                         {
-                                new PipeLineParameter("Orientation", "orientation", Enum.GetNames(typeof(LineOrientation)), 1),
-                                new PipeLineParameter("Line width (px)", "lineWidthPx", 1, 1, 20, 1),
-                                new PipeLineParameter("Min Length Fraction", "minLengthFraction", 0.5, 0.05, 1, 0.01),
-                                new PipeLineParameter("Start offset (px)", "offsetStartPx", -1, -1, 500, 1),
-                                new PipeLineParameter("Line color (Red)", "lineColorRed", -1, -1, 255, 1),
-                                new PipeLineParameter("Line color (Green)", "lineColorGreen", -1, -1, 255, 1),
-                                new PipeLineParameter("Line color (Blue)", "lineColorBlue", -1, -1, 255, 1),
-                                new PipeLineParameter("Color tolerance", "colorTolerance", 40, 0, 255, 1)
+                            new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "Integral", "By Contrast", "Manual"}, 0),
+                            // By contrast
+                            new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
+                            new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 255, 1),
+                            new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
+                            new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
+                            // Auto
+                            new PipeLineParameter("Auto Threshold", "autoThresh", true),
+                            new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
+                            new PipeLineParameter("Shift factor txt/bg", "shiftFactor", 0.25, 0.0, 3.0, 0.01),
+                            new PipeLineParameter("Threshold for dark pxls", "darkThreshold", 40, 0, 255, 1),
+                            new PipeLineParameter("Background color (RGB)", "bgColor", 0, 0, 255, 1),
+                            new PipeLineParameter("Min component area in pxls", "minAreaPx", 2000, 0, 2_000_000, 1),
+                            new PipeLineParameter("Span fraction across w/h", "minSpanFraction", 0.6, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Solidity threshold", "solidityThreshold", 0.6, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Penetration depth, relative", "minDepthFraction", 0.20, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Feather (cut margin)", "featherPx", 6, -10, 200, 1),
+                            new PipeLineParameter("Use TeleaHybrid", "useTeleaHybrid", true),
+                            // Manual
+                            new PipeLineParameter("Left", "manualLeft", 0, 0, 10000, 1),
+                            new PipeLineParameter("Right", "manualRight", 0, 0, 10000, 1),
+                            new PipeLineParameter("Top", "manualTop", 0, 0, 10000, 1),
+                            new PipeLineParameter("Bottom", "manualBottom", 0, 0, 10000, 1),
+                            new PipeLineParameter("Cut", "cutMethod", false),
+                            new PipeLineParameter("Preview cut", "manualCutDebug", false),
+                            new PipeLineParameter("Apply to Left Page", "applyToLeftPage", true),
+                            new PipeLineParameter("Apply to Right Page", "applyToRightPage", true),
+                            // Integral
+                            new PipeLineParameter("Seed contrast strickness", "seedContrastStrictness", 1.0, 0.05, 3.0, 0.05),
+                            new PipeLineParameter("Seed brightness strickness", "seedBrightnessStrictness", 1.0, 0.05, 3.0, 0.05),
+                            new PipeLineParameter("Texture allowance", "textureAllowance", 1.0, 0.05, 2.0, 0.05),
+                            new PipeLineParameter("Scan step px", "scanStepPx", 16, 1, 100, 1),
+                            new PipeLineParameter("Inpaint radius", "inpaintRadius", 3, 1, 50, 1),
+                            new PipeLineParameter("Inpaint mode", "inpaintMode", new [] {"Fill", "Telea", "NS"}, 0),
+                            new PipeLineParameter("Border color variation", "borderColorVariation", 0.5, 0.05, 1.0, 0.05),
+                            new PipeLineParameter("Border safety offset px", "borderSafetyOffsetPx", 5, -30, 30, 1),
+                            new PipeLineParameter("Cut result", "integralCut", false),
+                            new PipeLineParameter("Auto max border width fraction", "autoMaxBorderDepthFrac", true),
+                            new PipeLineParameter("Max border depth Left (frac)", "maxBorderDepthFracLeft", 0.25, 0, 1, 0.01),
+                            new PipeLineParameter("Max border depth Right (frac)", "maxBorderDepthFracRight", 0.25, 0, 1, 0.01),
+                            new PipeLineParameter("Max border depth Top (frac)", "maxBorderDepthFracTop", 0.25, 0, 1, 0.01),
+                            new PipeLineParameter("Max border depth Bottom (frac)", "maxBorderDepthFracBottom", 0.25, 0, 1, 0.01),
+                            new PipeLineParameter("K-interpolation", "kInterpolation", 0, 0, 50, 1)
+
                         },
-                        operation => ExecuteManagerCommand(ProcessorCommand.LinesRemove, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.SmartCrop:
-                    {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.SmartCrop,
-                            ProcessorCommand.SmartCrop,
+                        operation => ExecuteManagerCommand(ProcessorCommand.BordersRemove, operation.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.Binarize:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.Binarize,
+                        ProcessorCommand.Binarize,
                         displayName,
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Method", "autoCropMethod", new [] { "U-net", "EAST" }, 0),
-                            new PipeLineParameter("Crop level [0..100]", "cropLevel", 62, 0, 100, 1),
-                            new PipeLineParameter("Preset", "preset", new [] { "Fast", "Balance", "Quality" }),
-                            new PipeLineParameter("EAST input width", "eastInputWidth", 1280, 1, 1600, 64),
-                            new PipeLineParameter("EAST input height", "eastInputHeight", 1280, 1, 1600, 64),
-                            new PipeLineParameter("EAST score Threshold", "eastScoreThreshold", 0.5, 0.1, 1.0, 0.05),
-                            new PipeLineParameter("EAST NMS Threshold", "eastNmsThreshold", 0.4, 0.1, 1.0, 0.05),
-                            new PipeLineParameter("TESSERACT min confidence", "tesseractMinConfidence", 50, 5, 100, 1),
-                            new PipeLineParameter("Padding Px", "paddingPx", 20, 0, 300, 5),
-                            new PipeLineParameter("Downscale max width", "downscaleMaxWidth", 1600, -1, 2400, 100),
-                            new PipeLineParameter("Include Handwritten", "includeHandwritten", true),
-                            new PipeLineParameter("Handwritten sensitivity", "handwrittenSensitivity", 15, 0, 100, 1),
-                            new PipeLineParameter("Include stamps", "includeStamps", true),
-                            new PipeLineParameter("East debug", "eastDebug", true)
+                            new PipeLineParameter("Method", "method", new [] {"Threshold", "Sauvola", "Adaptive", "Majority"}, 0),
+                            // Treshold alg
+                            new PipeLineParameter("Threshold", "threshold", 128, 0, 255, 1),
+                            // Adaptive alg
+                            new PipeLineParameter("BlockSize", "blockSize", 3, 3, 255, 2),
+                            new PipeLineParameter("Mean C", "meanC", 14, -50.0, 50.0, 1),
+
+                            // Sauvola
+                            new PipeLineParameter("Window size", "sauvolaWindowSize", 25, 1, 500, 1),
+                            new PipeLineParameter("K: ", "sauvolaK", 0.30, 0.01, 1.00, 0.01),
+                            new PipeLineParameter("R: ", "sauvolaR", 180.0, 1.0, 256.0, 1.00),
+                            new PipeLineParameter("Pencil strokes boost", "pencilStrokeBoost", 0, 0, 30, 1),
+                            new PipeLineParameter("Use CLAHE", "sauvolaUseClahe", true),
+                            new PipeLineParameter("CLAHE Clip", "sauvolaClaheClip", 2.0, 0.01, 255.0, 1.0),
+                            new PipeLineParameter("CLAHE grid size", "sauvolaClaheGridSize", 8, 8, 64, 8),
+                            new PipeLineParameter("Morph radius", "sauvolaMorphRadius", 0, 0, 7, 1),
+                            // Majority
+                            new PipeLineParameter("MajorityOffset", "majorityOffset", 30, -120, 120, 1),
+
+                             // new boolean checkbox parameters:
+                            new PipeLineParameter("Use Gaussian", "useGaussian", false),
+                            new PipeLineParameter("Apply Morphology", "useMorphology", false),
+
+                            // morphology-specific numeric params (visible only if Apply Morphology == true — see ниже how to hide/show)
+                            new PipeLineParameter("Morph kernel", "morphKernelBinarize", 3, 1, 21, 2),
+                            new PipeLineParameter("Morph iterations", "morphIterationsBinarize", 1, 0, 5, 1),
+
                         },
-                        operation => ExecuteManagerCommand(ProcessorCommand.SmartCrop, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.Enhance:
+                        operation => ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.PunchHolesRemove:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.PunchHolesRemove,
+                        ProcessorCommand.PunchHolesRemove,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Punch Shape", "punchShape", new [] {"Circle", "Rect", "Both"}, 0),
+                            // Circle
+                            new PipeLineParameter("Diameter", "diameter",50, 1, 500, 1),
+                            new PipeLineParameter("Roundness", "roundness", 0.9, 0.01, 1.00, 0.01),
+                            // Rect
+                            new PipeLineParameter("Height", "height", 80, 1, 500, 1),
+                            new PipeLineParameter("Width", "width", 50, 1, 500, 1),
+                            new PipeLineParameter("Fill ratio", "fillRatio", 0.9, 0.01, 1.0, 0.01),
+               
+                            // common
+                            new PipeLineParameter("Density", "density", 1.00, 0.00, 1.00, 0.05),
+                            new PipeLineParameter("Size tolerance", "sizeTolerance", 0.8, 0.0, 2.0, 0.1),
+                            new PipeLineParameter("Left Offset", "leftOffset", 100, 0, 1500, 1),
+                            new PipeLineParameter("Right Offset", "rightOffset", 100, 0, 1500, 1),
+                            new PipeLineParameter("Top Offset", "topOffset", 100, 0, 1500, 1),
+                            new PipeLineParameter("Bottom Offset", "bottomOffset", 100, 0, 1500, 1),
+
+                             // new boolean checkbox parameters:
+                            //new PipeLineParameter("Use Gaussian", "useGaussian", false),
+               
+
+
+                        },
+                        operation => ExecuteManagerCommand(ProcessorCommand.PunchHolesRemove, operation.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.Despeckle:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.Despeckle,
+                        ProcessorCommand.Despeckle,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
+                            new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 5, 0.01),
+                            new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
+                            new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 5.00, 0.01),
+                            new PipeLineParameter("Proximity Radius Fraction", "proximityRadiusFraction", 0.80, 0.01, 5.00, 0.01),
+                            new PipeLineParameter("Squareness Tolerance", "squarenessTolerance", 0.60, 0.00, 3.00, 0.05),
+                            new PipeLineParameter("KeepClusters", "keepClusters", true),
+                            new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", false),
+                            new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
+                            new PipeLineParameter("Dilate Iterations", "dilateIter", 1, 1, 5, 1),
+                            new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
+                            new PipeLineParameter("Show candidates", "showDespeckleDebug", true)
+                        },
+                        operation => ExecuteManagerCommand(ProcessorCommand.Despeckle, operation.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.LinesRemove:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.LinesRemove,
+                        ProcessorCommand.LinesRemove,
+                    displayName,
+                    buttonText,
+                    new[]
                     {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.Enhance,
-                            ProcessorCommand.Enhance,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma"}, 0),
-                                new PipeLineParameter("CLAHE Clip Limit", "claheClipLimit", 4.0, 0.5, 12.0, 0.1),
-                                new PipeLineParameter("CLAHE Grid Size", "claheGridSize", 8, 2, 64, 1),
-                                new PipeLineParameter("Retinex Output Mode", "retinexOutputMode", new [] { "LogHighpass", "ReconstructExp" }, 0),
-                                new PipeLineParameter("Retinex Use Lab L Channel", "retinexUseLabL", true),
-                                new PipeLineParameter("Retinex Sigma", "retinexSigma", 50, 5, 200, 1),
-                                new PipeLineParameter("Retinex Gamma High", "retinexGammaHigh", 1.8, 0.1, 4.0, 0.1),
-                                new PipeLineParameter("Retinex Gamma Low", "retinexGammaLow", 0.6, 0.01, 2.0, 0.05),
-                                new PipeLineParameter("Retinex Epsilon", "retinexEps", 0.000001, 0.000001, 0.01, 0.000001),
-                                new PipeLineParameter("Retinex Robust Normalize", "retinexRobustNormalize", true),
-                                new PipeLineParameter("Retinex Low Percent", "retinexPercentLow", 0.5, 0.0, 5.0, 0.1),
-                                new PipeLineParameter("Retinex High Percent", "retinexPercentHigh", 99.5, 95.0, 100.0, 0.1),
-                                new PipeLineParameter("Retinex Hist Bins", "retinexHistBins", 2048, 32, 4096, 1),
-                                new PipeLineParameter("Retinex Exp Clamp", "retinexExpClamp", 4.0, 1.0, 8.0, 0.1),
-                                new PipeLineParameter("Levels Black %", "levelsBlackPercent", 1.0, 0.0, 20.0, 0.1),
-                                new PipeLineParameter("Levels White %", "levelsWhitePercent", 95.0, 50.0, 100.0, 0.1),
-                                new PipeLineParameter("Levels Gamma", "levelsGamma", 0.85, 0.1, 3.0, 0.05),
-                                new PipeLineParameter("Levels Target White", "levelsTargetWhite", 255, 128, 255, 1)
-                            },
-                            op => ExecuteManagerCommand(ProcessorCommand.Enhance, op.CreateParameterDictionary()));
-                    }
-                    break;
-                case PipelineOperationType.SplitPage:
+                            new PipeLineParameter("Orientation", "orientation", Enum.GetNames(typeof(LineOrientation)), 1),
+                            new PipeLineParameter("Line width (px)", "lineWidthPx", 1, 1, 20, 1),
+                            new PipeLineParameter("Min Length Fraction", "minLengthFraction", 0.5, 0.05, 1, 0.01),
+                            new PipeLineParameter("Start offset (px)", "offsetStartPx", -1, -1, 500, 1),
+                            new PipeLineParameter("Line color (Red)", "lineColorRed", -1, -1, 255, 1),
+                            new PipeLineParameter("Line color (Green)", "lineColorGreen", -1, -1, 255, 1),
+                            new PipeLineParameter("Line color (Blue)", "lineColorBlue", -1, -1, 255, 1),
+                            new PipeLineParameter("Color tolerance", "colorTolerance", 40, 0, 255, 1)
+                    },
+                    operation => ExecuteManagerCommand(ProcessorCommand.LinesRemove, operation.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.SmartCrop:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.SmartCrop,
+                        ProcessorCommand.SmartCrop,
+                    displayName,
+                    buttonText,
+                    new[]
                     {
-                        operation = new PipelineOperation(
-                            PipelineOperationType.SplitPage,
-                            ProcessorCommand.PageSplit,
-                            displayName,
-                            buttonText,
-                            new[]
-                            {
-                                new PipeLineParameter("Padding (%)", "padPercent", 3.0, 0.0, 20.0, 0.1),
-                                new PipeLineParameter("Min confidence", "minConfidence", 0.01, 0.0, 1.0, 0.01),
-                                new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true)
-                            },
-                            operation => ExecuteManagerCommand(ProcessorCommand.PageSplit, operation.CreateParameterDictionary()));
-                    }
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(
-                                     nameof(type),
-                                     type,
-                                     "Unsupported pipeline operation type in CreatePipelineOperation");
-            }
-
-
-
-            //op.Command = ProcessorCommand.Deskew;
-            return operation;
+                        new PipeLineParameter("Method", "autoCropMethod", new [] { "U-net", "EAST" }, 0),
+                        new PipeLineParameter("Crop level [0..100]", "cropLevel", 62, 0, 100, 1),
+                        new PipeLineParameter("Preset", "preset", new [] { "Fast", "Balance", "Quality" }),
+                        new PipeLineParameter("EAST input width", "eastInputWidth", 1280, 1, 1600, 64),
+                        new PipeLineParameter("EAST input height", "eastInputHeight", 1280, 1, 1600, 64),
+                        new PipeLineParameter("EAST score Threshold", "eastScoreThreshold", 0.5, 0.1, 1.0, 0.05),
+                        new PipeLineParameter("EAST NMS Threshold", "eastNmsThreshold", 0.4, 0.1, 1.0, 0.05),
+                        new PipeLineParameter("TESSERACT min confidence", "tesseractMinConfidence", 50, 5, 100, 1),
+                        new PipeLineParameter("Padding Px", "paddingPx", 20, 0, 300, 5),
+                        new PipeLineParameter("Downscale max width", "downscaleMaxWidth", 1600, -1, 2400, 100),
+                        new PipeLineParameter("Include Handwritten", "includeHandwritten", true),
+                        new PipeLineParameter("Handwritten sensitivity", "handwrittenSensitivity", 15, 0, 100, 1),
+                        new PipeLineParameter("Include stamps", "includeStamps", true),
+                        new PipeLineParameter("East debug", "eastDebug", true)
+                    },
+                    operation => ExecuteManagerCommand(ProcessorCommand.SmartCrop, operation.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.Enhance:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.Enhance,
+                        ProcessorCommand.Enhance,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma"}, 0),
+                            new PipeLineParameter("CLAHE Clip Limit", "claheClipLimit", 4.0, 0.5, 12.0, 0.1),
+                            new PipeLineParameter("CLAHE Grid Size", "claheGridSize", 8, 2, 64, 1),
+                            new PipeLineParameter("Retinex Output Mode", "retinexOutputMode", new [] { "LogHighpass", "ReconstructExp" }, 0),
+                            new PipeLineParameter("Retinex Use Lab L Channel", "retinexUseLabL", true),
+                            new PipeLineParameter("Retinex Sigma", "retinexSigma", 50, 5, 200, 1),
+                            new PipeLineParameter("Retinex Gamma High", "retinexGammaHigh", 1.8, 0.1, 4.0, 0.1),
+                            new PipeLineParameter("Retinex Gamma Low", "retinexGammaLow", 0.6, 0.01, 2.0, 0.05),
+                            new PipeLineParameter("Retinex Epsilon", "retinexEps", 0.000001, 0.000001, 0.01, 0.000001),
+                            new PipeLineParameter("Retinex Robust Normalize", "retinexRobustNormalize", true),
+                            new PipeLineParameter("Retinex Low Percent", "retinexPercentLow", 0.5, 0.0, 5.0, 0.1),
+                            new PipeLineParameter("Retinex High Percent", "retinexPercentHigh", 99.5, 95.0, 100.0, 0.1),
+                            new PipeLineParameter("Retinex Hist Bins", "retinexHistBins", 2048, 32, 4096, 1),
+                            new PipeLineParameter("Retinex Exp Clamp", "retinexExpClamp", 4.0, 1.0, 8.0, 0.1),
+                            new PipeLineParameter("Levels Black %", "levelsBlackPercent", 1.0, 0.0, 20.0, 0.1),
+                            new PipeLineParameter("Levels White %", "levelsWhitePercent", 95.0, 50.0, 100.0, 0.1),
+                            new PipeLineParameter("Levels Gamma", "levelsGamma", 0.85, 0.1, 3.0, 0.05),
+                            new PipeLineParameter("Levels Target White", "levelsTargetWhite", 255, 128, 255, 1)
+                        },
+                        op => ExecuteManagerCommand(ProcessorCommand.Enhance, op.CreateParameterDictionary()));
+                }
+                break;
+            case PipelineOperationType.SplitPage:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.SplitPage,
+                        ProcessorCommand.PageSplit,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Padding (%)", "padPercent", 3.0, 0.0, 20.0, 0.1),
+                            new PipeLineParameter("Min confidence", "minConfidence", 0.01, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true)
+                        },
+                        operation => ExecuteManagerCommand(ProcessorCommand.PageSplit, operation.CreateParameterDictionary()));
+                }
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                                 nameof(type),
+                                 type,
+                                 "Unsupported pipeline operation type in CreatePipelineOperation");
         }
 
 
-        public void LoadPipelineFromJson(string json)
+
+        //op.Command = ProcessorCommand.Deskew;
+        return operation;
+    }
+
+
+    public void LoadPipelineFromJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return;
+
+        List<PipelineSaveItem>? snapshot;
+        try
         {
-            if (string.IsNullOrWhiteSpace(json))
-                return;
-
-            List<PipelineSaveItem>? snapshot;
-            try
-            {
-                snapshot = JsonSerializer.Deserialize<List<PipelineSaveItem>>(json,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-            }
-            catch (JsonException ex)
-            {
-                Debug.WriteLine($"Failed to parse pipeline json: {ex}");
-                return;
-            }
-
-            if (snapshot == null || snapshot.Count == 0)
-                return;
-
-            lock (_operationsLock)
-            {
-                _operations.Clear();
-
-                foreach (var item in snapshot)
+            snapshot = JsonSerializer.Deserialize<List<PipelineSaveItem>>(json,
+                new JsonSerializerOptions
                 {
-                    // 1. Создаём операцию по enum-типу
-                    PipelineOperation op;
-                    try
-                    {
-                        op = CreatePipelineOperation(item.Type);
-                    }
-                    catch (ArgumentOutOfRangeException ex)
-                    {
-                        // TODO : логгирование
-                        Debug.WriteLine($"Skipping unsupported pipeline operation type '{item.Type}': {ex.Message}");
-                        continue; // move on to the next operation instead of crashing
-                    }
-
-                    // 2. Восстанавливаем значения параметров
-                    if (item.Parameters != null)
-                    {
-                        foreach (var param in op.Parameters)
-                        {
-                            if (item.Parameters.TryGetValue(param.Key, out var rawValue))
-                            {
-                                ApplySavedValueToParameter(param, rawValue);
-                            }
-                        }
-                    }
-
-                    if (CanAddOperation_NoLock(op.Type))
-                    InsertInternal(_operations.Count, op);
-                    if (op.Type == PipelineOperationType.SplitPage)
-                        break;
-                }
-            }
+                    PropertyNameCaseInsensitive = true
+                });
+        }
+        catch (JsonException ex)
+        {
+            Debug.WriteLine($"Failed to parse pipeline json: {ex}");
+            return;
         }
 
+        if (snapshot == null || snapshot.Count == 0)
+            return;
 
-        private static void ApplySavedValueToParameter(PipeLineParameter param, object? rawValue)
+        lock (_operationsLock)
         {
-            // Основной сценарий: System.Text.Json кладёт в Dictionary<string, object?>
-            // значения типа JsonElement
-            if (rawValue is JsonElement je)
+            _operations.Clear();
+
+            foreach (var item in snapshot)
             {
-                // ---- BOOL-параметр (CheckBox) ----
-                if (param.IsBool)
+                // 1. Создаём операцию по enum-типу
+                PipelineOperation op;
+                try
                 {
-                    switch (je.ValueKind)
-                    {
-                        case JsonValueKind.True:
-                        case JsonValueKind.False:
-                            param.BoolValue = je.GetBoolean();
-                            return;
-
-                        case JsonValueKind.Number:
-                            // условно: 0 -> false, всё остальное -> true
-                            if (je.TryGetInt32(out var i))
-                                param.BoolValue = (i != 0);
-                            return;
-
-                        case JsonValueKind.String:
-                            var sBool = je.GetString();
-                            if (bool.TryParse(sBool, out var bParsed))
-                                param.BoolValue = bParsed;
-                            return;
-
-                        default:
-                            return;
-                    }
+                    op = CreatePipelineOperation(item.Type);
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    // TODO : логгирование
+                    Debug.WriteLine($"Skipping unsupported pipeline operation type '{item.Type}': {ex.Message}");
+                    continue; // move on to the next operation instead of crashing
                 }
 
-                // ---- COMBO-параметр (Options/SelectedIndex) ----
-                if (param.IsCombo)
+                // 2. Восстанавливаем значения параметров
+                if (item.Parameters != null)
                 {
-                    if (param.Options == null || param.Options.Count == 0)
-                        return;
-
-                    string? option = null;
-
-                    switch (je.ValueKind)
+                    foreach (var param in op.Parameters)
                     {
-                        case JsonValueKind.String:
-                            option = je.GetString();
-                            break;
-
-                        case JsonValueKind.Number:
-                            // на всякий случай поддержим вариант с индексом
-                            if (je.TryGetInt32(out var idxNum) &&
-                                idxNum >= 0 && idxNum < param.Options.Count)
-                            {
-                                param.SelectedIndex = idxNum;
-                                return;
-                            }
-                            break;
-
-                        default:
-                            return;
-                    }
-
-                    if (!string.IsNullOrEmpty(option))
-                    {
-                        // сначала точное совпадение
-                        int idx = param.Options.IndexOf(option);
-                        if (idx < 0)
+                        if (item.Parameters.TryGetValue(param.Key, out var rawValue))
                         {
-                            // затем case-insensitive поиск
-                            for (int i = 0; i < param.Options.Count; i++)
-                            {
-                                if (string.Equals(param.Options[i], option, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    idx = i;
-                                    break;
-                                }
-                            }
+                            ApplySavedValueToParameter(param, rawValue);
                         }
-
-                        if (idx >= 0)
-                            param.SelectedIndex = idx;
-                    }
-
-                    return;
-                }
-
-                // ---- Числовой параметр (Slider / Numeric) ----
-                if (je.ValueKind == JsonValueKind.Number)
-                {
-                    if (je.TryGetDouble(out var d))
-                    {
-                        param.Value = d; // внутри PipeLineParameter зажмётся Clamp-ом
-                    }
-                }
-                else if (je.ValueKind == JsonValueKind.String)
-                {
-                    var sNum = je.GetString();
-                    if (double.TryParse(sNum, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
-                    {
-                        param.Value = d;
                     }
                 }
 
-                return;
+                if (CanAddOperation_NoLock(op.Type))
+                InsertInternal(_operations.Count, op);
+                if (op.Type == PipelineOperationType.SplitPage)
+                    break;
             }
+        }
+    }
 
-            // --- fallback: если вдруг rawValue не JsonElement (другой десериализатор/ручная подготовка) ---
 
+    private static void ApplySavedValueToParameter(PipeLineParameter param, object? rawValue)
+    {
+        // Основной сценарий: System.Text.Json кладёт в Dictionary<string, object?>
+        // значения типа JsonElement
+        if (rawValue is JsonElement je)
+        {
+            // ---- BOOL-параметр (CheckBox) ----
             if (param.IsBool)
             {
-                if (rawValue is bool b)
+                switch (je.ValueKind)
                 {
-                    param.BoolValue = b;
-                }
-                else if (rawValue is string s && bool.TryParse(s, out var parsed))
-                {
-                    param.BoolValue = parsed;
-                }
-                else if (rawValue is IConvertible conv)
-                {
-                    try
-                    {
-                        param.BoolValue = conv.ToBoolean(CultureInfo.InvariantCulture);
-                    }
-                    catch
-                    {
-                        // игнор, оставляем дефолт
-                    }
-                }
+                    case JsonValueKind.True:
+                    case JsonValueKind.False:
+                        param.BoolValue = je.GetBoolean();
+                        return;
 
-                return;
+                    case JsonValueKind.Number:
+                        // условно: 0 -> false, всё остальное -> true
+                        if (je.TryGetInt32(out var i))
+                            param.BoolValue = (i != 0);
+                        return;
+
+                    case JsonValueKind.String:
+                        var sBool = je.GetString();
+                        if (bool.TryParse(sBool, out var bParsed))
+                            param.BoolValue = bParsed;
+                        return;
+
+                    default:
+                        return;
+                }
             }
 
+            // ---- COMBO-параметр (Options/SelectedIndex) ----
             if (param.IsCombo)
             {
                 if (param.Options == null || param.Options.Count == 0)
                     return;
 
-                var s = rawValue?.ToString();
-                if (string.IsNullOrEmpty(s))
-                    return;
+                string? option = null;
 
-                int idx = param.Options.IndexOf(s);
-                if (idx < 0)
+                switch (je.ValueKind)
                 {
-                    for (int i = 0; i < param.Options.Count; i++)
-                    {
-                        if (string.Equals(param.Options[i], s, StringComparison.OrdinalIgnoreCase))
+                    case JsonValueKind.String:
+                        option = je.GetString();
+                        break;
+
+                    case JsonValueKind.Number:
+                        // на всякий случай поддержим вариант с индексом
+                        if (je.TryGetInt32(out var idxNum) &&
+                            idxNum >= 0 && idxNum < param.Options.Count)
                         {
-                            idx = i;
-                            break;
+                            param.SelectedIndex = idxNum;
+                            return;
+                        }
+                        break;
+
+                    default:
+                        return;
+                }
+
+                if (!string.IsNullOrEmpty(option))
+                {
+                    // сначала точное совпадение
+                    int idx = param.Options.IndexOf(option);
+                    if (idx < 0)
+                    {
+                        // затем case-insensitive поиск
+                        for (int i = 0; i < param.Options.Count; i++)
+                        {
+                            if (string.Equals(param.Options[i], option, StringComparison.OrdinalIgnoreCase))
+                            {
+                                idx = i;
+                                break;
+                            }
                         }
                     }
-                }
 
-                if (idx >= 0)
-                    param.SelectedIndex = idx;
+                    if (idx >= 0)
+                        param.SelectedIndex = idx;
+                }
 
                 return;
             }
 
-            // ---- числовой параметр ----
-            switch (rawValue)
+            // ---- Числовой параметр (Slider / Numeric) ----
+            if (je.ValueKind == JsonValueKind.Number)
             {
-                case double d:
+                if (je.TryGetDouble(out var d))
+                {
+                    param.Value = d; // внутри PipeLineParameter зажмётся Clamp-ом
+                }
+            }
+            else if (je.ValueKind == JsonValueKind.String)
+            {
+                var sNum = je.GetString();
+                if (double.TryParse(sNum, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+                {
                     param.Value = d;
-                    break;
-                case float f:
-                    param.Value = f;
-                    break;
-                case int i:
-                    param.Value = i;
-                    break;
-                case long l:
-                    param.Value = l;
-                    break;
-                case string s when double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d2):
-                    param.Value = d2;
-                    break;
-            }
-        }
-
-
-
-        public string BuildPipelineForSave()
-        {
-            List<PipelineSaveItem> snapshot;
-
-            lock (_operationsLock)
-            {
-                if (_operations.Count == 0)
-                    return string.Empty;
-
-                var filtered = _operations.Where(op => op.InPipeline).ToList();
-                if (filtered.Count == 0)
-                    return string.Empty;
-
-                snapshot = new List<PipelineSaveItem>(filtered.Count);
-
-                foreach (var op in filtered)
-                {
-                    var parameters = op.CreateParameterDictionary();
-
-                    snapshot.Add(new PipelineSaveItem
-                    {
-                        Type = op.Type,                 // берём тип из PipelineOperation.Type
-                        DisplayName = op.DisplayName,   // чисто информативно, при загрузке не нужен
-                        Parameters = parameters
-                    });
                 }
             }
 
-            var options = new JsonSerializerOptions
+            return;
+        }
+
+        // --- fallback: если вдруг rawValue не JsonElement (другой десериализатор/ручная подготовка) ---
+
+        if (param.IsBool)
+        {
+            if (rawValue is bool b)
             {
-                WriteIndented = true
-            };
-
-            return JsonSerializer.Serialize(snapshot, options);
-        }
-
-
-
-
-
-
-
-        public void ResetToDefault()
-        {
-            InitializeDefault();
-        }
-
-        public void InitializeDefault()
-        {
-
-            Clear();
-            Add(PipelineOperationType.BordersRemove);
-            Add(PipelineOperationType.Binarize);
-
-
-        }
-
-        private void InsertInternal(int index, PipelineOperation operation)
-        {
-            if (operation.Type == PipelineOperationType.SplitPage)
+                param.BoolValue = b;
+            }
+            else if (rawValue is string s && bool.TryParse(s, out var parsed))
             {
-                PipelineOperation? deskew = null;
-                foreach (var op in _operations)
+                param.BoolValue = parsed;
+            }
+            else if (rawValue is IConvertible conv)
+            {
+                try
                 {
-                    if (op.Type == PipelineOperationType.Deskew)
+                    param.BoolValue = conv.ToBoolean(CultureInfo.InvariantCulture);
+                }
+                catch
+                {
+                    // игнор, оставляем дефолт
+                }
+            }
+
+            return;
+        }
+
+        if (param.IsCombo)
+        {
+            if (param.Options == null || param.Options.Count == 0)
+                return;
+
+            var s = rawValue?.ToString();
+            if (string.IsNullOrEmpty(s))
+                return;
+
+            int idx = param.Options.IndexOf(s);
+            if (idx < 0)
+            {
+                for (int i = 0; i < param.Options.Count; i++)
+                {
+                    if (string.Equals(param.Options[i], s, StringComparison.OrdinalIgnoreCase))
                     {
-                        deskew = op;
+                        idx = i;
                         break;
                     }
                 }
-
-                _operations.Clear();
-                if (deskew != null)
-                    _operations.Add(deskew);
-
-                _operations.Add(operation);
-                return;
             }
 
-            if (operation.Type == PipelineOperationType.Deskew && ContainsSplitPageOperation_NoLock(operation))
-            {
-                if (ContainsDeskewOperation_NoLock(operation))
-                    return;
+            if (idx >= 0)
+                param.SelectedIndex = idx;
 
-                int splitIndex = _operations.Count;
-                for (int i = 0; i < _operations.Count; i++)
+            return;
+        }
+
+        // ---- числовой параметр ----
+        switch (rawValue)
+        {
+            case double d:
+                param.Value = d;
+                break;
+            case float f:
+                param.Value = f;
+                break;
+            case int i:
+                param.Value = i;
+                break;
+            case long l:
+                param.Value = l;
+                break;
+            case string s when double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d2):
+                param.Value = d2;
+                break;
+        }
+    }
+
+
+
+    public string BuildPipelineForSave()
+    {
+        List<PipelineSaveItem> snapshot;
+
+        lock (_operationsLock)
+        {
+            if (_operations.Count == 0)
+                return string.Empty;
+
+            var filtered = _operations.Where(op => op.InPipeline).ToList();
+            if (filtered.Count == 0)
+                return string.Empty;
+
+            snapshot = new List<PipelineSaveItem>(filtered.Count);
+
+            foreach (var op in filtered)
+            {
+                var parameters = op.CreateParameterDictionary();
+
+                snapshot.Add(new PipelineSaveItem
                 {
-                    if (_operations[i].Type == PipelineOperationType.SplitPage)
-                    {
-                        splitIndex = i;
-                        break;
-                    }
-                }
-
-                index = Math.Max(0, Math.Min(index, splitIndex));
-                _operations.Insert(index, operation);
-                return;
+                    Type = op.Type,                 // берём тип из PipelineOperation.Type
+                    DisplayName = op.DisplayName,   // чисто информативно, при загрузке не нужен
+                    Parameters = parameters
+                });
             }
-
-            if (!CanAddOperation_NoLock(operation.Type, operation))
-                return;
-
-            index = Math.Max(0, Math.Min(index, _operations.Count));
-            _operations.Insert(index, operation);
         }
 
-        public bool ContainsSplitPageOperation()
+        var options = new JsonSerializerOptions
         {
-            lock (_operationsLock)
-                return ContainsSplitPageOperation_NoLock();
-        }
+            WriteIndented = true
+        };
 
-        public bool CanAddOperation(PipelineOperationType type)
-        {
-            lock (_operationsLock)
-                return CanAddOperation_NoLock(type);
-        }
+        return JsonSerializer.Serialize(snapshot, options);
+    }
 
-        private bool CanAddOperation_NoLock(PipelineOperationType type, PipelineOperation? except = null)
-        {
-            bool hasSplit = ContainsSplitPageOperation_NoLock(except);
 
-            if (type == PipelineOperationType.SplitPage)
-                return !hasSplit;
 
-            if (hasSplit)
-                return type == PipelineOperationType.Deskew && !ContainsDeskewOperation_NoLock(except);
 
-            return true;
-        }
 
-        private bool ContainsSplitPageOperation_NoLock(PipelineOperation? except = null)
-        {
-            foreach (var op in _operations)
-            {
-                if (ReferenceEquals(op, except))
-                    continue;
 
-                if (op.Type == PipelineOperationType.SplitPage)
-                    return true;
-            }
 
-            return false;
-        }
+    public void ResetToDefault()
+    {
+        InitializeDefault();
+    }
 
-        private bool ContainsDeskewOperation_NoLock(PipelineOperation? except = null)
-        {
-            foreach (var op in _operations)
-            {
-                if (ReferenceEquals(op, except))
-                    continue;
+    public void InitializeDefault()
+    {
 
-                if (op.Type == PipelineOperationType.Deskew)
-                    return true;
-            }
+        Clear();
+        Add(PipelineOperationType.BordersRemove);
+        Add(PipelineOperationType.Binarize);
 
-            return false;
-        }
 
     }
+
+    private void InsertInternal(int index, PipelineOperation operation)
+    {
+        if (operation.Type == PipelineOperationType.SplitPage)
+        {
+            PipelineOperation? deskew = null;
+            foreach (var op in _operations)
+            {
+                if (op.Type == PipelineOperationType.Deskew)
+                {
+                    deskew = op;
+                    break;
+                }
+            }
+
+            _operations.Clear();
+            if (deskew != null)
+                _operations.Add(deskew);
+
+            _operations.Add(operation);
+            return;
+        }
+
+        if (operation.Type == PipelineOperationType.Deskew && ContainsSplitPageOperation_NoLock(operation))
+        {
+            if (ContainsDeskewOperation_NoLock(operation))
+                return;
+
+            int splitIndex = _operations.Count;
+            for (int i = 0; i < _operations.Count; i++)
+            {
+                if (_operations[i].Type == PipelineOperationType.SplitPage)
+                {
+                    splitIndex = i;
+                    break;
+                }
+            }
+
+            index = Math.Max(0, Math.Min(index, splitIndex));
+            _operations.Insert(index, operation);
+            return;
+        }
+
+        if (!CanAddOperation_NoLock(operation.Type, operation))
+            return;
+
+        index = Math.Max(0, Math.Min(index, _operations.Count));
+        _operations.Insert(index, operation);
+    }
+
+    public bool ContainsSplitPageOperation()
+    {
+        lock (_operationsLock)
+            return ContainsSplitPageOperation_NoLock();
+    }
+
+    public bool CanAddOperation(PipelineOperationType type)
+    {
+        lock (_operationsLock)
+            return CanAddOperation_NoLock(type);
+    }
+
+    private bool CanAddOperation_NoLock(PipelineOperationType type, PipelineOperation? except = null)
+    {
+        bool hasSplit = ContainsSplitPageOperation_NoLock(except);
+
+        if (type == PipelineOperationType.SplitPage)
+            return !hasSplit;
+
+        if (hasSplit)
+            return type == PipelineOperationType.Deskew && !ContainsDeskewOperation_NoLock(except);
+
+        return true;
+    }
+
+    private bool ContainsSplitPageOperation_NoLock(PipelineOperation? except = null)
+    {
+        foreach (var op in _operations)
+        {
+            if (ReferenceEquals(op, except))
+                continue;
+
+            if (op.Type == PipelineOperationType.SplitPage)
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool ContainsDeskewOperation_NoLock(PipelineOperation? except = null)
+    {
+        foreach (var op in _operations)
+        {
+            if (ReferenceEquals(op, except))
+                continue;
+
+            if (op.Type == PipelineOperationType.Deskew)
+                return true;
+        }
+
+        return false;
+    }
+
 }

@@ -1,35 +1,16 @@
-﻿using OpenCvSharp;
+﻿using ImgViewer.Models;
+using OpenCvSharp;
 using System.IO;
-using System.Security.Policy;
-using System.Windows.Media;
-using static ImgViewer.Models.OpenCvImageProcessor;
-using ImgViewer.Models;
 
 namespace ImgViewer.Interfaces
 {
     public interface IImageProcessor
     {
-        
+
         public object CurrentImage { set; }
-
-        
-
-
-
         public void UpdateCancellationToken(CancellationToken token);
-
-        //Stream? LoadAsPNGStream(string path, int targetBPP);
-        //void SaveCurrentImage(string path);
         Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
-
-        //public (byte[] binPixels, int width, int height) GetBinPixelsFromMat(bool photometricMinIsWhite = false,
-        //                                                                     bool useOtsu = true,
-        //                                                                     double manualThreshold = 128);
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi);
-
-        
-
-
         Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
 
         bool ApplyCommand(ProcessorCommand commandName,
@@ -78,16 +59,5 @@ namespace ImgViewer.Interfaces
         PageSplit,
         Enhance
     }
-
-    //public enum TiffCompression
-    //{
-    //    None = 0,
-    //    CCITTG4,  // G4
-    //    CCITTG3,  // G3
-    //    LZW,
-    //    Deflate,
-    //    JPEG,
-    //    PackBits
-    //}
 
 }
