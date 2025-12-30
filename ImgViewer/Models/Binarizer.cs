@@ -89,7 +89,7 @@ namespace ImgViewer.Models
             using var blur = new Mat();
             Cv2.GaussianBlur(gray, blur, new OpenCvSharp.Size(1, 1), 0);
 
-            using var bin = new Mat();
+            var bin = new Mat();
             var adaptiveType = p.UseGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
             var threshType = invert ? ThresholdTypes.BinaryInv : ThresholdTypes.Binary;
             Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, p.MeanC);
@@ -100,10 +100,10 @@ namespace ImgViewer.Models
                 Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: p.MorphIterationsBinarize);
             }
 
-            using var color = new Mat();
-            Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
+            //var color = new Mat();
+            //Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
 
-            return color.Clone();
+            return bin;
 
         }
 
@@ -111,47 +111,48 @@ namespace ImgViewer.Models
         {
             if (src == null || src.Empty()) return new Mat();
 
-            using var gray = Helper.MatToGray(src);
+            var gray = Helper.MatToGray(src);
 
 
             Cv2.Threshold(gray, gray, threshold, 255, ThresholdTypes.Binary);
 
             // Конвертируем обратно в BGR — тогда весь pipeline, ожидающий 3 канала, продолжит работать
-            using var color = new Mat();
-            Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
+            //var color = new Mat();
+            //Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
 
-            return color.Clone(); // сохраняем результат как 3-канальную матрицу
+            return gray; // сохраняем результат как 3-канальную матрицу
         }
 
         private static Mat Sauvola(Mat src, int windowSize = 25, double k = 0.34, double R = 180.0, int pencilStrokeBoost = 0)
         {
 
-            Mat gray = Helper.MatToGray(src);
+            using Mat gray = Helper.MatToGray(src);
 
             if (windowSize % 2 == 0) windowSize++; // ensure odd
 
             // Convert to double for precision
-            Mat srcD = new Mat();
+            using Mat srcD = new Mat();
             gray.ConvertTo(srcD, MatType.CV_64F);
 
             // mean = boxFilter(src, ksize) normalized
-            Mat mean = new Mat();
+            using Mat mean = new Mat();
             Cv2.BoxFilter(srcD, mean, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
 
             // meanSq: compute boxFilter(src*src)
-            Mat sq = new Mat();
+            using Mat sq = new Mat();
             Cv2.Multiply(srcD, srcD, sq);
-            Mat meanSq = new Mat();
+            using Mat meanSq = new Mat();
             Cv2.BoxFilter(sq, meanSq, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
 
             // std = sqrt(meanSq - mean*mean)
-            Mat std = new Mat();
-            Cv2.Subtract(meanSq, mean.Mul(mean), std); // std now holds variance
+            using Mat std = new Mat();
+            Mat meanMul = mean.Mul(mean);
+            Cv2.Subtract(meanSq, meanMul, std); // std now holds variance
             Cv2.Max(std, 0.0, std); // clamp small negatives
             Cv2.Sqrt(std, std);
 
             // threshold = mean * (1 + k * (std/R - 1))
-            Mat thresh = new Mat();
+            using Mat thresh = new Mat();
             Cv2.Divide(std, R, thresh);                 // thresh = std / R
             Cv2.Subtract(thresh, 1.0, thresh);          // thresh = std/R - 1
             Cv2.Multiply(thresh, k, thresh);            // thresh = k*(std/R -1)
@@ -166,10 +167,10 @@ namespace ImgViewer.Models
             // binarize: srcD > thresh -> 255 else 0
             Mat bin = new Mat();
             Cv2.Compare(srcD, threshShifted, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
+            srcD.Dispose();
+            threshShifted.Dispose();
             bin.ConvertTo(bin, MatType.CV_8UC1, 255.0);  // ensure 0/255
 
-            // Clean-up mats
-            srcD.Dispose(); mean.Dispose(); sq.Dispose(); meanSq.Dispose(); std.Dispose(); thresh.Dispose();
 
             return bin;
         }
@@ -177,7 +178,7 @@ namespace ImgViewer.Models
         private static Mat SauvolaBinarize(Mat src, BinarizeParameters p)
         {
             //Debug.WriteLine($"clahe grid size {p.SauvolaClaheGridSize}");
-            using var binMat = BinarizeForHandwritten(src,
+            var binMat = BinarizeForHandwritten(src,
                                                       p.SauvolaUseClahe,
                                                       p.SauvolaClaheClip,
                                                       p.SauvolaClaheGridSize,
@@ -187,27 +188,30 @@ namespace ImgViewer.Models
                                                       p.SauvolaMorphRadius,
                                                       p.PencilStrokeBoost);
 
-            Mat bin8;
-            if (binMat.Type() != MatType.CV_8UC1)
-            {
-                bin8 = new Mat();
-                binMat.ConvertTo(bin8, MatType.CV_8UC1);
-            }
-            else
-            {
-                bin8 = binMat.Clone(); // сделаем клон, чтобы безопасно Dispose оригинала ниже
-            }
+            return binMat;
+            //Mat bin8;
+            //if (binMat.Type() != MatType.CV_8UC1)
+            //{
+            //    bin8 = new Mat();
+            //    binMat.ConvertTo(bin8, MatType.CV_8UC1);
+            //}
+            //else
+            //{
+            //    bin8 = binMat.Clone(); // сделаем клон, чтобы безопасно Dispose оригинала ниже
+            //}
 
-            try
-            {
-                var colorMat = new Mat();
-                Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
-                return colorMat;
-            }
-            finally
-            {
-                bin8.Dispose();
-            }
+            //return bin8;
+
+            //try
+            //{
+            //    var colorMat = new Mat();
+            //    Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
+            //    return colorMat;
+            //}
+            //finally
+            //{
+            //    bin8.Dispose();
+            //}
 
         }
 
@@ -216,19 +220,21 @@ namespace ImgViewer.Models
         {
             var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
             Mat gray = src;
+            bool ownsGray = false;
             if (src.Type() != MatType.CV_8UC1)
             {
                 gray = new Mat();
                 Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+                ownsGray = true;
             }
             Mat pre = gray;
+            bool ownsPre = false;
             if (useClahe)
             {
-                var clahe = Cv2.CreateCLAHE(claheClip, claheGrid);
+                using var clahe = Cv2.CreateCLAHE(claheClip, claheGrid);
                 pre = new Mat();
                 clahe.Apply(gray, pre);
-                clahe.Dispose();
-                if (!ReferenceEquals(gray, src)) gray.Dispose();
+                ownsPre = true;
             }
 
             var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
@@ -244,8 +250,8 @@ namespace ImgViewer.Models
                 cleaned.Dispose();
             }
 
-            if (!ReferenceEquals(pre, gray) && pre != src) pre.Dispose();
-            if (gray != src && gray != pre) gray.Dispose();
+            if (ownsPre) pre.Dispose();
+            if (ownsGray) gray.Dispose();
 
             return bin;
         }

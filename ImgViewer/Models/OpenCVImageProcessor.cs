@@ -914,6 +914,103 @@ namespace ImgViewer.Models
             Debug.WriteLine(sb.ToString());
         }
 
+        public static Scalar SampleCentralBgrMeanScalar_GridFast8U(
+                                                                Mat src,
+                                                                int sampleSizePx = 0,
+                                                                double sampleFraction = 0.10,
+                                                                int grid = 11)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return new Scalar(255, 255, 255, 255);
+
+            int w = src.Cols, h = src.Rows;
+            int minSide = Math.Min(w, h);
+
+            int side;
+            if (sampleSizePx > 0)
+                side = Math.Max(1, Math.Min(sampleSizePx, minSide));
+            else
+            {
+                double frac = (!double.IsNaN(sampleFraction) && sampleFraction > 0) ? sampleFraction : 0.10;
+                side = Math.Max(1, (int)Math.Round(minSide * frac));
+            }
+
+            int rx = Math.Max(0, (w / 2) - (side / 2));
+            int ry = Math.Max(0, (h / 2) - (side / 2));
+            int rw = Math.Min(side, w - rx);
+            int rh = Math.Min(side, h - ry);
+            if (rw <= 0 || rh <= 0) return new Scalar(255, 255, 255, 255);
+
+            var type = src.Type();
+            if (type != MatType.CV_8UC3 && type != MatType.CV_8UC4 && type != MatType.CV_8UC1)
+            {
+                // редкий fallback (не fast)
+                using var roiMat = new Mat(src, new Rect(rx, ry, rw, rh));
+                var m = Cv2.Mean(roiMat);
+                return (roiMat.Channels() == 1)
+                    ? new Scalar(m.Val0, m.Val0, m.Val0, 255)
+                    : new Scalar(m.Val0, m.Val1, m.Val2, 255);
+            }
+
+            // grid size clamps
+            if (grid < 1) grid = 1;
+            int gx = Math.Min(grid, rw);
+            int gy = Math.Min(grid, rh);
+
+            long sumB = 0, sumG = 0, sumR = 0;
+            long count = (long)gx * gy;
+
+            unsafe
+            {
+                byte* basePtr = (byte*)src.DataPointer;
+                long step = src.Step(); // bytes per row
+
+                if (type == MatType.CV_8UC1)
+                {
+                    for (int iy = 0; iy < gy; iy++)
+                    {
+                        int y = (gy == 1) ? (ry + rh / 2) : (ry + (iy * (rh - 1)) / (gy - 1));
+                        byte* row = basePtr + y * step;
+                        for (int ix = 0; ix < gx; ix++)
+                        {
+                            int x = (gx == 1) ? (rx + rw / 2) : (rx + (ix * (rw - 1)) / (gx - 1));
+                            sumB += row[x];
+                        }
+                    }
+
+                    long mean = (sumB + count / 2) / count;
+                    return new Scalar(mean, mean, mean, 255);
+                }
+
+                int pixSize = (type == MatType.CV_8UC4) ? 4 : 3;
+
+                for (int iy = 0; iy < gy; iy++)
+                {
+                    int y = (gy == 1) ? (ry + rh / 2) : (ry + (iy * (rh - 1)) / (gy - 1));
+                    byte* row = basePtr + y * step;
+
+                    for (int ix = 0; ix < gx; ix++)
+                    {
+                        int x = (gx == 1) ? (rx + rw / 2) : (rx + (ix * (rw - 1)) / (gx - 1));
+                        byte* p = row + x * pixSize;
+
+                        // OpenCV order: B,G,R,(A)
+                        sumB += p[0];
+                        sumG += p[1];
+                        sumR += p[2];
+                    }
+                }
+            }
+
+            long meanB = (sumB + count / 2) / count;
+            long meanG = (sumG + count / 2) / count;
+            long meanR = (sumR + count / 2) / count;
+
+            return new Scalar(meanB, meanG, meanR, 255);
+        }
+
+
+
         public Mat ProcessSingle(Mat src,
                            ProcessorCommand command,
                            Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing)
@@ -964,7 +1061,7 @@ namespace ImgViewer.Models
                                 bool autoThresh = false;
                                 int marginPercentForThresh = 10;
                                 double shiftFactorForTresh = 0.25;
-                                Scalar? bgColor = null;
+                                Scalar bgColor = SampleCentralBgrMeanScalar_GridFast8U(src, 0, 0.1);
                                 int minAreaPx = 2000;
                                 double minSpanFraction = 0.6;
                                 double solidityThreshold = 0.6;
@@ -1012,11 +1109,13 @@ namespace ImgViewer.Models
                                             shiftFactorForTresh = SafeDouble(kv.Value, shiftFactorForTresh);
                                             break;
                                         case "bgColor":
-                                            int i = SafeInt(kv.Value, 0);
-                                            int color = Math.Max(0, Math.Min(255, i));
+                                            //int i = SafeInt(kv.Value, 0);
+                                            //int color = Math.Max(0, Math.Min(255, i));
                                             //bgColor = new Scalar(0, 0, 255);
                                             //bgColor = new Scalar(color, color, color);
-                                            bgColor = SampleCentralGrayScalar(src, 0, 0.1);
+                                            //bgColor = SampleCentralGrayScalar(src, 0, 0.1);
+                                            
+                                            //bgColor = SampleCentralGrayScalar_Fast8U(src, 0, 0.1);
                                             Debug.WriteLine("bgColor:", bgColor.ToString());
                                             break;
                                         case "darkThreshold":
@@ -1195,7 +1294,7 @@ namespace ImgViewer.Models
                                                 break;
                                             case "Manual":
 
-                                                return RemoveBorders_Manual(src, top, bottom, left, right, applyManualCut, manualCutDebug);
+                                                return RemoveBorders_Manual(src, top, bottom, left, right, applyManualCut, bgColor, manualCutDebug);
                                                 break;
                                             case "Integral":
                                                 return RemoveBorders_Integral(token,
@@ -2013,7 +2112,7 @@ namespace ImgViewer.Models
             return true;
         }
 
-        private Mat RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool applyCut, bool debug)
+        private Mat RemoveBorders_Manual(Mat src, int top, int bottom, int left, int right, bool applyCut, Scalar bgColor, bool debug)
         {
             int x = left;
             int y = top;
@@ -2025,6 +2124,7 @@ namespace ImgViewer.Models
                 
                 Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height,
                                                         applyCut ? BordersRemover.BordersRemovalMode.Cut : BordersRemover.BordersRemovalMode.Fill,
+                                                        bgColor,
                                                         debug);
                 return result;
             }

@@ -922,6 +922,7 @@ namespace ImgViewer.Models
                                     Mat src,
                                     int x, int y, int w, int h,
                                     BordersRemovalMode mode = BordersRemovalMode.Fill,
+                                    Scalar? fill = null,
                                     bool debug = true)
         {
             //Debug.WriteLine("Manual cut");
@@ -999,9 +1000,9 @@ namespace ImgViewer.Models
                     // 0 внутри ROI → маска = бордюры
                     Cv2.Rectangle(borderMask, roi, Scalar.All(0), thickness: -1);
 
-                    Scalar fill = new Scalar();
-                    using var innerBgr = new Mat(srcBgr, roi);
-                    fill = Cv2.Mean(innerBgr);
+                    //Scalar fill = new Scalar();
+                    //using var innerBgr = new Mat(srcBgr, roi);
+                    //fill = Cv2.Mean(innerBgr);
                     
                     
 
