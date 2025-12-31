@@ -1474,7 +1474,10 @@ namespace ImgViewer.Models
                                     switch (kv.Value.ToString())
                                     {
                                         case "U-net":
-                                            return DetectDocumentAndCrop(src, cropLevel, false, batchProcessing, out Mat debugMask, out Mat debugOverlay);
+                                            var resultDDC = DetectDocumentAndCrop(src, cropLevel, false, batchProcessing, out Mat debugMask, out Mat debugOverlay);
+                                            debugMask.Dispose();
+                                            debugOverlay.Dispose();
+                                            return resultDDC;
                                             break;
                                         case "EAST":
                                             //return SmartCrop(src);
@@ -1544,23 +1547,25 @@ namespace ImgViewer.Models
                             }
 
                             //WorkingImage = RemoveLines(src, lineWidthPx, minLengthFraction, orientation, offsetStartPx, lineColorRed, lineColorGreen, lineColorBlue, colorTolerance);
+                            //var mask = new Mat();
+                            var resultLR = new Mat();
                             var mask = new Mat();
-
                             if (orientation == LineOrientation.Vertical)
                             {
-                                
-                                return LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+                                resultLR = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+
                             }
                             if (orientation == LineOrientation.Horizontal)
                             {
-                                return LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
+                                resultLR = LinesRemover.RemoveScannerHorizontalStripes(src, 3, 20, 0, out mask, false, null);
                             }
                             if (orientation == LineOrientation.Both)
                             {
-                                Mat firstResult = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
-                                return LinesRemover.RemoveScannerHorizontalStripes(firstResult, 3, 20, 0, out mask, false, null);
+                                using Mat firstResult = LinesRemover.RemoveScannerVerticalStripes(src, 3, 20, 0, out mask, false, null);
+                                resultLR = LinesRemover.RemoveScannerHorizontalStripes(firstResult, 3, 20, 0, out mask, false, null);
                             }
-
+                            mask.Dispose();
+                            return resultLR;
 
 
                             break;
@@ -2071,7 +2076,9 @@ namespace ImgViewer.Models
             Scalar bgColor = GetBgColor(src);
             // create new Mat with bgColor and add 20px on each side
             using Mat bigMat = new Mat(src.Rows + 40, src.Cols + 40, src.Type(), bgColor);
-            src.CopyTo(new Mat(bigMat, new Rect(20, 20, src.Cols, src.Rows)));
+            var rect = new Rect(20, 20, src.Cols, src.Rows);
+            using var roi = new Mat(bigMat, rect);
+            src.CopyTo(roi);
             try
             {
                 using Mat mask = _docBoundaryModel.PredictMask(bigMat, cropLevel, _token);
