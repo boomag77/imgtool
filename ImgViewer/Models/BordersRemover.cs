@@ -292,199 +292,6 @@ namespace ImgViewer.Models
                         }
                     }
 
-                    // дальше идёт твой STRIP MODE (если когда-нибудь разкомментируешь)
-                    // // === STRIP MODE: ...
-
-
-                    //for (int i = 1; i < nLabels; i++)
-                    //{
-                    //    token.ThrowIfCancellationRequested();
-                    //    int x = stats.At<int>(i, 0);
-                    //    int y = stats.At<int>(i, 1);
-                    //    int w = stats.At<int>(i, 2);
-                    //    int h = stats.At<int>(i, 3);
-                    //    int area = stats.At<int>(i, 4);
-
-                    //    bool touchesLeft = x <= 0;
-                    //    bool touchesTop = y <= 0;
-                    //    bool touchesRight = (x + w) >= (cols - 1);
-                    //    bool touchesBottom = (y + h) >= (rows - 1);
-
-                    //    if (!(touchesLeft || touchesTop || touchesRight || touchesBottom)) continue;
-
-                    //    double solidity = (w > 0 && h > 0) ? (double)area / (w * h) : 0.0;
-                    //    double spanFractionW = (double)w / cols;
-                    //    double spanFractionH = (double)h / rows;
-
-                    //    // compute maxDepth by scanning the component mask area (safe, no ToArray)
-                    //    //int maxDepth = 0;
-                    //    using (var compMask = new Mat())
-                    //    {
-                    //        Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // 255 где label==i
-
-                    //        int maxDepth = 0;
-
-                    //        // НОВОЕ: маска "пограничной части" этого компонента
-                    //        using var compBorderMask = new Mat(darkMask.Size(), MatType.CV_8U, Scalar.All(0));
-
-                    //        // ширина пограничного пояса в пикселях (то, что раньше minDepthPx / maxBorderDepthPx)
-                    //        int borderBandPx = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
-
-                    //        // скан bbox компонента
-                    //        int x0 = Math.Max(0, x);
-                    //        int y0 = Math.Max(0, y);
-                    //        int x1 = Math.Min(cols - 1, x + w - 1);
-                    //        int y1 = Math.Min(rows - 1, y + h - 1);
-
-                    //        for (int yy = y0; yy <= y1; yy++)
-                    //        {
-                    //            token.ThrowIfCancellationRequested();
-                    //            for (int xx = x0; xx <= x1; xx++)
-                    //            {
-                    //                byte v = compMask.At<byte>(yy, xx);
-                    //                if (v == 0) continue;
-
-                    //                int d = Math.Min(
-                    //                            Math.Min(xx, cols - 1 - xx),
-                    //                            Math.Min(yy, rows - 1 - yy));
-
-                    //                if (d > maxDepth)
-                    //                    maxDepth = d;
-
-                    //                // ⬅ если пиксель этого компонента находится близко к краю — пишем его в compBorderMask
-                    //                if (d <= borderBandPx)
-                    //                    compBorderMask.Set<byte>(yy, xx, 255);
-                    //            }
-                    //        }
-
-                    //        bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
-
-                    //        bool isInBorderBand = maxDepth <= borderBandPx;
-
-                    //        bool spansHoriz =
-                    //            (touchesTop || touchesBottom) &&
-                    //            spanFractionW >= minSpanFraction;
-
-                    //        bool spansVert =
-                    //            (touchesLeft || touchesRight) &&
-                    //            spanFractionH >= minSpanFraction;
-
-                    //        bool isBigFrame =
-                    //            (touchesLeft && touchesRight) ||
-                    //            (touchesTop && touchesBottom);
-
-                    //        bool select = false;
-
-                    //        if (touchesAny)
-                    //        {
-                    //            // реальный бордюр — полосы вдоль краёв или рамка
-                    //            if (spansHoriz || spansVert || isBigFrame)
-                    //                select = true;
-
-                    //            // опционально: неровные/тонкие штуки в узком поясе
-                    //            if (isInBorderBand && solidity < solidityThreshold)
-                    //                select = true;
-                    //        }
-
-                    //        if (select)
-                    //        {
-                    //            // ⬇ ВАЖНО: добавляем только погран-пояс компонента, а не весь компонент
-                    //            Cv2.BitwiseOr(selectedMask, compBorderMask, selectedMask);
-
-                    //            // НОВОЕ: обновляем максимальную глубину бордюра по сторонам
-                    //            //if (maxDepth > 0)
-                    //            //{
-                    //            //    if (touchesTop)
-                    //            //    {
-                    //            //        hasTop = true;
-                    //            //        if (maxDepth > maxTopDepth) maxTopDepth = maxDepth;
-                    //            //    }
-                    //            //    if (touchesBottom)
-                    //            //    {
-                    //            //        hasBottom = true;
-                    //            //        if (maxDepth > maxBottomDepth) maxBottomDepth = maxDepth;
-                    //            //    }
-                    //            //    if (touchesLeft)
-                    //            //    {
-                    //            //        hasLeft = true;
-                    //            //        if (maxDepth > maxLeftDepth) maxLeftDepth = maxDepth;
-                    //            //    }
-                    //            //    if (touchesRight)
-                    //            //    {
-                    //            //        hasRight = true;
-                    //            //        if (maxDepth > maxRightDepth) maxRightDepth = maxDepth;
-                    //            //    }
-                    //            //}
-                    //        }
-
-
-                    //    }
-                    //}
-
-                    // === STRIP MODE: заменяем зубчатую маску бордюра на ровные полосы по сторонам ===
-                    //if (hasTop || hasBottom || hasLeft || hasRight)
-                    //{
-                    //    // ограничим максимальную глубину разумным потолком
-                    //    int maxDepthCap = (int)Math.Round(minDepthFraction * Math.Min(rows, cols));
-                    //    maxDepthCap = Math.Max(1, maxDepthCap);
-
-                    //    // очистим старую зубчатую маску
-                    //    selectedMask.SetTo(Scalar.All(0));
-
-                    //    // TOP
-                    //    if (hasTop && maxTopDepth > 0)
-                    //    {
-                    //        int depth = Math.Min(maxTopDepth, maxDepthCap);
-                    //        depth = Math.Min(depth, rows); // safety
-                    //        if (depth > 0)
-                    //        {
-                    //            var topRect = new Rect(0, 0, cols, depth);
-                    //            using (var roi = new Mat(selectedMask, topRect))
-                    //                roi.SetTo(255);
-                    //        }
-                    //    }
-
-                    //    // BOTTOM
-                    //    if (hasBottom && maxBottomDepth > 0)
-                    //    {
-                    //        int depth = Math.Min(maxBottomDepth, maxDepthCap);
-                    //        depth = Math.Min(depth, rows);
-                    //        if (depth > 0)
-                    //        {
-                    //            var bottomRect = new Rect(0, rows - depth, cols, depth);
-                    //            using (var roi = new Mat(selectedMask, bottomRect))
-                    //                roi.SetTo(255);
-                    //        }
-                    //    }
-
-                    //    // LEFT
-                    //    if (hasLeft && maxLeftDepth > 0)
-                    //    {
-                    //        int depth = Math.Min(maxLeftDepth, maxDepthCap);
-                    //        depth = Math.Min(depth, cols);
-                    //        if (depth > 0)
-                    //        {
-                    //            var leftRect = new Rect(0, 0, depth, rows);
-                    //            using (var roi = new Mat(selectedMask, leftRect))
-                    //                roi.SetTo(255);
-                    //        }
-                    //    }
-
-                    //    // RIGHT
-                    //    if (hasRight && maxRightDepth > 0)
-                    //    {
-                    //        int depth = Math.Min(maxRightDepth, maxDepthCap);
-                    //        depth = Math.Min(depth, cols);
-                    //        if (depth > 0)
-                    //        {
-                    //            var rightRect = new Rect(cols - depth, 0, depth, rows);
-                    //            using (var roi = new Mat(selectedMask, rightRect))
-                    //                roi.SetTo(255);
-                    //        }
-                    //    }
-                    //}
-                    //// === END STRIP MODE ===
-
                     var filled = working.Clone();
 
                     int margin = featherPx; // <-- ваш n: положительное = расширить, отрицательное = врезать внутрь
@@ -501,13 +308,13 @@ namespace ImgViewer.Models
                     if (margin > 0)
                     {
                         // use a square kernel of size (2*margin+1)
-                        var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
+                        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * margin + 1, 2 * margin + 1));
                         Cv2.Dilate(modMask, modMask, k, iterations: 1);
                     }
                     else if (margin < 0)
                     {
                         int m = -margin;
-                        var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
+                        using var k = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * m + 1, 2 * m + 1));
                         Cv2.Erode(modMask, modMask, k, iterations: 1);
                     }
 
@@ -540,67 +347,15 @@ namespace ImgViewer.Models
                         Cv2.BitwiseAnd(modMask, innerDarkInv, modMask);
                     }
 
-
-                    //// === NEW: сгладим mask вдоль краёв, чтобы не было "рваных" краёв ===
-
-                    //// ширина полосы вдоль краёв, где будем сглаживать маску
-                    //int edgeBandPx = Math.Max(4, Math.Min(minDepthPx * 2, Math.Min(rows, cols) / 6));
-
-                    //// если картинка слишком маленькая — просто пропустим
-                    //if (edgeBandPx > 0 && rows > 2 && cols > 2)
-                    //{
-                    //    // горизонтальное сглаживание (top / bottom)
-                    //    // ядро вытянуто по горизонтали: закрывает дырки и ступеньки вдоль линий
-                    //    using var kHoriz = Cv2.GetStructuringElement(
-                    //        MorphShapes.Rect,
-                    //        new OpenCvSharp.Size(141, 1)); // длину можно потом подстроить
-
-                    //    // TOP band
-                    //    int topBand = Math.Min(edgeBandPx, rows);
-                    //    if (topBand > 0)
-                    //    {
-                    //        var topRect = new Rect(0, 0, cols, topBand);
-                    //        using var topRoi = new Mat(modMask, topRect);
-                    //        Cv2.MorphologyEx(topRoi, topRoi, MorphTypes.Close, kHoriz);
-                    //    }
-
-                    //    // BOTTOM band
-                    //    int bottomBand = Math.Min(edgeBandPx, rows);
-                    //    if (bottomBand > 0)
-                    //    {
-                    //        var bottomRect = new Rect(0, rows - bottomBand, cols, bottomBand);
-                    //        using var bottomRoi = new Mat(modMask, bottomRect);
-                    //        Cv2.MorphologyEx(bottomRoi, bottomRoi, MorphTypes.Close, kHoriz);
-                    //    }
-
-                    //    // вертикальное сглаживание (left / right)
-                    //    using var kVert = Cv2.GetStructuringElement(
-                    //        MorphShapes.Rect,
-                    //        new OpenCvSharp.Size(1, 141)); // вытянуто по вертикали
-
-                    //    // LEFT band
-                    //    int leftBand = Math.Min(edgeBandPx, cols);
-                    //    if (leftBand > 0)
-                    //    {
-                    //        var leftRect = new Rect(0, 0, leftBand, rows);
-                    //        using var leftRoi = new Mat(modMask, leftRect);
-                    //        Cv2.MorphologyEx(leftRoi, leftRoi, MorphTypes.Close, kVert);
-                    //    }
-
-                    //    // RIGHT band
-                    //    int rightBand = Math.Min(edgeBandPx, cols);
-                    //    if (rightBand > 0)
-                    //    {
-                    //        var rightRect = new Rect(cols - rightBand, 0, rightBand, rows);
-                    //        using var rightRoi = new Mat(modMask, rightRect);
-                    //        Cv2.MorphologyEx(rightRoi, rightRoi, MorphTypes.Close, kVert);
-                    //    }
-                    //}
-                    //// === END NEW ===
-
                     // Если в маске ничего нет — просто вернуть исходник
                     if (Cv2.CountNonZero(modMask) == 0)
+                    {
+                            selectedMask?.Dispose();
+                            modMask?.Dispose();
+                        filled.Dispose();
                         return working.Clone();
+                    }
+                        
 
 
                     if (useTeleaHybrid)
@@ -640,7 +395,10 @@ namespace ImgViewer.Models
                         // 4.3. Твой зелёный debug по исходной selectedMask (оставляем!)
                         //filled.SetTo(new Scalar(0, 255, 0), selectedMask);
 
-                        return filled;
+                    selectedMask?.Dispose();
+                    modMask?.Dispose();
+
+                    return filled;
                     }
 
                     filled.SetTo(chosenBg, modMask);
@@ -670,7 +428,12 @@ namespace ImgViewer.Models
                     }
 
                     // if no nonzero found (should not), return filled
-                    if (top == -1) return filled.Clone();
+                    if (top == -1)
+                    {
+                        selectedMask?.Dispose();
+                        modMask?.Dispose();
+                        return filled;
+                    }
 
                     // expand ROI a bit
                     top = Math.Max(0, top - featherPx);
@@ -704,8 +467,10 @@ namespace ImgViewer.Models
                         }
                     }
 
+                    selectedMask?.Dispose();
+                    modMask?.Dispose();
 
-                    return filled;
+                return filled;
                 }
                 catch (OperationCanceledException)
                 {
@@ -714,6 +479,7 @@ namespace ImgViewer.Models
                 finally
                 {
                     if (disposeWorking && working != null) working.Dispose();
+                    
                 }
         }
 
@@ -732,6 +498,8 @@ namespace ImgViewer.Models
             // Подготовка источника (убедиться, что BGR CV_8UC3)
             //Mat src = _currentImage;
             Mat srcBgr = src;
+            Mat gray = new Mat();
+            
             bool converted = false;
             try
             {
@@ -757,7 +525,7 @@ namespace ImgViewer.Models
                 }
 
                 // Грейскейл
-                Mat gray = new Mat();
+                //Mat gray = new Mat();
                 Cv2.CvtColor(srcBgr, gray, ColorConversionCodes.BGR2GRAY);
                 token.ThrowIfCancellationRequested();
 
@@ -779,7 +547,7 @@ namespace ImgViewer.Models
                 cx1 = Math.Max(cx0 + 1, Math.Min(w, cx1));
                 cy1 = Math.Max(cy0 + 1, Math.Min(h, cy1));
 
-                Mat central = new Mat(gray, new Rect(cx0, cy0, cx1 - cx0, cy1 - cy0));
+                using var central = new Mat(gray, new Rect(cx0, cy0, cx1 - cx0, cy1 - cy0));
                 int centralMedian = ComputeMatMedian(central);
 
                 // Считаем количество "не-фон" пикселей в каждой строке и колонке
@@ -850,9 +618,6 @@ namespace ImgViewer.Models
                 if (left > 0) result[new Rect(0, 0, left, h)].SetTo(white);
                 if (right > 0) result[new Rect(w - right, 0, right, h)].SetTo(white);
 
-                central.Dispose();
-                gray.Dispose();
-                if (converted) srcBgr.Dispose();
 
                 return result;
                 // trying to crop instead of fill
@@ -883,6 +648,7 @@ namespace ImgViewer.Models
             }
             finally
             {
+                gray.Dispose();
                 if (converted && srcBgr != null)
                     srcBgr.Dispose();
             }
