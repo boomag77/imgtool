@@ -433,14 +433,21 @@ namespace ImgViewer.Models
             using var gray = ToGray8u(src);
 
             using var bin = new Mat();
-            var thrType = photometricMinIsWhite
-                ? ThresholdTypes.BinaryInv   // white bg -> 0, black ink -> 255
-                : ThresholdTypes.Binary;     // black ink -> 0, white bg -> 255
+            if (IsBinaryMat(gray))
+            {
+                gray.CopyTo(bin);
+            }
+            else
+            {
+                var thrType = photometricMinIsWhite
+                    ? ThresholdTypes.BinaryInv   // white bg -> 0, black ink -> 255
+                    : ThresholdTypes.Binary;     // black ink -> 0, white bg -> 255
 
-            if (useOtsu)
-                thrType |= ThresholdTypes.Otsu;
+                if (useOtsu)
+                    thrType |= ThresholdTypes.Otsu;
 
-            Cv2.Threshold(gray, bin, useOtsu ? 0 : manualThreshold, 255, thrType);
+                Cv2.Threshold(gray, bin, useOtsu ? 0 : manualThreshold, 255, thrType);
+            }
 
             
 
@@ -507,6 +514,17 @@ namespace ImgViewer.Models
                 gray.ConvertTo(gray, MatType.CV_8UC1);
 
             return gray;
+        }
+
+
+        private static bool IsBinaryMat(Mat gray)
+        {
+            if (gray == null || gray.Empty()) return false;
+            if (gray.Type() != MatType.CV_8UC1) return false;
+
+            using var nonBinary = new Mat();
+            Cv2.InRange(gray, new Scalar(1), new Scalar(254), nonBinary);
+            return Cv2.CountNonZero(nonBinary) == 0;
         }
 
 
