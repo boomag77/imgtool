@@ -74,10 +74,12 @@ namespace ImgViewer.Models
                 var labChannels = lab.Split();
                 var l = labChannels[0]; // ???????
 
+                var lEnhanced = new Mat();
+
                 // CLAHE ?????? ?? L-??????
                 using (var clahe = Cv2.CreateCLAHE(clipLimit, new OpenCvSharp.Size(gridSize, gridSize)))
                 {
-                    using var lEnhanced = new Mat();
+                    
                     clahe.Apply(l, lEnhanced);
 
                     // ?????? L ????? ??????????
@@ -88,6 +90,7 @@ namespace ImgViewer.Models
                 // ????????? L', a, b ???????
                 using var labMerged = new Mat();
                 Cv2.Merge(labChannels, labMerged);
+                lEnhanced.Dispose();
 
                 // ?????? ?????? ?? ?????
                 foreach (var ch in labChannels)

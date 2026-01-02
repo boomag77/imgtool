@@ -281,6 +281,8 @@ namespace ImgViewer.Models
 
 
 
+
+
         public (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null)
         {
 
