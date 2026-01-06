@@ -52,7 +52,8 @@ namespace ImgViewer.Models
                 {
                     old = _currentImage;
                     _currentImage = value;
-                    previewSnap = new Mat(value, new Rect(0, 0, value.Cols, value.Rows));
+                    if (_appManager != null)
+                        previewSnap = new Mat(value, new Rect(0, 0, value.Cols, value.Rows));
                 }
                 old?.Dispose();
                 if (_appManager == null) { previewSnap?.Dispose(); return; }
@@ -107,13 +108,15 @@ namespace ImgViewer.Models
 
 
 
-        public OpenCvImageProcessor(IAppManager appManager, CancellationToken token, int cvNumThreads = 1, bool needDocBoundaryModel = true)
+        public OpenCvImageProcessor(IAppManager appManager, CancellationToken token, int cvNumThreads = 0, bool needDocBoundaryModel = true)
         {
             _currentImage = new Mat();
             _appManager = appManager;
             _token = token;
             //_onnxCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            Cv2.SetNumThreads(cvNumThreads);
+            if (appManager == null)
+                Cv2.SetNumThreads(cvNumThreads); // force single-threaded if no app manager (e.g. unit tests)
+            //Debug.WriteLine($"[OpenCvImageProcessor] Initialized with Cv2.GetNumThreads()={Cv2.GetNumThreads()}");
 
             try
             {

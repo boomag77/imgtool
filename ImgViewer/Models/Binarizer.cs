@@ -53,6 +53,10 @@ namespace ImgViewer.Models
 
         public static Mat Binarize(Mat src, BinarizeMethod binMethod, BinarizeParameters binParams)
         {
+            if (src.Channels() != 1)
+            {
+                src = Helper.MatToGray(src);
+            }
             switch (binMethod)
             {
                 case BinarizeMethod.Sauvola:
@@ -111,28 +115,29 @@ namespace ImgViewer.Models
         {
             if (src == null || src.Empty()) return new Mat();
 
-            var gray = Helper.MatToGray(src);
+            //var gray = Helper.MatToGray(src);
+            var bin = new Mat();
 
 
-            Cv2.Threshold(gray, gray, threshold, 255, ThresholdTypes.Binary);
+            Cv2.Threshold(src, bin, threshold, 255, ThresholdTypes.Binary);
 
             // Конвертируем обратно в BGR — тогда весь pipeline, ожидающий 3 канала, продолжит работать
             //var color = new Mat();
             //Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
 
-            return gray; // сохраняем результат как 3-канальную матрицу
+            return bin; 
         }
 
         private static Mat Sauvola(Mat src, int windowSize = 25, double k = 0.34, double R = 180.0, int pencilStrokeBoost = 0)
         {
 
-            using Mat gray = Helper.MatToGray(src);
+            //using Mat gray = Helper.MatToGray(src);
 
             if (windowSize % 2 == 0) windowSize++; // ensure odd
 
             // Convert to double for precision
             using Mat srcD = new Mat();
-            gray.ConvertTo(srcD, MatType.CV_64F);
+            src.ConvertTo(srcD, MatType.CV_64F);
 
             // mean = boxFilter(src, ksize) normalized
             using Mat mean = new Mat();
@@ -189,55 +194,33 @@ namespace ImgViewer.Models
                                                       p.PencilStrokeBoost);
 
             return binMat;
-            //Mat bin8;
-            //if (binMat.Type() != MatType.CV_8UC1)
-            //{
-            //    bin8 = new Mat();
-            //    binMat.ConvertTo(bin8, MatType.CV_8UC1);
-            //}
-            //else
-            //{
-            //    bin8 = binMat.Clone(); // сделаем клон, чтобы безопасно Dispose оригинала ниже
-            //}
-
-            //return bin8;
-
-            //try
-            //{
-            //    var colorMat = new Mat();
-            //    Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
-            //    return colorMat;
-            //}
-            //finally
-            //{
-            //    bin8.Dispose();
-            //}
 
         }
 
         private static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
                                              int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0, int pencilStrokeBoost = 0)
         {
-            var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
-            Mat gray = src;
-            bool ownsGray = false;
-            if (src.Type() != MatType.CV_8UC1)
-            {
-                gray = new Mat();
-                Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-                ownsGray = true;
-            }
-            Mat pre = gray;
-            bool ownsPre = false;
+            
+            //Mat gray = src;
+            //bool ownsGray = false;
+            //if (src.Type() != MatType.CV_8UC1)
+            //{
+            //    gray = new Mat();
+            //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+            //    ownsGray = true;
+            //}
+            //Mat pre = src;
+            //bool ownsPre = false;
             if (useClahe)
             {
+                var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
                 using var clahe = Cv2.CreateCLAHE(claheClip, claheGrid);
-                pre = new Mat();
-                clahe.Apply(gray, pre);
-                ownsPre = true;
+                //pre = new Mat();
+                clahe.Apply(src, src);
+                //ownsPre = true;
             }
 
-            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
+            var bin = Sauvola(src, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
 
             // optional morphological cleaning (open to remove small noise, close to fill holes)
             if (morphRadius > 0)
@@ -250,8 +233,8 @@ namespace ImgViewer.Models
                 cleaned.Dispose();
             }
 
-            if (ownsPre) pre.Dispose();
-            if (ownsGray) gray.Dispose();
+            //if (ownsPre) pre.Dispose();
+            //if (ownsGray) gray.Dispose();
 
             return bin;
         }
@@ -270,7 +253,7 @@ namespace ImgViewer.Models
 
             public static Mat MatToGray(Mat src)
             {
-                if (src == null || src.Empty()) return null; // уже в градациях серого
+                if (src == null || src.Empty()) return null; 
                 var gray = new Mat();
                 try
                 {
