@@ -136,28 +136,33 @@ namespace ImgViewer.Models
             if (windowSize % 2 == 0) windowSize++; // ensure odd
 
             // Convert to double for precision
-            using Mat srcD = new Mat();
+            using var srcD = new Mat();
             src.ConvertTo(srcD, MatType.CV_64F);
 
             // mean = boxFilter(src, ksize) normalized
-            using Mat mean = new Mat();
+            using var mean = new Mat();
             Cv2.BoxFilter(srcD, mean, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
 
             // meanSq: compute boxFilter(src*src)
-            using Mat sq = new Mat();
+            using var sq = new Mat();
             Cv2.Multiply(srcD, srcD, sq);
-            using Mat meanSq = new Mat();
+            using var meanSq = new Mat();
             Cv2.BoxFilter(sq, meanSq, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
 
             // std = sqrt(meanSq - mean*mean)
-            using Mat std = new Mat();
-            Mat meanMul = mean.Mul(mean);
-            Cv2.Subtract(meanSq, meanMul, std); // std now holds variance
+            using var std = new Mat();
+
+            //using var meanMul = mean.Mul(mean);
+            //Cv2.Subtract(meanSq, meanMul, std); // std now holds variance
+
+            Cv2.Multiply(mean, mean, sq); // std = mean*mean
+            Cv2.Subtract(meanSq, sq, std); // std = meanSq - mean*mean (variance)
+
             Cv2.Max(std, 0.0, std); // clamp small negatives
             Cv2.Sqrt(std, std);
 
             // threshold = mean * (1 + k * (std/R - 1))
-            using Mat thresh = new Mat();
+            using var thresh = new Mat();
             Cv2.Divide(std, R, thresh);                 // thresh = std / R
             Cv2.Subtract(thresh, 1.0, thresh);          // thresh = std/R - 1
             Cv2.Multiply(thresh, k, thresh);            // thresh = k*(std/R -1)
@@ -170,10 +175,8 @@ namespace ImgViewer.Models
             Cv2.Min(threshShifted, new Scalar(255.0), threshShifted);
 
             // binarize: srcD > thresh -> 255 else 0
-            Mat bin = new Mat();
+            Mat bin = new();
             Cv2.Compare(srcD, threshShifted, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
-            srcD.Dispose();
-            threshShifted.Dispose();
             bin.ConvertTo(bin, MatType.CV_8UC1, 255.0);  // ensure 0/255
 
 
