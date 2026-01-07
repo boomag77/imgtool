@@ -10,9 +10,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Media3D;
-using System.Threading;
-using static ImgViewer.Models.BordersRemover;
 
 namespace ImgViewer.Models
 {
@@ -68,6 +65,37 @@ namespace ImgViewer.Models
 
             }
         }
+
+        //Mat Load(byte[] rawPixels) => Cv2.ImDecode(rawPixels, ImreadModes.Color);
+        //Mat Load(ReadOnlySpan<byte> rawPixels)
+        //{
+        //    Cv2.ImDecode(rawPixels, ImreadModes.Color);
+        //}
+            
+        Mat Load(BitmapSource bmp) => BitmapSourceToMat(bmp);
+
+        public void SetSpanData(ReadOnlySpan<byte> rawPixels)
+        {
+            try
+            {
+                ClearSplitResults();
+                Mat? mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
+                if (mat == null || mat.Empty())
+                {
+                    mat?.Dispose();
+                    return;
+                }
+                WorkingImage = mat;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Failed to set Current Image from span: {ex.Message}");
+            }
+        }
+
         public object CurrentImage
         {
             set
@@ -85,6 +113,15 @@ namespace ImgViewer.Models
                     {
                         mat = BitmapSourceToMat(bmp);
                     }
+                    else if (value is ReadOnlyMemory<byte> rom)
+                    {
+                        mat = Cv2.ImDecode(rom.Span, ImreadModes.Color);
+                    }
+                    else
+                    {
+                        ErrorOccured?.Invoke($"Unsupported type for CurrentImage: {value.GetType()}");
+                        return;
+                    }
                     if (mat == null || mat.Empty())
                     {
                         mat?.Dispose();
@@ -93,7 +130,7 @@ namespace ImgViewer.Models
 
                     WorkingImage = mat;
                 }
-                
+
                 catch (OperationCanceledException)
                 {
 
@@ -301,7 +338,7 @@ namespace ImgViewer.Models
         public event Action<Stream>? ImageUpdated;
         public event Action<string>? ErrorOccured;
 
-        
+
 
 
         public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
@@ -452,7 +489,7 @@ namespace ImgViewer.Models
                 Cv2.Threshold(gray, bin, useOtsu ? 0 : manualThreshold, 255, thrType);
             }
 
-            
+
 
             int width = bin.Cols;
             int height = bin.Rows;
@@ -1135,7 +1172,7 @@ namespace ImgViewer.Models
                                             //bgColor = new Scalar(0, 0, 255);
                                             //bgColor = new Scalar(color, color, color);
                                             //bgColor = SampleCentralGrayScalar(src, 0, 0.1);
-                                            
+
                                             //bgColor = SampleCentralGrayScalar_Fast8U(src, 0, 0.1);
                                             Debug.WriteLine("bgColor:", bgColor.ToString());
                                             break;
@@ -1200,7 +1237,7 @@ namespace ImgViewer.Models
                                         case "borderSafetyOffsetPx":
                                             safetyOffsetPx = SafeInt(kv.Value, safetyOffsetPx);
                                             break;
-                                         case "inpaintMode":
+                                        case "inpaintMode":
                                             var raw = kv.Value?.ToString();
                                             if (string.IsNullOrWhiteSpace(raw))
                                             {
@@ -1287,7 +1324,7 @@ namespace ImgViewer.Models
                                         switch (kv.Value.ToString())
                                         {
                                             case "Auto":
-                                                
+
                                                 if (autoThresh)
                                                 {
                                                     darkThresh = EstimateBlackThreshold(src, marginPercentForThresh, shiftFactorForTresh);
@@ -1915,7 +1952,7 @@ namespace ImgViewer.Models
                 else
                     src.ConvertTo(gray8, MatType.CV_8UC1);
 
-                var leveled = Enhancer.LevelsAndGamma8U( gray8, _token, clampedBlack, clampedWhite, clampedGamma, whiteTarget);
+                var leveled = Enhancer.LevelsAndGamma8U(gray8, _token, clampedBlack, clampedWhite, clampedGamma, whiteTarget);
                 gray8.Dispose();
 
                 var colored = new Mat();
@@ -1974,7 +2011,7 @@ namespace ImgViewer.Models
                                                         bool cutResult,
                                                         Scalar? fillColor = null)
         {
-            
+
             try
             {
                 Mat result = new Mat();
@@ -2039,7 +2076,7 @@ namespace ImgViewer.Models
         private Scalar GetBgColor(Mat src)
         {
             var bgScalar = Scalar.All(0);
-            
+
             int rws = src.Rows;
             int cls = src.Cols;
             var thr = EstimateBlackThreshold(src);
@@ -2149,7 +2186,7 @@ namespace ImgViewer.Models
             if (width <= 0 || height <= 0) return src.Clone();
             try
             {
-                
+
                 Mat result = BordersRemover.ManualCut(_token, src, x, y, width, height,
                                                         applyCut ? BordersRemover.BordersRemovalMode.Cut : BordersRemover.BordersRemovalMode.Fill,
                                                         bgColor,
@@ -2340,7 +2377,7 @@ namespace ImgViewer.Models
         }
 
 
-        
+
 
         private void ExecutePageSplitPreview(Mat src, Dictionary<string, object> parameters)
         {
@@ -2743,7 +2780,7 @@ namespace ImgViewer.Models
                     //                               paddingPx,
                     //                               downscaleMaxWidth);
                 }
-               
+
             }
             catch (OperationCanceledException)
             {
@@ -4249,7 +4286,7 @@ namespace ImgViewer.Models
 
         //}
 
-        
+
 
 
 
@@ -4292,6 +4329,6 @@ namespace ImgViewer.Models
         //    return bin;
         //}
 
-        
+
     }
 }

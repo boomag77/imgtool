@@ -1,6 +1,5 @@
 ﻿using OpenCvSharp;
 using System.Diagnostics;
-using System.Web.SessionState;
 using Size = OpenCvSharp.Size;
 
 namespace ImgViewer.Models
@@ -17,7 +16,7 @@ namespace ImgViewer.Models
         public struct PreBinarizationParameters
         {
             public PreBinarizationMethod Method { get; set; }
-            public bool UseLabLChannel { get; set;  }
+            public bool UseLabLChannel { get; set; }
             public double HomomorphicSigma { get; set; }
             public double HomomorphicGammaHigh { get; set; }
             public double HomomorphicGammaLow { get; set; }
@@ -125,7 +124,7 @@ namespace ImgViewer.Models
             //var color = new Mat();
             //Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
 
-            return bin; 
+            return bin;
         }
 
         private static Mat Sauvola(Mat src, int windowSize = 25, double k = 0.34, double R = 180.0, int pencilStrokeBoost = 0)
@@ -203,7 +202,7 @@ namespace ImgViewer.Models
         private static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
                                              int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0, int pencilStrokeBoost = 0)
         {
-            
+
             //Mat gray = src;
             //bool ownsGray = false;
             //if (src.Type() != MatType.CV_8UC1)
@@ -256,7 +255,7 @@ namespace ImgViewer.Models
 
             public static Mat MatToGray(Mat src)
             {
-                if (src == null || src.Empty()) return null; 
+                if (src == null || src.Empty()) return null;
                 var gray = new Mat();
                 try
                 {

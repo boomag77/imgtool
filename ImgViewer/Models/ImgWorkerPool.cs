@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
+using System.Buffers;
 
 
 namespace ImgViewer.Models
@@ -558,6 +559,8 @@ namespace ImgViewer.Models
                 foreach (var file in _filesQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
+                    int len;
+                    ArrayPool<byte> localPool;
                     (ImageSource?, byte[]?) loaded;
                     try
                     {
@@ -581,9 +584,12 @@ namespace ImgViewer.Models
                         continue;
                     }
 
-                    imgProc.CurrentImage = loaded.Item2;
+                    ReadOnlyMemory<byte> imageBytes = loaded.Item2;
+                    imgProc.CurrentImage = imageBytes;
+
+                    //imgProc.CurrentImage = loaded.Item2;
                     //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
-                    
+
 
                     foreach (var op in _plOperations)
                     {

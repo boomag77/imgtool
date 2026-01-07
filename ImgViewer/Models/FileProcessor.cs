@@ -1,6 +1,7 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using ImageMagick;
 using ImgViewer.Interfaces;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Security;
@@ -137,10 +138,12 @@ namespace ImgViewer.Models
                 {
                     // return only byte[] in batch mode
                     bmp = null;
-                    using var ms = new MemoryStream();
-                    fs.CopyTo(ms);
+                    //using var ms = new MemoryStream();
+                    //fs.CopyTo(ms);
 
-                    bytes = ms.ToArray();
+                    //bytes = ms.ToArray();
+                    bytes = File.ReadAllBytes(path); // simpler way to read all bytes
+
                     return true; // raw file bytes
 
                 }
@@ -168,10 +171,10 @@ namespace ImgViewer.Models
                 bmp = src;
 
                 // Если тебе реально нужен byte[] (как сейчас): оставим BMP-энкодинг для совместимости
-                if (isBatch)
-                {
-                    bytes = EncodeToBmpBytes(src);
-                }
+                //if (isBatch)
+                //{
+                //    bytes = EncodeToBmpBytes(src);
+                //}
                     
 
                 return true;
@@ -277,6 +280,8 @@ namespace ImgViewer.Models
             enc.Frames.Add(BitmapFrame.Create(src));
             enc.Save(ms);
             return ms.ToArray();
+
+
         }
 
 
@@ -313,9 +318,11 @@ namespace ImgViewer.Models
 
             if (TryLoadWithWic(isBatch, path, decodePixelWidth, out var wicBmp, out var wicBytes, out var wicFail))
             {
+                
 #if DEBUG
                 Debug.WriteLine($"Loaded {path} via WIC.");
 #endif
+                
                 return isBatch ? (null, wicBytes) : (wicBmp!, null);
             }
 
@@ -337,6 +344,7 @@ namespace ImgViewer.Models
                 ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
 
                 //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
+                
                 return (null, null);
             }
 
