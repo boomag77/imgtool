@@ -739,7 +739,12 @@
                 <TextBlock x:Name="StatusText" Text="{Binding Status}" />
             </StatusBarItem>
             <StatusBarItem>
-                <ProgressBar x:Name="MyProgressBar" Width="200" Height="16" Minimum="0" Maximum="100" />
+                <ProgressBar x:Name="MyProgressBar"
+                             Width="200"
+                             Height="16"
+                             Minimum="0"
+                             Maximum="100"
+                             Value="{Binding Progress}" />
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock HorizontalAlignment="Right" Text="{Binding TiffCompressionLabel}"/>

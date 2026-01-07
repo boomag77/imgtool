@@ -12,6 +12,7 @@ namespace ImgViewer.Interfaces
         public ImageSource? ImageOnPreview { get; set; }
         public ImageSource? OriginalImage {  get; set; }
         public string Status { get; set; }
+        public int Progress { get; set; }
         public string? CurrentImagePath { get; set; }
         public void SetSplitPreviewImages(ImageSource left, ImageSource right);
         public void ClearSplitPreviewImages();

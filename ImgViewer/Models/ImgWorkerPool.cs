@@ -60,6 +60,11 @@ namespace ImgViewer.Models
         private readonly bool _boundaryModelRequested = false;
         private readonly bool _isSplitPipeline;
 
+        private void ReportProgress(int processed)
+        {
+            ProgressChanged?.Invoke(processed, _totalCount);
+        }
+
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
                              int maxWorkersCount,
@@ -445,7 +450,8 @@ namespace ImgViewer.Models
                     {
                         // skip existing output
                         //_processedCount++;
-                        Interlocked.Increment(ref _processedCount);
+                        int processedCount = Interlocked.Increment(ref _processedCount);
+                        ReportProgress(processedCount);
                         continue;
                     }
                     var sourceFile = new SourceImageFile
@@ -706,7 +712,8 @@ namespace ImgViewer.Models
 
                     if (handledSplit)
                     {
-                        Interlocked.Increment(ref _processedCount);
+                        int processedCount = Interlocked.Increment(ref _processedCount);
+                        ReportProgress(processedCount);
                         continue;
                     }
 
@@ -749,7 +756,8 @@ namespace ImgViewer.Models
                         RegisterFileError(file.Path, "Error saving processed image.", exSave);
                         continue;
                     }
-                    Interlocked.Increment(ref _processedCount);
+                    int processedAfterSave = Interlocked.Increment(ref _processedCount);
+                    ReportProgress(processedAfterSave);
 
                 }
             }

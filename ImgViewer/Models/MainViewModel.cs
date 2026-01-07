@@ -99,6 +99,17 @@ namespace ImgViewer.Models
             }
         }
 
+        public int Progress
+        {
+            get => _progress;
+            set
+            {
+                if (_progress == value) return;
+                _progress = value;
+                OnPropertyChanged();
+            }
+        }
+
         public Visibility IsProcessingImageOnPreview
         {
             get => _imageOnPreview != null ? Visibility.Visible : Visibility.Hidden;

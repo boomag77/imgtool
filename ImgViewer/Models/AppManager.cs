@@ -589,6 +589,7 @@ namespace ImgViewer.Models
             if (pipeline == null) return;
 
             UpdateStatus($"Processing folder " + srcFolder);
+            _mainViewModel.Progress = 0;
 
 
             //var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
@@ -610,6 +611,21 @@ namespace ImgViewer.Models
                 {
                     try
                     {
+                        workerPool.ProgressChanged += (processedCount, total) =>
+                        {
+                            int percent = total > 0 ? (int)Math.Round(processedCount * 100.0 / total) : 0;
+                            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                            if (dispatcher == null || dispatcher.CheckAccess())
+                            {
+                                _mainViewModel.Progress = percent;
+                            }
+                            else
+                            {
+                                dispatcher.InvokeAsync(() => _mainViewModel.Progress = percent,
+                                    System.Windows.Threading.DispatcherPriority.Background);
+                            }
+                        };
+
                         await workerPool.RunAsync().ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
