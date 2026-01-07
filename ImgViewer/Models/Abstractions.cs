@@ -28,8 +28,6 @@ namespace ImgViewer.Models
         public TiffCompression Compression { get; set; }
         public bool IsMultiPage { get; set; }
         // add more properties as needed
-
-        
     }
 
     public enum SourceFileLayout
@@ -40,8 +38,14 @@ namespace ImgViewer.Models
 
     public struct SourceImageFile
     {
-        public string Path { get; set; }
+        public string FolderPath { get; set; }
+        public string Name { get; set; }
+        public readonly string Path
+        {
+            get => System.IO.Path.Combine(FolderPath, Name);
+        }
         public SourceFileLayout? Layout { get; set; }
+
     }
 
     public class SourceImageFolder

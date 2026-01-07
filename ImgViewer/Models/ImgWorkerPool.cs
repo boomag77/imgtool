@@ -73,6 +73,7 @@ namespace ImgViewer.Models
             _sourceFolderPath = sourceFolderPath;
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
             string parentPath = Path.GetDirectoryName(_sourceFolderPath);
+            _totalCount = Task.Run(() => CountImages(sourceFolderPath), _token).Result;
 
             if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.SmartCrop))
             {
@@ -167,6 +168,27 @@ namespace ImgViewer.Models
             {
                 _opsLog.Add($"- {op.Command}");
             }
+        }
+
+        private int CountImages(string folder)
+        {
+            int count = 0;
+            foreach (var path in Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly))
+            {
+                var ext = Path.GetExtension(path);
+                if (ext.Length == 0) continue;
+
+                // сравниваем расширения
+                if (ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                    ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                    ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+                    ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
+                    ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
+                {
+                    count++;
+                }
+            }
+            return count;
         }
 
         private void RegisterFileError(string filePath, string message, Exception ex = null)
@@ -354,7 +376,10 @@ namespace ImgViewer.Models
             };
         }
 
-
+        private static readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".tif", ".tiff"
+        };
 
         public void Dispose()
         {
@@ -365,6 +390,16 @@ namespace ImgViewer.Models
             try { _tokenRegistration.Dispose(); } catch { }
             try { _filesQueue?.Dispose(); } catch { }
             try { _saveQueue?.Dispose(); } catch { }
+        }
+
+        IEnumerable<string> EnumerateImages(string folder)
+        {
+            foreach (var file in Directory.EnumerateFiles(folder))
+            {
+                var ext = Path.GetExtension(file);
+                if (ImageExts.Contains(ext))
+                    yield return Path.GetFileName(file);
+            }
         }
 
         private async Task EnqueueFiles()
@@ -386,20 +421,21 @@ namespace ImgViewer.Models
                 IEnumerable<string> files;
                 try
                 {
-                    files = Directory.EnumerateFiles(_sourceFolderPath)
-                                 .Where(file =>
-                                            file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                                            file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                                            file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                                            file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-                                            file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
+                    //files = Directory.EnumerateFiles(_sourceFolderPath)
+                    //             .Where(file =>
+                    //                        file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                    //                        file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                    //                        file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                    //                        file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
+                    //                        file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
+                    files = EnumerateImages(_sourceFolderPath);
                 }
                 catch (Exception ex)
                 {
                     RegisterFileError(_sourceFolderPath, "Error enumerating files in source folder.", ex);
                     throw;
                 }
-                _totalCount = files.Count();
+                //_totalCount = files.Count();
                 foreach (var file in files)
                 {
                     _token.ThrowIfCancellationRequested();
@@ -414,7 +450,8 @@ namespace ImgViewer.Models
                     }
                     var sourceFile = new SourceImageFile
                     {
-                        Path = file,
+                        FolderPath = _sourceFolderPath,
+                        Name = Path.GetFileName(file),
                         Layout = GetLayoutFromFileName(file)
                     };
                     _filesQueue.Add(sourceFile, _token);
@@ -503,6 +540,7 @@ namespace ImgViewer.Models
             var token = _token;
             using var fileProc = new FileProcessor(CancellationToken.None);
             string currentOutputFile = null;
+            //var tiffInfo = new TiffInfo();
             try
             {
                 foreach (var saveTask in _saveQueue.GetConsumingEnumerable())
@@ -525,12 +563,13 @@ namespace ImgViewer.Models
 
 
                     var finalPath = saveTask.OutputFilePath;
-                    var tempPath = finalPath + ".tmp";
+                    var tempPath = string.Concat(finalPath, ".tmp");
                     currentOutputFile = finalPath;
                     fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
                     if (File.Exists(finalPath))
                         File.Delete(finalPath);
                     File.Move(tempPath, finalPath);
+                    tiffInfo = null;
                 }
             }
             catch (OperationCanceledException)
@@ -545,7 +584,6 @@ namespace ImgViewer.Models
             {
                 RegisterFileError(currentOutputFile ?? "<unknown>", "Error in ImageSavingWorker.", ex);
             }
-
         }
 
         private void ImageProcessingWorker()
