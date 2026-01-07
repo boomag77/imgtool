@@ -6,8 +6,7 @@ using System.Threading.Tasks;
 
 namespace ImgViewer.Models
 {
-    internal class BatchDispatcher
+    internal class BatchViewModel
     {
-
     }
 }
