@@ -9,6 +9,7 @@ namespace ImgViewer.Models
     {
         private TiffCompression _tiffCompression;
         private string _lastOpenedFolder;
+        private string _lastSavedFolder;
 
         private TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
         private double _eraseOperationModeOffset = 100;
@@ -81,6 +82,16 @@ namespace ImgViewer.Models
             {
                 _tiffCompression = value;
                 Debug.WriteLine($"App Settings: Compression set to: {_tiffCompression}");
+                ScheduleSave();
+            }
+        }
+
+        public string LastSavedFolder
+        {
+            get { return _lastSavedFolder; }
+            set
+            {
+                _lastSavedFolder = value;
                 ScheduleSave();
             }
         }

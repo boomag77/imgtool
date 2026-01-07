@@ -398,7 +398,7 @@ namespace ImgViewer.Models
             {
                 var ext = Path.GetExtension(file);
                 if (ImageExts.Contains(ext))
-                    yield return Path.GetFileName(file);
+                    yield return file;
             }
         }
 
@@ -450,8 +450,7 @@ namespace ImgViewer.Models
                     }
                     var sourceFile = new SourceImageFile
                     {
-                        FolderPath = _sourceFolderPath,
-                        Name = Path.GetFileName(file),
+                        Path = file,
                         Layout = GetLayoutFromFileName(file)
                     };
                     _filesQueue.Add(sourceFile, _token);

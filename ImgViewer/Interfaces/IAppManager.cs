@@ -9,6 +9,8 @@ namespace ImgViewer.Interfaces
         public TiffCompression CurrentTiffCompression { get; set;  }
         public string LastOpenedFolder { get; set; }
 
+        public string LastSavedFolder { get; set; }
+
         public Pipeline CurrentPipeline { get; }
 
         public double EraseOperationOffset { get; set; }

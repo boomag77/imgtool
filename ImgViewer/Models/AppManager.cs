@@ -1,11 +1,6 @@
-﻿using BitMiracle.LibTiff.Classic;
-using ImgViewer.Interfaces;
-using ImgViewer.Models.Onnx;
-using OpenCvSharp;
-using System.Buffers;
+﻿using ImgViewer.Interfaces;
 using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -53,10 +48,10 @@ namespace ImgViewer.Models
             _fileProcessor.ErrorOccured += OnFileProcessorError;
 
             _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
-            _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token, Environment.ProcessorCount-1, true);
+            _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token, Environment.ProcessorCount - 1, true);
 
             _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
-            
+
 
         }
 
@@ -80,12 +75,24 @@ namespace ImgViewer.Models
             set { _appSettings.EraseOperationOffset = value; }
         }
 
-        
+
 
         public TiffCompression CurrentTiffCompression
         {
             get { return _appSettings.TiffCompression; }
             set { _appSettings.TiffCompression = value; }
+        }
+
+        public string LastSavedFolder
+        {
+            get
+            {
+                return _appSettings.LastSavedFolder;
+            }
+            set
+            {
+                _appSettings.LastSavedFolder = value;
+            }
         }
 
         public string LastOpenedFolder
@@ -254,11 +261,11 @@ namespace ImgViewer.Models
             await _imageLoadLock.WaitAsync();
             try
             {
-                
+
                 var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.LoadImageSource(imagePath, isBatch: false));
                 if (bmpImage is BitmapSource bmpSource && !bmpSource.IsFrozen)
-                    bmpSource.Freeze(); 
-                
+                    bmpSource.Freeze();
+
                 _mainViewModel.CurrentImagePath = imagePath;
                 await SetBmpImageAsOriginal(bmpImage);
                 await SetBmpImageOnPreview(bmpImage);
@@ -267,9 +274,9 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-                #if DEBUG
+#if DEBUG
                 Debug.WriteLine("Loading image was canceled by user.");
-                #endif
+#endif
             }
             catch (Exception ex)
             {
@@ -310,9 +317,9 @@ namespace ImgViewer.Models
             }
             catch (OperationCanceledException)
             {
-                #if DEBUG
+#if DEBUG
                 Debug.WriteLine($"Command {command} canceled by user.");
-                #endif
+#endif
             }
             catch (Exception ex)
             {
@@ -330,7 +337,7 @@ namespace ImgViewer.Models
                 UpdateStatus("Standby");
             }
 
-            
+
 
         }
 
@@ -445,16 +452,16 @@ namespace ImgViewer.Models
             var batchToken = _rootFolderCts.Token;
 
             //var debug = false;
-            
 
-            var startTime = DateTime.Now;   
+
+            var startTime = DateTime.Now;
 
             UpdateStatus($"Processing folders in " + rootFolderPath);
             //_mainViewModel.Status = $"Processing folders in " + rootFolder;
 
             var processedCount = 0;
             var visitedCount = 0;
-            
+
             var folderPaths = _fileProcessor.EnumerateSubFolderPaths(rootFolderPath, fullTree, batchToken);
 
 
@@ -583,7 +590,7 @@ namespace ImgViewer.Models
 
             UpdateStatus($"Processing folder " + srcFolder);
 
-            
+
             //var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
             //if (sourceFolder == null || sourceFolder.Files == null || sourceFolder.Files.Length == 0) return;
 
@@ -620,10 +627,10 @@ namespace ImgViewer.Models
             }
             finally
             {
-                
+
                 UpdateStatus("Standby");
 
-                
+
                 try
                 {
                     _poolCts?.Dispose();

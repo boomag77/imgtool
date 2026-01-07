@@ -38,14 +38,8 @@ namespace ImgViewer.Models
 
     public struct SourceImageFile
     {
-        public string FolderPath { get; set; }
-        public string Name { get; set; }
-        public readonly string Path
-        {
-            get => System.IO.Path.Combine(FolderPath, Name);
-        }
+        public string Path { get; set; }
         public SourceFileLayout? Layout { get; set; }
-
     }
 
     public class SourceImageFolder

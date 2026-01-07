@@ -1386,7 +1386,7 @@ namespace ImgViewer.Views
         {
             if (_viewModel.OriginalImage == null) return;
             var dlg = new Microsoft.Win32.SaveFileDialog();
-            dlg.InitialDirectory = _manager.LastOpenedFolder;
+            dlg.InitialDirectory = _manager.LastSavedFolder;
             //dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
             dlg.Filter = "TIFF Image|*.tif;*.tiff";
 
