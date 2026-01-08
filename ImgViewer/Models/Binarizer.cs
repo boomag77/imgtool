@@ -255,7 +255,9 @@ namespace ImgViewer.Models
 
             public static Mat MatToGray(Mat src)
             {
-                if (src == null || src.Empty()) return null;
+                if (src == null) throw new ArgumentNullException(nameof(src));
+                if (src.Empty()) throw new InvalidOperationException("MatToGray: src is empty");
+
                 var gray = new Mat();
                 try
                 {
@@ -278,7 +280,7 @@ namespace ImgViewer.Models
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"MatToGray error: {ex}");
-                    return gray;
+                    throw;
                 }
 
 
