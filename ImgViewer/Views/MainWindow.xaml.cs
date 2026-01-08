@@ -172,6 +172,7 @@ namespace ImgViewer.Views
             var cts = new CancellationTokenSource();
             _manager = new AppManager(this, cts);
             //_pipeline = new Pipeline(_manager);
+            _manager.BatchProgressDismissRequested += CloseBatchProgressWindow;
 
             _eraseOffset = _manager.EraseOperationOffset;
             _liveDebounceDelay = _manager.ParametersChangedDebounceDelay;
@@ -1111,7 +1112,12 @@ namespace ImgViewer.Views
             {
                 _batchProgressWindow = new BatchProgressWindow();
                 _batchProgressWindow.Owner = this;
-                _batchProgressWindow.Closed += (_, __) => _batchProgressWindow = null;
+                _batchProgressWindow.CancelRequested += OnBatchCancelRequested;
+                _batchProgressWindow.Closed += (_, __) =>
+                {
+                    _batchProgressWindow.CancelRequested -= OnBatchCancelRequested;
+                    _batchProgressWindow = null;
+                };
             }
 
             _batchProgressWindow.DataContext = _manager.BatchViewModel;
@@ -1119,6 +1125,23 @@ namespace ImgViewer.Views
             if (_batchProgressWindow.WindowState == WindowState.Minimized)
                 _batchProgressWindow.WindowState = WindowState.Normal;
             _batchProgressWindow.Activate();
+        }
+
+        private void CloseBatchProgressWindow()
+        {
+            if (_batchProgressWindow == null)
+                return;
+
+            if (_batchProgressWindow.IsLoaded)
+            {
+                _batchProgressWindow.Close();
+            }
+            _batchProgressWindow = null;
+        }
+
+        private void OnBatchCancelRequested(string folderPath)
+        {
+            _manager.CancelFolderProcessing(folderPath);
         }
 
 

@@ -1,4 +1,5 @@
-﻿using System.Windows.Media;
+﻿using System;
+using System.Windows.Media;
 using ImgViewer.Models;
 using ImgViewer.Models.Onnx;
 
@@ -20,6 +21,7 @@ namespace ImgViewer.Interfaces
         public bool IsSavePipelineToMd { get; set; }
 
         public BatchViewModel BatchViewModel { get; }
+        public event Action? BatchProgressDismissRequested;
 
         //public DocBoundaryModel? DocBoundaryModel { get; }
 
@@ -44,6 +46,7 @@ namespace ImgViewer.Interfaces
         public Task ProcessFolder(string srcFolder);
 
         public Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree);
+        public void CancelFolderProcessing(string folderPath);
 
         public Task LoadPipelineFromFile(string fileNamePath);
 

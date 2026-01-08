@@ -5,9 +5,30 @@
         Height="320"
         Width="520"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="CanResize">
+        ResizeMode="CanResize"
+        Background="#1C1F24">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#2F3136"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#464A52"/>
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E5E7EA"/>
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#AAB0B7"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#1E66E0"/>
+        <Style x:Key="TaskItemBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+        <Style x:Key="InlineButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#3A3E46"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="MinWidth" Value="24"/>
+        </Style>
     </Window.Resources>
     <Grid Margin="12">
         <Grid.RowDefinitions>
@@ -17,12 +38,17 @@
 
         <TextBlock Text="Active and pending batch tasks"
                    FontWeight="SemiBold"
+                   Foreground="{StaticResource PrimaryTextBrush}"
                    Margin="0,0,0,8" />
 
-        <ListBox Grid.Row="1" ItemsSource="{Binding Tasks}">
+        <ListBox Grid.Row="1"
+                 ItemsSource="{Binding Tasks}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 HorizontalContentAlignment="Stretch">
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <Border BorderBrush="#DDDDDD" BorderThickness="1" Padding="8" Margin="0,0,0,8">
+                    <Border Style="{StaticResource TaskItemBorderStyle}" Margin="0,0,0,8">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -31,18 +57,30 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
-                            <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="#666666" />
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource PrimaryTextBrush}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Status}"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       HorizontalAlignment="Right" />
+                            <Button Grid.Column="2"
+                                    Margin="10,0,0,0"
+                                    Content="X"
+                                    Style="{StaticResource InlineButtonStyle}"
+                                    Click="CancelRow_Click" />
 
                             <ProgressBar Grid.Row="1"
-                                         Grid.ColumnSpan="2"
+                                         Grid.ColumnSpan="3"
                                          Height="12"
                                          Margin="0,6,0,0"
                                          Minimum="0"
                                          Maximum="100"
                                          Value="{Binding Progress}"
+                                         Foreground="{StaticResource AccentBrush}"
                                          Visibility="{Binding IsInProgress, Converter={StaticResource BoolToVis}}" />
                         </Grid>
                     </Border>

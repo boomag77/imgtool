@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using ImgViewer.Views;
 using System.Windows.Media;
 using System.Buffers;
 
@@ -59,10 +60,25 @@ namespace ImgViewer.Models
 
         private readonly bool _boundaryModelRequested = false;
         private readonly bool _isSplitPipeline;
+        private readonly Func<ExistingFilesChoice?>? _getExistingFilesChoice;
+        private readonly Action<ExistingFilesChoice>? _setExistingFilesChoice;
+        private readonly Action? _onBatchCanceled;
 
         private void ReportProgress(int processed)
         {
             ProgressChanged?.Invoke(processed, _totalCount);
+        }
+
+        private static ExistingFilesChoice ShowExistingFilesDialog(string title, string message)
+        {
+            var dialog = new ExistingFilesDialog(message)
+            {
+                Title = title,
+                Owner = System.Windows.Application.Current?.MainWindow,
+                ShowInTaskbar = false
+            };
+            dialog.ShowDialog();
+            return dialog.Choice;
         }
 
         public ImgWorkerPool(CancellationTokenSource cts,
@@ -70,10 +86,16 @@ namespace ImgViewer.Models
                              int maxWorkersCount,
                              string sourceFolderPath,
                              int maxFilesQueue,
-                             bool savePipelineToMd)
+                             bool savePipelineToMd,
+                             Func<ExistingFilesChoice?>? getExistingFilesChoice = null,
+                             Action<ExistingFilesChoice>? setExistingFilesChoice = null,
+                             Action? onBatchCanceled = null)
         {
             _cts = cts;
             _token = _cts.Token;
+            _getExistingFilesChoice = getExistingFilesChoice;
+            _setExistingFilesChoice = setExistingFilesChoice;
+            _onBatchCanceled = onBatchCanceled;
             //_sourceFolder = sourceFolder;
             _sourceFolderPath = sourceFolderPath;
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
@@ -116,30 +138,44 @@ namespace ImgViewer.Models
                 var dispatcher = System.Windows.Application.Current?.Dispatcher;
                 string title = "Existing Processed Files Detected";
                 string message =
-                    $"The output folder '{_outputFolder}' already contains {_existingOutputNames.Count} processed TIFF files. Do you want to overwrite them (Yes) or Proceed (No). Press Cancel to cancel processing?";
-                MessageBoxResult result = MessageBoxResult.Cancel;
-                if (dispatcher == null || dispatcher.CheckAccess())
-                {
+                    $"The output folder '{_outputFolder}' already contains {_existingOutputNames.Count} processed TIFF files. Overwrite them (Yes), Proceed without overwrite (No), or apply to all folders with Yes to All / No to All?";
 
-                    result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                ExistingFilesChoice result;
+                var batchChoice = _getExistingFilesChoice?.Invoke();
+                if (batchChoice == ExistingFilesChoice.YesToAll || batchChoice == ExistingFilesChoice.NoToAll)
+                {
+                    result = batchChoice.Value;
+                }
+                else if (dispatcher == null || dispatcher.CheckAccess())
+                {
+                    result = ShowExistingFilesDialog(title, message);
                 }
                 else
                 {
+                    ExistingFilesChoice captured = ExistingFilesChoice.Cancel;
                     dispatcher.Invoke(() =>
-                        result = System.Windows.MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question),
+                        captured = ShowExistingFilesDialog(title, message),
                         System.Windows.Threading.DispatcherPriority.Background);
+                    result = captured;
                 }
-                if (result == MessageBoxResult.Yes)
+
+                if (result == ExistingFilesChoice.Yes || result == ExistingFilesChoice.YesToAll)
                 {
                     overWriteExistingOutputs = true;
                 }
-                else if (result == MessageBoxResult.No)
+                else if (result == ExistingFilesChoice.No || result == ExistingFilesChoice.NoToAll)
                 {
                     overWriteExistingOutputs = false;
                 }
                 else
                 {
+                    _onBatchCanceled?.Invoke();
                     throw new OperationCanceledException("User cancelled processing due to existing files.");
+                }
+
+                if (result == ExistingFilesChoice.YesToAll || result == ExistingFilesChoice.NoToAll)
+                {
+                    _setExistingFilesChoice?.Invoke(result);
                 }
             }
 

@@ -1,4 +1,5 @@
 ﻿using ImgViewer.Interfaces;
+using ImgViewer.Views;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -22,6 +23,13 @@ namespace ImgViewer.Models
 
         private readonly SemaphoreSlim _currentImageLock = new(1, 1);
         private readonly SemaphoreSlim _imageLoadLock = new(1, 1);
+        private readonly object _batchChoiceLock = new();
+        private ExistingFilesChoice? _batchExistingFilesChoice;
+        private readonly object _batchCancelLock = new();
+        private readonly HashSet<string> _canceledFolders = new(StringComparer.OrdinalIgnoreCase);
+        private string? _currentBatchFolder;
+
+        public event Action? BatchProgressDismissRequested;
 
         private readonly CancellationTokenSource _cts;
         private CancellationTokenSource? _poolCts;
@@ -72,12 +80,81 @@ namespace ImgViewer.Models
             }
         }
 
+        private void RequestBatchProgressDismiss()
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                BatchProgressDismissRequested?.Invoke();
+            }
+            else
+            {
+                dispatcher.InvokeAsync(() => BatchProgressDismissRequested?.Invoke(),
+                    System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
         private static string BuildBatchDisplayName(string folderPath)
         {
             var folder = Path.GetFileName(folderPath);
             var parent = Path.GetFileName(Path.GetDirectoryName(folderPath) ?? string.Empty);
             if (string.IsNullOrWhiteSpace(parent)) return folder;
             return $"{parent}/{folder}";
+        }
+
+        private ExistingFilesChoice? GetBatchExistingFilesChoice()
+        {
+            lock (_batchChoiceLock)
+            {
+                return _batchExistingFilesChoice;
+            }
+        }
+
+        private void SetBatchExistingFilesChoice(ExistingFilesChoice choice)
+        {
+            if (choice != ExistingFilesChoice.YesToAll && choice != ExistingFilesChoice.NoToAll)
+                return;
+
+            lock (_batchChoiceLock)
+            {
+                _batchExistingFilesChoice = choice;
+            }
+        }
+
+        private bool IsFolderCanceled(string folderPath)
+        {
+            lock (_batchCancelLock)
+            {
+                return _canceledFolders.Contains(folderPath);
+            }
+        }
+
+        private bool IsCurrentFolder(string folderPath)
+        {
+            lock (_batchCancelLock)
+            {
+                return _currentBatchFolder != null &&
+                       string.Equals(_currentBatchFolder, folderPath, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        public void CancelFolderProcessing(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath))
+                return;
+
+            lock (_batchCancelLock)
+            {
+                _canceledFolders.Add(folderPath);
+            }
+
+            UpdateBatchViewModel(vm => vm.Remove(folderPath));
+
+            if (IsCurrentFolder(folderPath))
+            {
+                _poolCts?.Cancel();
+                UpdateProgress(0);
+            }
         }
 
         //public DocBoundaryModel DocBoundaryModel => _docBoundaryModel;
@@ -485,6 +562,11 @@ namespace ImgViewer.Models
             _rootFolderCts?.Dispose();
 
             _inRootFolderBatch = true;
+            _batchExistingFilesChoice = null;
+            lock (_batchCancelLock)
+            {
+                _canceledFolders.Clear();
+            }
             while (_rootBatchIssues.TryDequeue(out _)) { }
             UpdateBatchViewModel(vm => vm.Clear());
 
@@ -553,6 +635,12 @@ namespace ImgViewer.Models
                     if (batchToken.IsCancellationRequested) break;
                     try
                     {
+                        if (IsFolderCanceled(folderPath))
+                        {
+                            UpdateBatchViewModel(vm => vm.Remove(folderPath));
+                            continue;
+                        }
+
                         await ProcessFolder(folderPath, pipeline, batchToken).ConfigureAwait(false);
                         processedCount++;
                     }
@@ -640,6 +728,11 @@ namespace ImgViewer.Models
             _rootFolderCts?.Cancel();
             _rootFolderCts?.Dispose();
             _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            _batchExistingFilesChoice = null;
+            lock (_batchCancelLock)
+            {
+                _canceledFolders.Clear();
+            }
 
             var token = _rootFolderCts.Token;
             var pipelines = CurrentPipeline.CreatePipelinesForBatchProcessing();
@@ -655,6 +748,11 @@ namespace ImgViewer.Models
         private async Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken)
         {
             if (pipeline == null) return;
+
+            lock (_batchCancelLock)
+            {
+                _currentBatchFolder = srcFolder;
+            }
 
             UpdateStatus($"Processing folder " + srcFolder);
             UpdateProgress(0);
@@ -682,7 +780,16 @@ namespace ImgViewer.Models
 
             try
             {
-                using (var workerPool = new ImgWorkerPool(_poolCts, pipeline, 0, srcFolder, 0, IsSavePipelineToMd))
+                using (var workerPool = new ImgWorkerPool(
+                    _poolCts,
+                    pipeline,
+                    0,
+                    srcFolder,
+                    0,
+                    IsSavePipelineToMd,
+                    GetBatchExistingFilesChoice,
+                    SetBatchExistingFilesChoice,
+                    () => CancelBatchProcessing()))
                 {
                     try
                     {
@@ -720,6 +827,13 @@ namespace ImgViewer.Models
                 if (_poolCts?.IsCancellationRequested == true || batchToken.IsCancellationRequested)
                 {
                     UpdateProgress(0);
+                }
+                lock (_batchCancelLock)
+                {
+                    if (string.Equals(_currentBatchFolder, srcFolder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _currentBatchFolder = null;
+                    }
                 }
 
 
@@ -769,6 +883,7 @@ namespace ImgViewer.Models
                 _rootFolderCts?.Cancel();
                 UpdateBatchViewModel(vm => vm.Clear());
                 UpdateProgress(0);
+                RequestBatchProgressDismiss();
             }
             catch (Exception ex)
             {
