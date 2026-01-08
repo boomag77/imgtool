@@ -52,27 +52,22 @@ namespace ImgViewer.Models
 
         public static Mat Binarize(Mat src, BinarizeMethod binMethod, BinarizeParameters binParams)
         {
-            if (src.Channels() != 1)
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) throw new InvalidOperationException("Binarizer: src is empty");
+            using var gray = (src.Channels() == 1) ? src.Clone() : Helper.MatToGray(src);
+
+            return binMethod switch
             {
-                src = Helper.MatToGray(src);
-            }
-            switch (binMethod)
-            {
-                case BinarizeMethod.Sauvola:
-                    return SauvolaBinarize(src, binParams);
-                case BinarizeMethod.Threshold:
-                    return BinarizeThreshold(src, binParams.Threshold);
-                case BinarizeMethod.Adaptive:
-                    return BinarizeAdaptive(src, binParams);
-                default:
-                    throw new NotImplementedException($"Binarization method {binMethod} is not implemented.");
-            }
+                BinarizeMethod.Sauvola => SauvolaBinarize(gray, binParams),
+                BinarizeMethod.Threshold => BinarizeThreshold(gray, binParams.Threshold),
+                BinarizeMethod.Adaptive => BinarizeAdaptive(gray, binParams),
+                _ => throw new NotImplementedException($"Binarization method {binMethod} is not implemented.")
+            };
         }
 
 
-        private static Mat BinarizeAdaptive(Mat src, BinarizeParameters p, bool invert = false)
+        private static Mat BinarizeAdaptive(Mat gray, BinarizeParameters p, bool invert = false)
         {
-            using var gray = Helper.MatToGray(src);
 
             int bs;
             if (p.BlockSize.HasValue && p.BlockSize > 0)
@@ -112,7 +107,6 @@ namespace ImgViewer.Models
 
         private static Mat BinarizeThreshold(Mat src, int threshold = 128)
         {
-            if (src == null || src.Empty()) return new Mat();
 
             //var gray = Helper.MatToGray(src);
             var bin = new Mat();
@@ -131,6 +125,8 @@ namespace ImgViewer.Models
         {
 
             //using Mat gray = Helper.MatToGray(src);
+            
+
 
             if (windowSize % 2 == 0) windowSize++; // ensure odd
 
@@ -168,7 +164,7 @@ namespace ImgViewer.Models
             Cv2.Add(thresh, 1.0, thresh);               // thresh = 1 + k*(std/R -1)
             Cv2.Multiply(mean, thresh, thresh);         // thresh = mean * (...)
 
-            double pencilMargin = (double)pencilStrokeBoost; // TODO: вынести в BinarizeParameters (SauvolaPencilMargin)
+            double pencilMargin = (double)pencilStrokeBoost; 
             using var threshShifted = new Mat();
             Cv2.Add(thresh, new Scalar(pencilMargin), threshShifted);
             Cv2.Min(threshShifted, new Scalar(255.0), threshShifted);
@@ -184,6 +180,7 @@ namespace ImgViewer.Models
 
         private static Mat SauvolaBinarize(Mat src, BinarizeParameters p)
         {
+
             //Debug.WriteLine($"clahe grid size {p.SauvolaClaheGridSize}");
             var binMat = BinarizeForHandwritten(src,
                                                       p.SauvolaUseClahe,
@@ -202,27 +199,18 @@ namespace ImgViewer.Models
         private static Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
                                              int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0, int pencilStrokeBoost = 0)
         {
-
-            //Mat gray = src;
-            //bool ownsGray = false;
-            //if (src.Type() != MatType.CV_8UC1)
-            //{
-            //    gray = new Mat();
-            //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-            //    ownsGray = true;
-            //}
-            //Mat pre = src;
-            //bool ownsPre = false;
+            Mat pre = src;
+            bool ownsPre = false;
             if (useClahe)
             {
                 var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
                 using var clahe = Cv2.CreateCLAHE(claheClip, claheGrid);
-                //pre = new Mat();
-                clahe.Apply(src, src);
-                //ownsPre = true;
+                pre = new Mat();
+                clahe.Apply(src, pre);
+                ownsPre = true;
             }
 
-            var bin = Sauvola(src, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
+            var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
 
             // optional morphological cleaning (open to remove small noise, close to fill holes)
             if (morphRadius > 0)
@@ -235,8 +223,7 @@ namespace ImgViewer.Models
                 cleaned.Dispose();
             }
 
-            //if (ownsPre) pre.Dispose();
-            //if (ownsGray) gray.Dispose();
+            if (ownsPre) pre.Dispose();
 
             return bin;
         }
@@ -249,7 +236,7 @@ namespace ImgViewer.Models
                 foreach (var prop in props)
                 {
                     var value = prop.GetValue(strct);
-                    System.Diagnostics.Debug.WriteLine($"{prop.Name}: {value}");
+                    Debug.WriteLine($"{prop.Name}: {value}");
                 }
             }
 
@@ -257,7 +244,6 @@ namespace ImgViewer.Models
             {
                 if (src == null) throw new ArgumentNullException(nameof(src));
                 if (src.Empty()) throw new InvalidOperationException("MatToGray: src is empty");
-
                 var gray = new Mat();
                 try
                 {
