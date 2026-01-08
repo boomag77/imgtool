@@ -744,7 +744,9 @@
                              Height="16"
                              Minimum="0"
                              Maximum="100"
-                             Value="{Binding Progress}" />
+                             Value="{Binding Progress}"
+                             Cursor="Hand"
+                             MouseLeftButtonUp="ProgressBar_MouseLeftButtonUp" />
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock HorizontalAlignment="Right" Text="{Binding TiffCompressionLabel}"/>

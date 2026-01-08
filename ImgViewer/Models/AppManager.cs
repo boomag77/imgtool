@@ -11,6 +11,7 @@ namespace ImgViewer.Models
     {
 
         private readonly IViewModel _mainViewModel;
+        private readonly BatchViewModel _batchViewModel = new();
         private readonly IFileProcessor _fileProcessor;
         private readonly IImageProcessor _imageProcessor;
         private readonly AppSettings _appSettings;
@@ -53,6 +54,30 @@ namespace ImgViewer.Models
             _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
 
 
+        }
+
+        public BatchViewModel BatchViewModel => _batchViewModel;
+
+        private void UpdateBatchViewModel(Action<BatchViewModel> update)
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                update(_batchViewModel);
+            }
+            else
+            {
+                dispatcher.InvokeAsync(() => update(_batchViewModel),
+                    System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
+        private static string BuildBatchDisplayName(string folderPath)
+        {
+            var folder = Path.GetFileName(folderPath);
+            var parent = Path.GetFileName(Path.GetDirectoryName(folderPath) ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(parent)) return folder;
+            return $"{parent}/{folder}";
         }
 
         //public DocBoundaryModel DocBoundaryModel => _docBoundaryModel;
@@ -170,6 +195,20 @@ namespace ImgViewer.Models
                 }, System.Windows.Threading.DispatcherPriority.Background);
 
             //_mainViewModel.Status = status;
+        }
+
+        private void UpdateProgress(int percent)
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                _mainViewModel.Progress = percent;
+            }
+            else
+            {
+                dispatcher.InvokeAsync(() => _mainViewModel.Progress = percent,
+                    System.Windows.Threading.DispatcherPriority.Background);
+            }
         }
 
         public void CancelImageProcessing()
@@ -447,6 +486,7 @@ namespace ImgViewer.Models
 
             _inRootFolderBatch = true;
             while (_rootBatchIssues.TryDequeue(out _)) { }
+            UpdateBatchViewModel(vm => vm.Clear());
 
             _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             var batchToken = _rootFolderCts.Token;
@@ -468,28 +508,28 @@ namespace ImgViewer.Models
 
             try
             {
+                var pendingFolders = new List<string>();
                 foreach (var folderPath in folderPaths)
                 {
                     if (batchToken.IsCancellationRequested) break;
                     try
                     {
                         visitedCount++;
-
+                
                         if (!TryHasAnyImageFast(folderPath, batchToken, out var issue))
                         {
-                            // если issue == null → просто нет изображений
+                            // ???? issue == null  ? ?????? ??? ???????????
                             _rootBatchIssues.Enqueue(issue ?? $"SKIP_NO_IMAGES: '{folderPath}'");
                             continue;
                         }
-
-                        await ProcessFolder(folderPath, pipeline, batchToken).ConfigureAwait(false);
-                        processedCount++;
+                
+                        pendingFolders.Add(folderPath);
                     }
                     catch (OperationCanceledException)
                     {
-#if DEBUG
+                #if DEBUG
                         Debug.WriteLine("Processing Root Folder was canceled.");
-#endif
+                #endif
                         break;
                     }
                     catch (Exception ex)
@@ -497,11 +537,39 @@ namespace ImgViewer.Models
                         _rootBatchIssues.Enqueue($"[ProcessFolder] {folderPath}: {ex.Message}");
                         if (!_inRootFolderBatch)
                             ReportError($"Error while processing sub-folder {folderPath} in root folder {rootFolderPath}.", ex, "Processing Error");
-
                     }
                 }
-
-
+                
+                UpdateBatchViewModel(vm =>
+                {
+                    foreach (var folderPath in pendingFolders)
+                    {
+                        vm.AddPending(folderPath, BuildBatchDisplayName(folderPath));
+                    }
+                });
+                
+                foreach (var folderPath in pendingFolders)
+                {
+                    if (batchToken.IsCancellationRequested) break;
+                    try
+                    {
+                        await ProcessFolder(folderPath, pipeline, batchToken).ConfigureAwait(false);
+                        processedCount++;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                #if DEBUG
+                        Debug.WriteLine("Processing Root Folder was canceled.");
+                #endif
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _rootBatchIssues.Enqueue($"[ProcessFolder] {folderPath}: {ex.Message}");
+                        if (!_inRootFolderBatch)
+                            ReportError($"Error while processing sub-folder {folderPath} in root folder {rootFolderPath}.", ex, "Processing Error");
+                    }
+                }
                 var duration = DateTime.Now - startTime;
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
@@ -589,7 +657,14 @@ namespace ImgViewer.Models
             if (pipeline == null) return;
 
             UpdateStatus($"Processing folder " + srcFolder);
-            _mainViewModel.Progress = 0;
+            UpdateProgress(0);
+            UpdateBatchViewModel(vm =>
+            {
+                vm.AddPending(srcFolder, BuildBatchDisplayName(srcFolder));
+                vm.SetInProgress(srcFolder);
+                vm.SetProgress(srcFolder, 0);
+            });
+            UpdateProgress(0);
 
 
             //var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
@@ -613,17 +688,13 @@ namespace ImgViewer.Models
                     {
                         workerPool.ProgressChanged += (processedCount, total) =>
                         {
+                            if (_poolCts?.IsCancellationRequested == true || batchToken.IsCancellationRequested)
+                            {
+                                return;
+                            }
                             int percent = total > 0 ? (int)Math.Round(processedCount * 100.0 / total) : 0;
-                            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-                            if (dispatcher == null || dispatcher.CheckAccess())
-                            {
-                                _mainViewModel.Progress = percent;
-                            }
-                            else
-                            {
-                                dispatcher.InvokeAsync(() => _mainViewModel.Progress = percent,
-                                    System.Windows.Threading.DispatcherPriority.Background);
-                            }
+                            UpdateProgress(percent);
+                            UpdateBatchViewModel(vm => vm.SetProgress(srcFolder, percent));
                         };
 
                         await workerPool.RunAsync().ConfigureAwait(false);
@@ -645,6 +716,11 @@ namespace ImgViewer.Models
             {
 
                 UpdateStatus("Standby");
+                UpdateBatchViewModel(vm => vm.Remove(srcFolder));
+                if (_poolCts?.IsCancellationRequested == true || batchToken.IsCancellationRequested)
+                {
+                    UpdateProgress(0);
+                }
 
 
                 try
@@ -691,6 +767,8 @@ namespace ImgViewer.Models
             try
             {
                 _rootFolderCts?.Cancel();
+                UpdateBatchViewModel(vm => vm.Clear());
+                UpdateProgress(0);
             }
             catch (Exception ex)
             {

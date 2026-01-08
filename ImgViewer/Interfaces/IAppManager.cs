@@ -19,6 +19,8 @@ namespace ImgViewer.Interfaces
 
         public bool IsSavePipelineToMd { get; set; }
 
+        public BatchViewModel BatchViewModel { get; }
+
         //public DocBoundaryModel? DocBoundaryModel { get; }
 
         public Task SetImageOnPreview(string imagePath);

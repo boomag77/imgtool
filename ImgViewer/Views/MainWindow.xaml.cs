@@ -72,6 +72,7 @@ namespace ImgViewer.Views
         private Point _magnifierNormalizedPos = new Point(0.5, 0.5);
 
         private DocumentationWindow? _documentationWindow;
+        private BatchProgressWindow? _batchProgressWindow;
 
         private double _eraseOffset;   // ???????? ?? ??????/??????? ????
         private bool _eraseModeActive;
@@ -225,7 +226,7 @@ namespace ImgViewer.Views
                     await Task.Delay(_liveDebounceDelay, cts.Token);
                     cts.Token.ThrowIfCancellationRequested();
 
-                    // ???? ? ???? ?????? ??? ???? ?????? — ????, ???? ??????????
+                    // ???? ? ???? ?????? ??? ???? ??????  ????, ???? ??????????
                     //while (_livePipelineRunning)
                     //{
                     //    await Task.Delay(50, cts.Token);
@@ -236,7 +237,7 @@ namespace ImgViewer.Views
                 }
                 catch (TaskCanceledException)
                 {
-                    // ??? ????????? — ???????? debounce
+                    // ??? ?????????  ???????? debounce
                 }
                 catch (Exception ex)
                 {
@@ -253,7 +254,7 @@ namespace ImgViewer.Views
             var pos = Mouse.GetPosition(PipelineListBox);
             double width = PipelineListBox.ActualWidth;
 
-            // "???? ????????" — ????? ???? ??????, ??? EraseOffset ?? ?????/?????? ???? ??????
+            // "???? ????????"  ????? ???? ??????, ??? EraseOffset ?? ?????/?????? ???? ??????
             return pos.X < -_eraseOffset || pos.X > width + _eraseOffset;
         }
 
@@ -484,7 +485,7 @@ namespace ImgViewer.Views
                                 int imgW = bmp.PixelWidth;
                                 int imgH = bmp.PixelHeight;
 
-                                // ???? ????????? — "??????? ?? ?????"
+                                // ???? ?????????  "??????? ?? ?????"
                                 int manualLeft = x;
                                 int manualTop = y;
                                 int manualRight = imgW - (x + w);
@@ -669,7 +670,7 @@ namespace ImgViewer.Views
                 return;
             }
 
-            // «?????» ??????? ??????? ???????????? ListBox
+            // ????? ??????? ??????? ???????????? ListBox
             var rawPos = e.GetPosition(PipelineListBox);
             double width = PipelineListBox.ActualWidth;
 
@@ -1104,6 +1105,23 @@ namespace ImgViewer.Views
             _documentationWindow?.ShowSection(sectionId);
         }
 
+        private void ProgressBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_batchProgressWindow == null || !_batchProgressWindow.IsLoaded)
+            {
+                _batchProgressWindow = new BatchProgressWindow();
+                _batchProgressWindow.Owner = this;
+                _batchProgressWindow.Closed += (_, __) => _batchProgressWindow = null;
+            }
+
+            _batchProgressWindow.DataContext = _manager.BatchViewModel;
+            _batchProgressWindow.Show();
+            if (_batchProgressWindow.WindowState == WindowState.Minimized)
+                _batchProgressWindow.WindowState = WindowState.Normal;
+            _batchProgressWindow.Activate();
+        }
+
+
         private async void LoadPipelinePreset_Click(object sender, RoutedEventArgs e)
         {
             var res = System.Windows.MessageBox.Show($"WARNING! All unsaved parameters will be lost! Are you sure?",
@@ -1176,7 +1194,7 @@ namespace ImgViewer.Views
             {
                 var fileName = dlg.FileName;
 
-                // ???? ???????????? ?? ?????? ?????????? — ??????? .igpreset
+                // ???? ???????????? ?? ?????? ??????????  ??????? .igpreset
                 if (!Path.HasExtension(fileName))
                     fileName += ".igpreset";
 
@@ -1253,7 +1271,7 @@ namespace ImgViewer.Views
             }
             catch (OperationCanceledException)
             {
-                // cancelled — ??????????
+                // cancelled  ??????????
             }
             catch (Exception ex)
             {
@@ -1282,7 +1300,7 @@ namespace ImgViewer.Views
             if (Pipeline == null) return;
             if (Pipeline.Operations.Count == 0)
             {
-                System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                System.Windows.MessageBox.Show("Pipeline is empty  choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1330,7 +1348,7 @@ namespace ImgViewer.Views
 
                 if (Pipeline.Operations.Count == 0)
                 {
-                    System.Windows.MessageBox.Show("Pipeline is empty — choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    System.Windows.MessageBox.Show("Pipeline is empty  choose at least one operation before running.", "Warning!", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
@@ -1754,7 +1772,7 @@ namespace ImgViewer.Views
                 }
             }
 
-            // ??? Max(MagnifierMinSize, max) — ?????? ????????
+            // ??? Max(MagnifierMinSize, max)  ?????? ????????
             return max;
         }
 
@@ -1777,7 +1795,7 @@ namespace ImgViewer.Views
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            // ESC — turn off both magnifiers
+            // ESC  turn off both magnifiers
             if (e.Key == Key.Escape)
             {
                 if (_magnifierEnabled || _originalMagnifierEnabled)
@@ -1790,7 +1808,7 @@ namespace ImgViewer.Views
                 }
             }
 
-            // M — on/off magnifier on PreviewImgBox (working image)
+            // M  on/off magnifier on PreviewImgBox (working image)
             if (e.Key == Key.M)
             {
                 if (_magnifierEnabled)
@@ -1801,7 +1819,7 @@ namespace ImgViewer.Views
                 e.Handled = true;
             }
 
-            // S — on/off synced magnifier on OrigImgBox (original Image)
+            // S  on/off synced magnifier on OrigImgBox (original Image)
             if (e.Key == Key.S)
             {
                 if (_originalMagnifierEnabled)
@@ -1830,7 +1848,7 @@ namespace ImgViewer.Views
         //            pos.Y / size.Height
         //        );
 
-        //        // ???? ???????? ???? ?? ????????? — ??????? ?? ? ?? ?? ????????????? ?????
+        //        // ???? ???????? ???? ?? ?????????  ??????? ?? ? ?? ?? ????????????? ?????
         //        if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
         //        {
         //            var sizeOrig = OrigViewbox.RenderSize;
@@ -2237,7 +2255,7 @@ namespace ImgViewer.Views
 
             EnsureSelectionAdorner();
 
-            // ???? ??? ???? selection — ????????, ?????? ?? ? ????
+            // ???? ??? ???? selection  ????????, ?????? ?? ? ????
             if (HasSelection)
             {
                 var mode = HitTestSelection(pos);
@@ -2362,7 +2380,7 @@ namespace ImgViewer.Views
 #endif
         }
 
-        // ??????? ??????, ????? ?????? — ???? ?? ??? ?????
+        // ??????? ??????, ????? ??????  ???? ?? ??? ?????
         private bool HasSelection =>
             !_selectedRect.IsEmpty &&
             _selectedRect.Width > 0 &&
@@ -2402,7 +2420,7 @@ namespace ImgViewer.Views
                 pos.X >= r.Left && pos.X <= r.Right)
                 return SelectionMode.ResizeBottom;
 
-            // ?????? — move
+            // ??????  move
             if (r.Contains(pos))
                 return SelectionMode.Moving;
 
