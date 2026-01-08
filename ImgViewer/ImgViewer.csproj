@@ -94,6 +94,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Compile Remove="ImgViewer.Tests\**\*.cs" />
+	  <None Remove="ImgViewer.Tests\**\*.*" />
+	  <Content Remove="ImgViewer.Tests\**\*.*" />
+	  <EmbeddedResource Remove="ImgViewer.Tests\**\*.*" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Compile Update="Models\Onnx\DocBoundaryModel.cs">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </Compile>
