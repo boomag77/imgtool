@@ -36,10 +36,21 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Active and pending batch tasks"
-                   FontWeight="SemiBold"
-                   Foreground="{StaticResource PrimaryTextBrush}"
-                   Margin="0,0,0,8" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Active and pending batch tasks"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource PrimaryTextBrush}"
+                       Margin="0,0,0,8" />
+            <Button Grid.Column="1"
+                    Content="Cancel all"
+                    Style="{StaticResource InlineButtonStyle}"
+                    Margin="10,0,0,8"
+                    Click="CancelAll_Click" />
+        </Grid>
 
         <ListBox Grid.Row="1"
                  ItemsSource="{Binding Tasks}"

@@ -141,7 +141,10 @@ namespace ImgViewer.Models
         public void CancelFolderProcessing(string folderPath)
         {
             if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                CancelBatchProcessing();
                 return;
+            }
 
             lock (_batchCancelLock)
             {

@@ -20,5 +20,10 @@ namespace ImgViewer.Views
                 CancelRequested?.Invoke(item.Id);
             }
         }
+
+        private void CancelAll_Click(object sender, RoutedEventArgs e)
+        {
+            CancelRequested?.Invoke(string.Empty);
+        }
     }
 }
