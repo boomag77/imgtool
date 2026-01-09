@@ -44,13 +44,14 @@ namespace ImgViewer.Models
             {
                 if (value == null || value.Empty()) return;
                 Mat old;
-                Mat previewSnap = null;
+                Mat? previewSnap = null;
                 lock (_imageLock)
                 {
                     old = _currentImage;
                     _currentImage = value;
                     if (_appManager != null)
-                        previewSnap = new Mat(value, new Rect(0, 0, value.Cols, value.Rows));
+                        //previewSnap = new Mat(value, new Rect(0, 0, value.Cols, value.Rows));
+                        previewSnap = value.Clone();
                 }
                 old?.Dispose();
                 if (_appManager == null) { previewSnap?.Dispose(); return; }
@@ -343,7 +344,11 @@ namespace ImgViewer.Models
 
         public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
         {
+
             using var img = WorkingImage; // clone for thread safety
+            if (img == null || img.Empty())
+                throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
+
             using var bin = new Mat();
             if (img.Type() != MatType.CV_8UC1)
             {
@@ -354,8 +359,7 @@ namespace ImgViewer.Models
                 // make stream from bin
 
             }
-            if (img == null || img.Empty())
-                throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
+           
             if (format == ImageFormat.Tiff)
             {
                 var paramsList = new List<int>();
@@ -2826,11 +2830,11 @@ namespace ImgViewer.Models
         //}
 
         // Safe Mat -> BitmapSource conversion (no use of .Depth or non-existent members)
-        private BitmapSource MatToBitmapSource(Mat matOrg)
+        private BitmapSource MatToBitmapSource(Mat mat)
         {
-            if (matOrg == null || matOrg.Empty()) return null!;
+            if (mat == null || mat.Empty()) return null!;
 
-            using var mat = matOrg.Clone();
+            //using var mat = matOrg.Clone();
 
             // Desired types: 8-bit single/three/four channels
             MatType desiredType;

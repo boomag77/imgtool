@@ -1,12 +1,14 @@
 ﻿using ImgViewer.Interfaces;
+using ImgViewer.Views;
 using OpenCvSharp;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows;
-using ImgViewer.Views;
 using System.Windows.Media;
-using System.Buffers;
 
 
 namespace ImgViewer.Models
@@ -21,6 +23,8 @@ namespace ImgViewer.Models
 
             
         }
+
+        private readonly Task<int> _countImagesTask;
 
         private bool _disposed;
 
@@ -47,7 +51,7 @@ namespace ImgViewer.Models
         private string _sourceFolderPath = string.Empty;
 
         private int _processedCount;
-        private int _totalCount;
+        private int _totalCount = 0;
         private (ProcessorCommand Command, Dictionary<string, object> Params)[] _plOperations;
         private readonly string? _plJson;
         private List<string> _opsLog = new List<string>();
@@ -63,6 +67,7 @@ namespace ImgViewer.Models
         private readonly Func<ExistingFilesChoice?>? _getExistingFilesChoice;
         private readonly Action<ExistingFilesChoice>? _setExistingFilesChoice;
         private readonly Action? _onBatchCanceled;
+
 
         private void ReportProgress(int processed)
         {
@@ -100,7 +105,8 @@ namespace ImgViewer.Models
             _sourceFolderPath = sourceFolderPath;
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
             string parentPath = Path.GetDirectoryName(_sourceFolderPath);
-            _totalCount = Task.Run(() => CountImages(sourceFolderPath), _token).Result;
+            _countImagesTask = CountImagesLowPriorityAsync(_sourceFolderPath, _token);
+            
 
             if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.SmartCrop))
             {
@@ -210,6 +216,65 @@ namespace ImgViewer.Models
                 _opsLog.Add($"- {op.Command}");
             }
         }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct MEMORYSTATUSEX
+        {
+            public uint dwLength;
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys;
+            public ulong ullAvailPhys;
+            public ulong ullTotalPageFile;
+            public ulong ullAvailPageFile;
+            public ulong ullTotalVirtual;
+            public ulong ullAvailVirtual;
+            public ulong ullAvailExtendedVirtual;
+        }
+
+        private long GetAvailableMemoryBytes()
+        {
+            var mem = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+            GlobalMemoryStatusEx(ref mem);
+            return (long)mem.ullAvailPhys;
+        }
+
+        private bool IsLowMemory(long minFreeBytes)
+        {
+            long avail = GetAvailableMemoryBytes();
+            return avail < minFreeBytes;
+        }
+
+        private Task<int> CountImagesLowPriorityAsync(string path, CancellationToken token)
+        {
+            var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var thread = new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                Thread.CurrentThread.Priority = ThreadPriority.Lowest;
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    int result = CountImages(path);
+                    tcs.TrySetResult(result);
+                }
+                catch (OperationCanceledException oce)
+                {
+                    tcs.TrySetCanceled(oce.CancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            });
+
+            thread.Start();
+            return tcs.Task;
+        }
+
 
         private int CountImages(string folder)
         {
@@ -638,8 +703,11 @@ namespace ImgViewer.Models
                 foreach (var file in _filesQueue.GetConsumingEnumerable(token))
                 {
                     token.ThrowIfCancellationRequested();
-                    int len;
-                    ArrayPool<byte> localPool;
+                    while (IsLowMemory(512L * 1024 * 1024))
+                    {
+                        token.ThrowIfCancellationRequested();
+                        Thread.Sleep(50);
+                    }
                     (ImageSource?, byte[]?) loaded;
                     try
                     {
@@ -833,6 +901,7 @@ namespace ImgViewer.Models
             var startTime = DateTime.Now;
             var processingTasks = new List<Task>();
             bool cancelled = false;
+            _totalCount = _countImagesTask.GetAwaiter().GetResult();
             try
             {
                 //if _plOperations contains SmartCrop _workersCount--
