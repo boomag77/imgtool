@@ -320,7 +320,7 @@ namespace ImgViewer.Models
             {
                 
 #if DEBUG
-                Debug.WriteLine($"Loaded {path} via WIC.");
+                //Debug.WriteLine($"Loaded {path} via WIC.");
 #endif
                 
                 return isBatch ? (null, wicBytes) : (wicBmp!, null);

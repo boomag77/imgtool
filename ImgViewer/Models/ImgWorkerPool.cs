@@ -5,9 +5,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Windows;
 using System.Windows.Media;
 
 
@@ -21,7 +19,7 @@ namespace ImgViewer.Models
             public TiffInfo? TiffInfo { get; set; }
             public string OutputFilePath { get; set; } = string.Empty;
 
-            
+
         }
 
         private readonly Task<int> _countImagesTask;
@@ -106,7 +104,7 @@ namespace ImgViewer.Models
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
             string parentPath = Path.GetDirectoryName(_sourceFolderPath);
             _countImagesTask = CountImagesLowPriorityAsync(_sourceFolderPath, _token);
-            
+
 
             if (pipeline.Operations.Any(op => op.InPipeline && op.Command == ProcessorCommand.SmartCrop))
             {
@@ -133,7 +131,7 @@ namespace ImgViewer.Models
                 //_outputFolder = Path.Combine(parentPath, sourceFolderName + "_" + pipeline.Name);
             }
 
-                Directory.CreateDirectory(_outputFolder);
+            Directory.CreateDirectory(_outputFolder);
             _batchErrorsPath = Path.Combine(_outputFolder, "_batch_errors.txt");
 
             _existingOutputNames = LoadExistingOutputNamesAndCleanupTmp(_outputFolder);
@@ -200,9 +198,9 @@ namespace ImgViewer.Models
             _filesQueue = new BlockingCollection<SourceImageFile>(
                 maxFilesQueue == 0 ? _workersCount : maxFilesQueue
             );
-            int saveQueueCapacity = Math.Max(1, _workersCount/2);
+            int saveQueueCapacity = Math.Max(1, _workersCount / 2);
             _saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
-            
+
             _maxSavingWorkers = 3;
             _tokenRegistration = _token.Register(() =>
             {
@@ -284,15 +282,18 @@ namespace ImgViewer.Models
                 var ext = Path.GetExtension(path);
                 if (ext.Length == 0) continue;
 
-                // сравниваем расширения
-                if (ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                    ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                    ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
-                    ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
-                    ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
-                {
+                if (ImageExts.Contains(ext))
                     count++;
-                }
+
+                // сравниваем расширения
+                //if (ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                //    ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                //    ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+                //    ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
+                //    ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
+                //{
+                //    count++;
+                //}
             }
             return count;
         }
@@ -446,7 +447,7 @@ namespace ImgViewer.Models
             }
         }
 
-        private static void SaveMatToFile(Mat mat, string encodeExt, string finalPath)
+        private void SaveMatToFile(Mat mat, string encodeExt, string finalPath)
         {
             if (mat == null)
                 throw new ArgumentNullException(nameof(mat));
@@ -463,7 +464,7 @@ namespace ImgViewer.Models
             File.Move(tempPath, finalPath);
         }
 
-        private static string NormalizeEncodeExtension(string originalExtension)
+        private string NormalizeEncodeExtension(string originalExtension)
         {
             if (string.IsNullOrWhiteSpace(originalExtension))
                 return ".tif";
@@ -476,15 +477,13 @@ namespace ImgViewer.Models
                 ".png" => ".png",
                 ".bmp" => ".bmp",
                 ".tif" => ".tif",
-                ".tiff" => ".tif",
-                ".webp" => ".webp",
-                _ => ".tif"
+                ".tiff" => ".tif"
             };
         }
 
-        private static readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            ".jpg", ".jpeg", ".png", ".tif", ".tiff"
+            ".jpg", ".jpeg", ".png", ".tif", ".tiff", "bmp"
         };
 
         public void Dispose()
@@ -871,7 +870,7 @@ namespace ImgViewer.Models
                 string logMsg = "Worker cancelled by token.";
                 Debug.WriteLine(logMsg);
 #endif
-                
+
             }
             catch (Exception ex)
             {
