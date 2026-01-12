@@ -239,28 +239,10 @@ namespace ImgViewer.Models
             }
         }
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        private struct MEMORYSTATUSEX
-        {
-            public uint dwLength;
-            public uint dwMemoryLoad;
-            public ulong ullTotalPhys;
-            public ulong ullAvailPhys;
-            public ulong ullTotalPageFile;
-            public ulong ullAvailPageFile;
-            public ulong ullTotalVirtual;
-            public ulong ullAvailVirtual;
-            public ulong ullAvailExtendedVirtual;
-        }
-
         private long GetAvailableMemoryBytes()
         {
-            var mem = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
-            GlobalMemoryStatusEx(ref mem);
-            return (long)mem.ullAvailPhys;
+            var info = GC.GetGCMemoryInfo();
+            return info.TotalAvailableMemoryBytes;
         }
 
         private bool IsLowMemory(long minFreeBytes)
