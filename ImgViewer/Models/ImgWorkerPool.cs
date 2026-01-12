@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
+using System.Threading.Channels;
 
 
 namespace ImgViewer.Models
@@ -28,8 +29,14 @@ namespace ImgViewer.Models
 
         private readonly ConcurrentBag<string> _fileErrors = new();
 
-        private readonly BlockingCollection<SourceImageFile> _filesQueue;
-        private readonly BlockingCollection<SaveTaskInfo> _saveQueue;
+        //private readonly BlockingCollection<SourceImageFile> _filesQueue;
+        //private readonly BlockingCollection<SaveTaskInfo> _saveQueue;
+
+        private readonly Channel<SourceImageFile> _filesCh;
+        private readonly Channel<SaveTaskInfo> _saveCh;
+
+
+
         private readonly CancellationTokenSource _cts;
         private readonly CancellationToken _token;
         private CancellationTokenRegistration _tokenRegistration;
@@ -195,17 +202,34 @@ namespace ImgViewer.Models
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount - 1) : maxWorkersCount;
 
-            _filesQueue = new BlockingCollection<SourceImageFile>(
-                maxFilesQueue == 0 ? _workersCount : maxFilesQueue
-            );
-            int saveQueueCapacity = Math.Max(1, _workersCount / 2);
-            _saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
+            //_filesQueue = new BlockingCollection<SourceImageFile>(
+            //    maxFilesQueue == 0 ? _workersCount : maxFilesQueue
+            //);
+            int filesCapacity = maxFilesQueue == 0 ? _workersCount : maxFilesQueue;
 
-            _maxSavingWorkers = 3;
+            _filesCh = Channel.CreateBounded<SourceImageFile>(new BoundedChannelOptions(filesCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait, // backpressure
+                SingleWriter = true,                    // EnqueueFiles один пишет
+                SingleReader = false                    // воркеров много
+            });
+            int saveQueueCapacity = Math.Max(1, _workersCount / 2);
+            _saveCh = Channel.CreateBounded<SaveTaskInfo>(new BoundedChannelOptions(saveQueueCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleWriter = false, // processing workers много пишут
+                SingleReader = false  // saving workers много читают
+            });
+            //_saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
+
+            _maxSavingWorkers = 2;
+
             _tokenRegistration = _token.Register(() =>
             {
-                try { _filesQueue.CompleteAdding(); } catch { }
-                try { _saveQueue.CompleteAdding(); } catch { }
+                //try { _filesQueue.CompleteAdding(); } catch { }
+                //try { _saveQueue.CompleteAdding(); } catch { }
+                try { _filesCh.Writer.TryComplete(); } catch { }
+                try { _saveCh.Writer.TryComplete(); } catch { }
             });
             _processedCount = 0;
             //_totalCount = sourceFolder.Files.Length;
@@ -493,8 +517,8 @@ namespace ImgViewer.Models
             _disposed = true;
 
             try { _tokenRegistration.Dispose(); } catch { }
-            try { _filesQueue?.Dispose(); } catch { }
-            try { _saveQueue?.Dispose(); } catch { }
+            //try { _filesQueue?.Dispose(); } catch { }
+            //try { _saveQueue?.Dispose(); } catch { }
         }
 
         IEnumerable<string> EnumerateImages(string folder)
@@ -559,7 +583,8 @@ namespace ImgViewer.Models
                         Path = file,
                         Layout = GetLayoutFromFileName(file)
                     };
-                    _filesQueue.Add(sourceFile, _token);
+                    //_filesQueue.Add(sourceFile, _token);
+                    await _filesCh.Writer.WriteAsync(sourceFile, _token);
 
 
                     //await Task.Yield();
@@ -577,7 +602,8 @@ namespace ImgViewer.Models
             }
             finally
             {
-                try { _filesQueue.CompleteAdding(); } catch { }
+                //try { _filesQueue.CompleteAdding(); } catch { }
+                try { _filesCh.Writer.TryComplete(); } catch { }
             }
 
         }
@@ -648,7 +674,7 @@ namespace ImgViewer.Models
             //var tiffInfo = new TiffInfo();
             try
             {
-                foreach (var saveTask in _saveQueue.GetConsumingEnumerable())
+                await foreach (var saveTask in _saveCh.Reader.ReadAllAsync(token))
                 {
                     token.ThrowIfCancellationRequested();
                     //using (var stream = saveTask.ImageStream)
@@ -691,7 +717,7 @@ namespace ImgViewer.Models
             }
         }
 
-        private void ImageProcessingWorker()
+        private async Task ImageProcessingWorkerAsync()
         {
             var token = _token;
 
@@ -699,7 +725,7 @@ namespace ImgViewer.Models
             using var fileProc = new FileProcessor(token);
             try
             {
-                foreach (var file in _filesQueue.GetConsumingEnumerable(token))
+                await foreach (var file in _filesCh.Reader.ReadAllAsync(token))
                 {
                     token.ThrowIfCancellationRequested();
                     while (IsLowMemory(512L * 1024 * 1024))
@@ -847,11 +873,13 @@ namespace ImgViewer.Models
                             TiffInfo = tiffInfo,
                             //DisposeStream = true
                         };
-                        _saveQueue.Add(saveTask, _token);
-                        if (_saveQueue.Count >= 2)
-                        {
-                            StartSavingWorkerIfNeeded();
-                        }
+                        //_saveQueue.Add(saveTask, _token);
+                        //if (_saveQueue.Count >= 2)
+                        //{
+                        //    StartSavingWorkerIfNeeded();
+                        //}
+                        await _saveCh.Writer.WriteAsync(saveTask, token);
+
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception exSave)
@@ -912,13 +940,17 @@ namespace ImgViewer.Models
                 {
                     _token.ThrowIfCancellationRequested();
                     if (_cts.IsCancellationRequested) throw new OperationCanceledException();
-                    processingTasks.Add(Task.Run(() => ImageProcessingWorker(), _token));
+                    processingTasks.Add(Task.Run(async () => await ImageProcessingWorkerAsync(), _token));
                 }
 
                 // in parallel enqueing que
                 var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
                 processingTasks.Add(enqueueTask);
-                StartSavingWorkerIfNeeded();
+                //StartSavingWorkerIfNeeded();
+                for (int i = 0; i < _maxSavingWorkers; i++)
+                {
+                    _savingTasks.Add(Task.Run(() => ImageSavingWorkerAsync(), _token));
+                }
                 await Task.WhenAll(processingTasks);
                 if (_token.IsCancellationRequested)
                 {
@@ -995,10 +1027,12 @@ namespace ImgViewer.Models
             }
             finally
             {
-                _saveQueue.CompleteAdding();
+                //_saveQueue.CompleteAdding();
+                //await Task.WhenAll(_savingTasks);
+                _saveCh.Writer.TryComplete();
                 await Task.WhenAll(_savingTasks);
+
                 try { _tokenRegistration.Dispose(); } catch { }
-                try { _filesQueue.Dispose(); } catch { }
 
             }
 

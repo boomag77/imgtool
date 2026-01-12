@@ -1328,11 +1328,14 @@ namespace ImgViewer.Views
             }
 
             string rootFolder = string.Empty;
-            var dlg = new System.Windows.Forms.FolderBrowserDialog();
-            dlg.SelectedPath = _manager.LastOpenedFolder;
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            var dlg = new Microsoft.Win32.OpenFolderDialog
             {
-                rootFolder = dlg.SelectedPath;
+                InitialDirectory = _manager.LastOpenedFolder,
+                Multiselect = false
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                rootFolder = dlg.FolderName;
             }
             if (rootFolder == string.Empty) return;
             _manager.LastOpenedFolder = rootFolder;
