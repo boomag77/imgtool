@@ -107,5 +107,81 @@ namespace ImgViewer.Tests
             using var result255 = Binarizer.Binarize(gray2, BinarizeMethod.Threshold, p);
             Assert.AreEqual(MatType.CV_8UC1, result255.Type());
         }
+
+        [TestMethod]
+        public void Binarize_Majority_Throws_NotImplemented()
+        {
+            using var gray = new Mat(5, 5, MatType.CV_8UC1, Scalar.All(120));
+            Assert.ThrowsException<NotImplementedException>(() =>
+                Binarizer.Binarize(gray, BinarizeMethod.Majority, BinarizeParameters.Default));
+        }
+
+        [TestMethod]
+        public void Binarize_InvalidChannelCount_Throws()
+        {
+            using var twoChannel = new Mat(5, 5, MatType.CV_8UC2, Scalar.All(128));
+            Assert.ThrowsException<ArgumentException>(() =>
+                Binarizer.Binarize(twoChannel, BinarizeMethod.Threshold, BinarizeParameters.Default));
+        }
+
+        [TestMethod]
+        public void Binarize_Adaptive_UsesGaussian()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Adaptive;
+            p.UseGaussian = true;
+            using var gray = new Mat(9, 9, MatType.CV_8UC1, Scalar.All(127));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Adaptive, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Adaptive_UsesMorphology()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Adaptive;
+            p.UseMorphology = true;
+            p.MorphKernelBinarize = 3;
+            p.MorphIterationsBinarize = 1;
+            using var gray = new Mat(9, 9, MatType.CV_8UC1, Scalar.All(127));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Adaptive, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Adaptive_BlockSizeAuto()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Adaptive;
+            p.BlockSize = null;
+            using var gray = new Mat(60, 60, MatType.CV_8UC1, Scalar.All(120));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Adaptive, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Sauvola_WithClaheAndMorphology()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Sauvola;
+            p.SauvolaUseClahe = true;
+            p.SauvolaMorphRadius = 1;
+            p.SauvolaWindowSize = 15;
+            using var gray = new Mat(25, 25, MatType.CV_8UC1, Scalar.All(140));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Sauvola, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Sauvola_NoClahe_NoMorphology()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Sauvola;
+            p.SauvolaUseClahe = false;
+            p.SauvolaMorphRadius = 0;
+            using var gray = new Mat(25, 25, MatType.CV_8UC1, Scalar.All(140));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Sauvola, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
     }
 }
