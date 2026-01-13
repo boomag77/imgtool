@@ -3,11 +3,11 @@ using ImgViewer.Views;
 using OpenCvSharp;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Windows.Media;
 using System.Threading.Channels;
+using System.Windows.Media;
 
 
 namespace ImgViewer.Models
@@ -45,7 +45,7 @@ namespace ImgViewer.Models
         private int _workersCount;
 
         private readonly int _maxSavingWorkers;
-        private int _currentSavingWorkers = 0;
+        //private int _currentSavingWorkers = 0;
 
         private readonly object _savingLock = new();
         private readonly List<Task> _savingTasks = new();
@@ -61,7 +61,7 @@ namespace ImgViewer.Models
         private readonly string? _plJson;
         private List<string> _opsLog = new List<string>();
 
-        public event Action<string>? ErrorOccured;
+        //public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
 
         private string _batchErrorsPath = string.Empty;
@@ -470,6 +470,8 @@ namespace ImgViewer.Models
             File.Move(tempPath, finalPath);
         }
 
+
+
         private string NormalizeEncodeExtension(string originalExtension)
         {
             if (string.IsNullOrWhiteSpace(originalExtension))
@@ -487,10 +489,14 @@ namespace ImgViewer.Models
             };
         }
 
-        private readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ".jpg", ".jpeg", ".png", ".tif", ".tiff", "bmp"
-        };
+        //private readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        //{
+        //    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"
+        //};
+
+        private readonly FrozenSet<string> ImageExts =
+            new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" }
+            .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
         public void Dispose()
         {

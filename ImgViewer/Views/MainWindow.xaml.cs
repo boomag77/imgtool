@@ -1,6 +1,7 @@
 using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using ImgViewer.Models.Onnx;
+using System.Collections.Frozen;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
@@ -12,7 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-
+using System.Xml.Serialization;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using DataObject = System.Windows.DataObject;
@@ -83,6 +84,8 @@ namespace ImgViewer.Views
         private readonly object _liveLock = new();
         private readonly HashSet<PipelineOperation> _liveRunning = new();
 
+        private CurrentFolderIndex _currentFolderIndex;
+        private CancellationTokenSource _folderIndexCts;
 
 
         // Rect selection
@@ -150,6 +153,7 @@ namespace ImgViewer.Views
         {
             InitializeComponent();
 
+
         #if DEBUG
             try
             {
@@ -178,6 +182,9 @@ namespace ImgViewer.Views
             _liveDebounceDelay = _manager.ParametersChangedDebounceDelay;
 
             DataContext = _viewModel;
+
+            _currentFolderIndex = new CurrentFolderIndex(this);
+            _folderIndexCts = new CancellationTokenSource();
 
 
             //_explorer = new FileProcessor(_cts.Token);
@@ -1013,6 +1020,8 @@ namespace ImgViewer.Views
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             _manager.Shutdown();
+            _folderIndexCts?.Cancel();
+            _folderIndexCts?.Dispose();
             base.OnClosing(e);
         }
 
@@ -1047,11 +1056,25 @@ namespace ImgViewer.Views
                     //await SetImgBoxSourceAsync(dlg.FileName);
                     //await _mvm.LoadImagAsync(dlg.FileName);
                     var fileName = dlg.FileName;
+                    var directoryName = Path.GetDirectoryName(fileName);
+
+                    if (_currentFolderIndex.CachedDirectory != directoryName)
+                    {
+                        _folderIndexCts.Cancel();
+                        _folderIndexCts.Dispose();
+                        _folderIndexCts = new CancellationTokenSource();
+                        await _currentFolderIndex.CreateAsync(directoryName!, fileName, _folderIndexCts.Token);
+                        if (_folderIndexCts.Token.IsCancellationRequested)
+                            return;
+                    }
+                    if (_currentFolderIndex.TryGetFileIndexForPath(fileName, out int index))
+                        _currentFolderIndex.CachedFileIndex = index;
+
                     _liveDebounceCts?.Cancel();
                     _liveDebounceCts = null;
                     await _manager.SetImageOnPreview(fileName);
                     _viewModel.CurrentImagePath = fileName;
-                    _manager.LastOpenedFolder = System.IO.Path.GetDirectoryName(fileName);
+                    _manager.LastOpenedFolder = directoryName!;
 
                     await RunLiveOperationsForNewImageAsync();
                 }
@@ -1256,39 +1279,192 @@ namespace ImgViewer.Views
             await OpenSiblingFileAsync(false);
         }
 
+        //private readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        //{
+        //    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"
+        //};
+
+        private readonly FrozenSet<string> ImageExts =
+            new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" }
+            .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class CurrentFolderIndex
+        {
+            private readonly MainWindow _owner;
+            private int _cachedFileIndex = -1;
+            private string _cachedDirectory = string.Empty;
+            private  Dictionary<int, string> _folderIndex;
+            private  Dictionary<string, int> _folderIndexByPath;
+
+            private readonly object _lock = new object();
+
+            //private readonly FrozenSet<string> ImageExts =
+            //    new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" }
+            //    .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+            public int CachedFileIndex
+            {
+                get
+                {
+                    lock (_lock)
+                        return _cachedFileIndex;
+                }
+                set
+                {
+                    Debug.WriteLine("Setting new cached index");
+                    lock (_lock)
+                        _cachedFileIndex = value;
+                }
+
+            }
+
+            public int LastIndex
+            {
+                get
+                {
+                    lock (_lock)
+                        return _folderIndex.Count - 1;
+                }
+            }
+        
+               
+
+            public string CachedDirectory
+            {
+                get
+                {
+                    lock(_lock)
+                       return _cachedDirectory;
+                }
+            }
+               
+
+            public CurrentFolderIndex(MainWindow owner)
+            {
+                _owner = owner;
+                _folderIndex = new Dictionary<int, string>();
+                _folderIndexByPath = new Dictionary<string, int>();
+            }
+
+            public bool TryGetFilePathForIndex(int index, out string filePath)
+            {
+                lock(_lock)
+                {
+                    if (!_folderIndex.TryGetValue(index, out string? value))
+                    {
+                        filePath = string.Empty;
+                        return false;
+                    }
+                    filePath = value;
+                    _cachedFileIndex = index;
+                    return true;
+                }
+                
+            }
+
+            public bool TryGetFileIndexForPath(string filePath, out int idx)
+            {
+                lock(_lock)
+                {
+                    if (!_folderIndexByPath.TryGetValue(filePath, out int fileIndex))
+                    {
+                        idx = -1;
+                        return false;
+                    }
+
+                    idx = fileIndex;
+                    return true;
+                }
+                
+            }
+
+            private void Clear()
+            {
+                lock(_lock)
+                {
+                    _folderIndex.Clear();
+                    _folderIndexByPath.Clear();
+                    _cachedFileIndex = -1;
+                    _cachedDirectory = string.Empty;
+                }
+                
+
+            }
+
+
+            public async Task CreateAsync(string folderPath, string filePath, CancellationToken token)
+            {
+                Debug.WriteLine($"Creating Folder index");
+                lock(_lock)
+                {
+                    Clear();
+                }
+                
+                
+
+                await Task.Run(() =>
+                {
+                    var files = Directory.GetFiles(folderPath)
+                                     .Where(f => _owner.ImageExts.Contains(System.IO.Path.GetExtension(f)))
+                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                                     .ToArray();
+                    var tmpFolderIndex = new Dictionary<int, string>();
+                    var tmpFolderIndexByPath = new Dictionary<string, int>();
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        if (token.IsCancellationRequested) return;
+                        tmpFolderIndex[i] = files[i];
+                        tmpFolderIndexByPath[files[i]] = i;
+                    }
+                    if (token.IsCancellationRequested) return;
+                    lock(_lock)
+                    {
+                        _folderIndex = tmpFolderIndex;
+                        _folderIndexByPath = tmpFolderIndexByPath;
+                        _cachedDirectory = folderPath;
+                        _cachedFileIndex = _folderIndexByPath.TryGetValue(filePath, out var idx) ? idx : -1;
+                    }
+                    
+                }, token);
+                
+            }
+
+        }
+
         private async Task OpenSiblingFileAsync(bool next)
         {
-            string[] _imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
+            //string[] _imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
             try
             {
                 // ???????? ?????
-                var folder = _manager.LastOpenedFolder;
+                var folder = _currentFolderIndex.CachedDirectory;
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
                     System.Windows.MessageBox.Show("Folder unknown or doesn't exist. Open a file first.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
+                //var files = Directory.GetFiles(folder)
+                //                     .Where(f => ImageExts.Contains(System.IO.Path.GetExtension(f)))
+                //                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                //                     .ToArray();
 
-                // ??????? ????? ? ??????? ????????????
-                var files = Directory.GetFiles(folder)
-                                     .Where(f => _imageExtensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
-                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                                     .ToArray();
-
-                int i = Array.IndexOf(files, _viewModel.CurrentImagePath);
+                //int i = Array.IndexOf(files, _viewModel.CurrentImagePath);
+                int i = _currentFolderIndex.CachedFileIndex;
                 if (i == -1)
                     return;
                 int newIdx = next ? i + 1 : i - 1;
-                if (newIdx < 0 || newIdx >= files.Length) return;
+                if (newIdx < 0 || newIdx > _currentFolderIndex.LastIndex) return;
 
-                var target = files[newIdx];
+                if (!_currentFolderIndex.TryGetFilePathForIndex(newIdx, out var target))
+                    return;
 
                 _manager.CancelImageProcessing();
                 _liveDebounceCts?.Cancel();
+                
                 _liveDebounceCts = null;
                 await _manager.SetImageOnPreview(target);
                 _viewModel.CurrentImagePath = target;
-                _manager.LastOpenedFolder = folder;
+                //_manager.LastOpenedFolder = folder;
 
                 await RunLiveOperationsForNewImageAsync();
             }
