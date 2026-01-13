@@ -1,12 +1,8 @@
 ﻿using ImgViewer.Models;
 using OpenCvSharp;
-using System.Collections.Generic;
-using System.Linq;
-using Size = OpenCvSharp.Size;
-using Point = OpenCvSharp.Point;
-using Point2f = OpenCvSharp.Point2f;
 using System.Diagnostics;
-using ImageMagick;
+using Point = OpenCvSharp.Point;
+using Size = OpenCvSharp.Size;
 
 public static class PunchHoleRemover
 {
@@ -301,7 +297,7 @@ public static class PunchHoleRemover
         //Mat kernelDil = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(7, 7));
         //Cv2.Dilate(holesMask, holesMask, kernelDil, iterations: 2);
 
-        
+
 
         // optionally blur mask to feather edges (inpaint expects 8U mask; we threshold after blur)
         Mat holesMaskF = new Mat();
@@ -320,7 +316,7 @@ public static class PunchHoleRemover
         Cv2.Inpaint(srcColor, holesMaskF, dst, inpaintRadius, InpaintMethod.NS);
         //----- OLD INPAINT END
 
-        
+
 
         // cleanup
         gray.Dispose();
