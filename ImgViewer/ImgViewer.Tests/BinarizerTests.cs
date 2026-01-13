@@ -125,6 +125,14 @@ namespace ImgViewer.Tests
         }
 
         [TestMethod]
+        public void Binarize_4Channel_Input_ConvertsToGray()
+        {
+            using var bgra = new Mat(10, 10, MatType.CV_8UC4, Scalar.All(200));
+            using var result = Binarizer.Binarize(bgra, BinarizeMethod.Threshold, BinarizeParameters.Default);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
         public void Binarize_Adaptive_UsesGaussian()
         {
             var p = BinarizeParameters.Default;
@@ -160,6 +168,28 @@ namespace ImgViewer.Tests
         }
 
         [TestMethod]
+        public void Binarize_Adaptive_BlockSizeEven_Adjusts()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Adaptive;
+            p.BlockSize = 4; // even, should become odd >= 3
+            using var gray = new Mat(15, 15, MatType.CV_8UC1, Scalar.All(110));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Adaptive, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Adaptive_BlockSizeZero_Adjusts()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Adaptive;
+            p.BlockSize = 0;
+            using var gray = new Mat(15, 15, MatType.CV_8UC1, Scalar.All(110));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Adaptive, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
         public void Binarize_Sauvola_WithClaheAndMorphology()
         {
             var p = BinarizeParameters.Default;
@@ -179,6 +209,28 @@ namespace ImgViewer.Tests
             p.Method = BinarizeMethod.Sauvola;
             p.SauvolaUseClahe = false;
             p.SauvolaMorphRadius = 0;
+            using var gray = new Mat(25, 25, MatType.CV_8UC1, Scalar.All(140));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Sauvola, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Sauvola_WindowEven_Adjusts()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Sauvola;
+            p.SauvolaWindowSize = 10; // even, should adjust
+            using var gray = new Mat(25, 25, MatType.CV_8UC1, Scalar.All(140));
+            using var result = Binarizer.Binarize(gray, BinarizeMethod.Sauvola, p);
+            Assert.AreEqual(MatType.CV_8UC1, result.Type());
+        }
+
+        [TestMethod]
+        public void Binarize_Sauvola_PencilStrokeBoost_Works()
+        {
+            var p = BinarizeParameters.Default;
+            p.Method = BinarizeMethod.Sauvola;
+            p.PencilStrokeBoost = 10;
             using var gray = new Mat(25, 25, MatType.CV_8UC1, Scalar.All(140));
             using var result = Binarizer.Binarize(gray, BinarizeMethod.Sauvola, p);
             Assert.AreEqual(MatType.CV_8UC1, result.Type());
