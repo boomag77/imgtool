@@ -381,7 +381,7 @@ namespace ImgViewer.Models
             try
             {
 
-                var (bmpImage, bytes) = await Task.Run(() => _fileProcessor.LoadImageSource(imagePath, isBatch: false));
+                var (bmpImage, _) = await Task.Run(() => _fileProcessor.LoadImageSource(imagePath, isBatch: false));
                 if (bmpImage is BitmapSource bmpSource && !bmpSource.IsFrozen)
                     bmpSource.Freeze();
 

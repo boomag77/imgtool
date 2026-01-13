@@ -165,9 +165,15 @@ namespace ImgViewer.Models
                 src = ApplyDecodeWidth(src, decodePixelWidth);
 
                 // 3) Приводим к удобному формату для WPF (и чтобы PNG alpha не потерять)
-                src = EnsureBgra32(src);
+                //src = EnsureBgra32(src);
 
-                src.Freeze();
+                // If src BGRa32 or Bgr24, we can keep it as is.
+                if (src.Format != PixelFormats.Bgr24 && src.Format != PixelFormats.Bgra32)
+                {
+                    src = EnsureBgr24(src);
+                }
+
+                if (!src.IsFrozen) src.Freeze();
                 bmp = src;
 
                 // Если тебе реально нужен byte[] (как сейчас): оставим BMP-энкодинг для совместимости
@@ -272,6 +278,17 @@ namespace ImgViewer.Models
             conv.Freeze();
             return conv;
         }
+
+        private BitmapSource EnsureBgr24(BitmapSource src)
+        {
+            if (src.Format == PixelFormats.Bgr24)
+                return src;
+
+            var conv = new FormatConvertedBitmap(src, PixelFormats.Bgr24, null, 0);
+            conv.Freeze();
+            return conv;
+        }
+
 
         private byte[] EncodeToBmpBytes(BitmapSource src)
         {
