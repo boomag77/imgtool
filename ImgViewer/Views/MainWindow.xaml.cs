@@ -1404,17 +1404,18 @@ namespace ImgViewer.Views
 
                 await Task.Run(() =>
                 {
-                    var files = Directory.GetFiles(folderPath)
+                    var files = Directory.EnumerateFiles(folderPath)
                                      .Where(f => _owner.ImageExts.Contains(System.IO.Path.GetExtension(f)))
-                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                                     .ToArray();
+                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase);
                     var tmpFolderIndex = new Dictionary<int, string>();
                     var tmpFolderIndexByPath = new Dictionary<string, int>();
-                    for (int i = 0; i < files.Length; i++)
+                    int i = 0;
+                    foreach (var file in files)
                     {
                         if (token.IsCancellationRequested) return;
-                        tmpFolderIndex[i] = files[i];
-                        tmpFolderIndexByPath[files[i]] = i;
+                        tmpFolderIndex[i] = file;
+                        tmpFolderIndexByPath[file] = i;
+                        i++;
                     }
                     if (token.IsCancellationRequested) return;
                     lock(_lock)
