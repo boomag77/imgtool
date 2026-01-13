@@ -386,10 +386,15 @@ namespace ImgViewer.Models
                     bmpSource.Freeze();
 
                 _mainViewModel.CurrentImagePath = imagePath;
-                await SetBmpImageAsOriginal(bmpImage);
-                await SetBmpImageOnPreview(bmpImage);
+                var tasks = new List<Task>();
+                tasks.Add(Task.Run(() => SetBmpImageAsOriginal(bmpImage)));
+                tasks.Add(Task.Run(() => SetImageForProcessing(bmpImage)));
+                //tasks.Add(Task.Run(() => SetBmpImageOnPreview(bmpImage)));
+                await Task.WhenAll(tasks);
+                //await SetBmpImageAsOriginal(bmpImage);
+                //await SetBmpImageOnPreview(bmpImage);
                 ClearSplitPreviewImages();
-                await SetImageForProcessing(bmpImage);
+                //await SetImageForProcessing(bmpImage);
             }
             catch (OperationCanceledException)
             {
