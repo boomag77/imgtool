@@ -193,15 +193,25 @@ namespace ImgViewer.Models
                 return g;
             }
 
-            // If BGRA -> BGR
-            using var bgr = (src.Channels() == 4)
-                ? src.CvtColor(ColorConversionCodes.BGRA2BGR)
-                : src;
+            // If BGRA -> BGR, dispose only the temporary Mat we create.
+            Mat? bgr = null;
+            bool disposeBgr = false;
+            if (src.Channels() == 4)
+            {
+                bgr = src.CvtColor(ColorConversionCodes.BGRA2BGR);
+                disposeBgr = true;
+            }
+            else
+            {
+                bgr = src;
+            }
 
             if (!useLabL)
             {
                 var gray = new Mat();
                 Cv2.CvtColor(bgr, gray, ColorConversionCodes.BGR2GRAY);
+                if (disposeBgr)
+                    bgr.Dispose();
                 return gray;
             }
 
@@ -218,6 +228,8 @@ namespace ImgViewer.Models
             finally
             {
                 foreach (var m in ch) m.Dispose();
+                if (disposeBgr)
+                    bgr.Dispose();
             }
         }
 
@@ -426,7 +438,7 @@ namespace ImgViewer.Models
                 if (y > 255) y = 255;
                 lut[i] = (byte)y;
             }
-
+            token.ThrowIfCancellationRequested();
             using var lutMat = new Mat(1, 256, MatType.CV_8UC1);
             for (int i = 0; i < 256; i++)
                 lutMat.Set(0, i, lut[i]);
