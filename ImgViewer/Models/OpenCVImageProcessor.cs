@@ -1876,6 +1876,8 @@ namespace ImgViewer.Models
             return src.Clone();
         }
 
+        
+
         private bool TryApplyEnhanceCommand(Mat src, CancellationToken token, Dictionary<string, object> parameters, out Mat? result)
         {
             try
@@ -3167,51 +3169,6 @@ namespace ImgViewer.Models
 
             return gray;
         }
-
-        //private Mat BinarizeAdaptive(Mat src, BinarizeParameters p, bool invert = false)
-        //{
-        //    if (src == null || src.Empty()) return null;
-
-        //    // Debug all args
-        //    //DumpStruct(p);
-
-        //    using var gray = MatToGray(src);
-
-        //    int bs;
-        //    if (p.BlockSize.HasValue && p.BlockSize > 0)
-        //    {
-        //        bs = p.BlockSize.Value;
-        //    }
-        //    else
-        //    {
-        //        // heuristic: блок ~min(width, height) / 30, clamp to[3..201]
-        //        int baseBs = Math.Max(3, Math.Min(201, Math.Min(gray.Cols, gray.Rows) / 30));
-        //        if ((baseBs & 1) == 0) baseBs++; // сделать нечётным
-        //        bs = baseBs;
-        //    }
-        //    if (bs < 3) bs = 3;
-        //    if ((bs & 1) == 0) bs++; // сделать нечётным
-
-        //    using var blur = new Mat();
-        //    Cv2.GaussianBlur(gray, blur, new OpenCvSharp.Size(1, 1), 0);
-
-        //    using var bin = new Mat();
-        //    var adaptiveType = p.UseGaussian ? AdaptiveThresholdTypes.GaussianC : AdaptiveThresholdTypes.MeanC;
-        //    var threshType = invert ? ThresholdTypes.BinaryInv : ThresholdTypes.Binary;
-        //    Cv2.AdaptiveThreshold(blur, bin, 255, adaptiveType, threshType, bs, p.MeanC);
-
-        //    if (p.UseMorphology)
-        //    {
-        //        using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(p.MorphKernelBinarize, p.MorphKernelBinarize));
-        //        Cv2.MorphologyEx(bin, bin, MorphTypes.Open, kernel, iterations: p.MorphIterationsBinarize);
-        //    }
-
-        //    using var color = new Mat();
-        //    Cv2.CvtColor(bin, color, ColorConversionCodes.GRAY2BGR);
-
-        //    return color.Clone();
-
-        //}
 
         private Mat MajorityVotingBinarize(Mat srcColor, int baseThreshold = -1, int[] deltas = null)
         {
