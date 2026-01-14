@@ -360,7 +360,7 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma"}, 0),
+                            new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma", "Color Adjust", "Brightness & Contrast"}, 0),
                             new PipeLineParameter("CLAHE Clip Limit", "claheClipLimit", 4.0, 0.5, 12.0, 0.1),
                             new PipeLineParameter("CLAHE Grid Size", "claheGridSize", 8, 2, 64, 1),
                             new PipeLineParameter("Retinex Output Mode", "retinexOutputMode", new [] { "LogHighpass", "ReconstructExp" }, 0),
@@ -377,7 +377,14 @@ public class Pipeline
                             new PipeLineParameter("Levels Black %", "levelsBlackPercent", 1.0, 0.0, 20.0, 0.1),
                             new PipeLineParameter("Levels White %", "levelsWhitePercent", 95.0, 50.0, 100.0, 0.1),
                             new PipeLineParameter("Levels Gamma", "levelsGamma", 0.85, 0.1, 3.0, 0.05),
-                            new PipeLineParameter("Levels Target White", "levelsTargetWhite", 255, 128, 255, 1)
+                            new PipeLineParameter("Levels Target White", "levelsTargetWhite", 255, 128, 255, 1),
+                            new PipeLineParameter("Red", "colorRed", 0, -100, 100, 1),
+                            new PipeLineParameter("Green", "colorGreen", 0, -100, 100, 1),
+                            new PipeLineParameter("Blue", "colorBlue", 0, -100, 100, 1),
+                            new PipeLineParameter("Hue", "colorHue", 0, -180, 180, 1),
+                            new PipeLineParameter("Saturation", "colorSaturation", 0, -100, 100, 1),
+                            new PipeLineParameter("Brightness", "brightness", 0, -100, 100, 1),
+                            new PipeLineParameter("Contrast", "contrast", 0, -100, 100, 1)
                         },
                         op => ExecuteManagerCommand(ProcessorCommand.Enhance, op.CreateParameterDictionary()));
                 }

@@ -1886,10 +1886,14 @@ namespace ImgViewer.Models
                 if (parameters.TryGetValue("enhanceMethod", out var methodObj))
                     method = methodObj?.ToString();
 
-                string methodName = method?.Trim() ?? string.Empty;
-                bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
-                bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
-                                methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
+                  string methodName = method?.Trim() ?? string.Empty;
+                  bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
+                  bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
+                                  methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
+                  bool isColorAdjust = methodName.Equals("Color Adjust", StringComparison.OrdinalIgnoreCase);
+                  bool isBrightnessContrast = methodName.Equals("Brightness & Contrast", StringComparison.OrdinalIgnoreCase) ||
+                                              methodName.Equals("Brightness/Contrast", StringComparison.OrdinalIgnoreCase) ||
+                                              methodName.Equals("Brightness and Contrast", StringComparison.OrdinalIgnoreCase);
 
                 if (isRetinex)
                 {
@@ -1972,11 +1976,11 @@ namespace ImgViewer.Models
                     return true;
                 }
 
-                if (isLevels)
-                {
-                    double blackPct = 1.0;
-                    double whitePct = 95.0;
-                    double levelsGamma = 0.85;
+                  if (isLevels)
+                  {
+                      double blackPct = 1.0;
+                      double whitePct = 95.0;
+                      double levelsGamma = 0.85;
                     double targetWhite = 255.0;
 
                     foreach (var kv in parameters)
@@ -1998,12 +2002,77 @@ namespace ImgViewer.Models
                         }
                     }
 
-                    result = ApplyLevelsAndGamma(src, token, blackPct, whitePct, levelsGamma, targetWhite);
-                    return true;
-                }
+                      result = ApplyLevelsAndGamma(src, token, blackPct, whitePct, levelsGamma, targetWhite);
+                      return true;
+                  }
 
-                double claheClipLimit = 4.0;
-                int claheGridSize = 8;
+                  if (isColorAdjust)
+                  {
+                      double red = 0;
+                      double green = 0;
+                      double blue = 0;
+                      double hue = 0;
+                      double saturation = 0;
+
+                      foreach (var kv in parameters)
+                      {
+                          switch (kv.Key)
+                          {
+                              case "colorRed":
+                                  red = SafeDouble(kv.Value, red);
+                                  break;
+                              case "colorGreen":
+                                  green = SafeDouble(kv.Value, green);
+                                  break;
+                              case "colorBlue":
+                                  blue = SafeDouble(kv.Value, blue);
+                                  break;
+                              case "colorHue":
+                                  hue = SafeDouble(kv.Value, hue);
+                                  break;
+                              case "colorSaturation":
+                                  saturation = SafeDouble(kv.Value, saturation);
+                                  break;
+                          }
+                      }
+
+                      red = Math.Max(-100.0, Math.Min(100.0, red));
+                      green = Math.Max(-100.0, Math.Min(100.0, green));
+                      blue = Math.Max(-100.0, Math.Min(100.0, blue));
+                      hue = Math.Max(-180.0, Math.Min(180.0, hue));
+                      saturation = Math.Max(-100.0, Math.Min(100.0, saturation));
+
+                      result = Enhancer.AdjustColor(token, src, red, green, blue, hue, saturation);
+                      return true;
+                  }
+
+                  if (isBrightnessContrast)
+                  {
+                      double brightness = 0;
+                      double contrast = 0;
+
+                      foreach (var kv in parameters)
+                      {
+                          switch (kv.Key)
+                          {
+                              case "brightness":
+                                  brightness = SafeDouble(kv.Value, brightness);
+                                  break;
+                              case "contrast":
+                                  contrast = SafeDouble(kv.Value, contrast);
+                                  break;
+                          }
+                      }
+
+                      brightness = Math.Max(-100.0, Math.Min(100.0, brightness));
+                      contrast = Math.Max(-100.0, Math.Min(100.0, contrast));
+
+                      result = Enhancer.AdjustBrightnessContrast(token, src, brightness, contrast);
+                      return true;
+                  }
+
+                  double claheClipLimit = 4.0;
+                  int claheGridSize = 8;
 
                 if (parameters.TryGetValue("claheClipLimit", out var clipObj))
                     claheClipLimit = SafeDouble(clipObj, claheClipLimit);

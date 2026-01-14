@@ -725,6 +725,17 @@ namespace ImgViewer.Models
                     case "levelsTargetWhite":
                         parameter.IsVisible = mode == EnhanceMode.Levels;
                         break;
+                    case "colorRed":
+                    case "colorGreen":
+                    case "colorBlue":
+                    case "colorHue":
+                    case "colorSaturation":
+                        parameter.IsVisible = mode == EnhanceMode.ColorAdjust;
+                        break;
+                    case "brightness":
+                    case "contrast":
+                        parameter.IsVisible = mode == EnhanceMode.BrightnessContrast;
+                        break;
                     default:
                         break;
                 }
@@ -760,6 +771,8 @@ namespace ImgViewer.Models
                     0 => EnhanceMode.Clahe,
                     1 => EnhanceMode.Retinex,
                     2 => EnhanceMode.Levels,
+                    3 => EnhanceMode.ColorAdjust,
+                    4 => EnhanceMode.BrightnessContrast,
                     _ => EnhanceMode.Clahe
                 };
             }
@@ -770,6 +783,12 @@ namespace ImgViewer.Models
                 return EnhanceMode.Clahe;
             if (method.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) || method.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase))
                 return EnhanceMode.Levels;
+            if (method.Equals("Color Adjust", StringComparison.OrdinalIgnoreCase))
+                return EnhanceMode.ColorAdjust;
+            if (method.Equals("Brightness & Contrast", StringComparison.OrdinalIgnoreCase) ||
+                method.Equals("Brightness/Contrast", StringComparison.OrdinalIgnoreCase) ||
+                method.Equals("Brightness and Contrast", StringComparison.OrdinalIgnoreCase))
+                return EnhanceMode.BrightnessContrast;
 
             return EnhanceMode.Unknown;
         }
@@ -779,7 +798,9 @@ namespace ImgViewer.Models
             Unknown,
             Clahe,
             Retinex,
-            Levels
+            Levels,
+            ColorAdjust,
+            BrightnessContrast
         }
 
 

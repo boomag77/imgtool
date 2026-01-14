@@ -448,6 +448,208 @@ namespace ImgViewer.Models
             return dst;
         }
 
+        public static Mat AdjustColor(
+            CancellationToken token,
+            Mat src,
+            double redPercent,
+            double greenPercent,
+            double bluePercent,
+            double hueDegrees,
+            double saturationPercent)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return new Mat();
+
+            Mat working = CloneAsBgr8U(src);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+
+                double redScale = Math.Max(0.0, 1.0 + redPercent / 100.0);
+                double greenScale = Math.Max(0.0, 1.0 + greenPercent / 100.0);
+                double blueScale = Math.Max(0.0, 1.0 + bluePercent / 100.0);
+
+                if (Math.Abs(redScale - 1.0) > 0.0001 ||
+                    Math.Abs(greenScale - 1.0) > 0.0001 ||
+                    Math.Abs(blueScale - 1.0) > 0.0001)
+                {
+                    using var lutB = BuildScaleLut(blueScale);
+                    using var lutG = BuildScaleLut(greenScale);
+                    using var lutR = BuildScaleLut(redScale);
+
+                    var channels = working.Split();
+                    try
+                    {
+                        Cv2.LUT(channels[0], lutB, channels[0]);
+                        Cv2.LUT(channels[1], lutG, channels[1]);
+                        Cv2.LUT(channels[2], lutR, channels[2]);
+                        Cv2.Merge(channels, working);
+                    }
+                    finally
+                    {
+                        foreach (var ch in channels)
+                        {
+                            if (!ch.IsDisposed)
+                                ch.Dispose();
+                        }
+                    }
+                }
+
+                int hueShift = (int)Math.Round(hueDegrees / 2.0);
+                hueShift = Math.Max(-90, Math.Min(90, hueShift));
+                double saturationScale = Math.Max(0.0, 1.0 + saturationPercent / 100.0);
+
+                if (hueShift != 0 || Math.Abs(saturationScale - 1.0) > 0.0001)
+                {
+                    using var hsv = new Mat();
+                    Cv2.CvtColor(working, hsv, ColorConversionCodes.BGR2HSV);
+
+                    var hsvChannels = hsv.Split();
+                    try
+                    {
+                        if (hueShift != 0)
+                        {
+                            using var lutH = BuildHueLut(hueShift);
+                            Cv2.LUT(hsvChannels[0], lutH, hsvChannels[0]);
+                        }
+
+                        if (Math.Abs(saturationScale - 1.0) > 0.0001)
+                        {
+                            using var lutS = BuildScaleLut(saturationScale);
+                            Cv2.LUT(hsvChannels[1], lutS, hsvChannels[1]);
+                        }
+
+                        Cv2.Merge(hsvChannels, hsv);
+                    }
+                    finally
+                    {
+                        foreach (var ch in hsvChannels)
+                        {
+                            if (!ch.IsDisposed)
+                                ch.Dispose();
+                        }
+                    }
+
+                    var adjusted = new Mat();
+                    Cv2.CvtColor(hsv, adjusted, ColorConversionCodes.HSV2BGR);
+                    working.Dispose();
+                    working = adjusted;
+                }
+
+                return working;
+            }
+            catch
+            {
+                working.Dispose();
+                throw;
+            }
+        }
+
+        public static Mat AdjustBrightnessContrast(
+            CancellationToken token,
+            Mat src,
+            double brightness,
+            double contrast)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return new Mat();
+
+            Mat working = CloneAsBgr8U(src);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+
+                double alpha = (contrast + 100.0) / 100.0;
+                alpha = Math.Max(0.0, Math.Min(3.0, alpha));
+                double beta = Math.Max(-255.0, Math.Min(255.0, brightness));
+
+                var dst = new Mat();
+                working.ConvertTo(dst, MatType.CV_8UC3, alpha, beta);
+                working.Dispose();
+                return dst;
+            }
+            catch
+            {
+                working.Dispose();
+                throw;
+            }
+        }
+
+        private static Mat CloneAsBgr8U(Mat src)
+        {
+            if (src.Channels() == 3)
+            {
+                if (src.Type() == MatType.CV_8UC3)
+                    return src.Clone();
+
+                var bgr3 = new Mat();
+                src.ConvertTo(bgr3, MatType.CV_8UC3);
+                return bgr3;
+            }
+
+            if (src.Channels() == 4)
+            {
+                if (src.Type() == MatType.CV_8UC4)
+                {
+                    var bgr4 = new Mat();
+                    Cv2.CvtColor(src, bgr4, ColorConversionCodes.BGRA2BGR);
+                    return bgr4;
+                }
+
+                using var tmp = new Mat();
+                src.ConvertTo(tmp, MatType.CV_8UC4);
+                var bgrFrom4 = new Mat();
+                Cv2.CvtColor(tmp, bgrFrom4, ColorConversionCodes.BGRA2BGR);
+                return bgrFrom4;
+            }
+
+            if (src.Channels() == 1)
+            {
+                var bgr1 = new Mat();
+                if (src.Type() == MatType.CV_8UC1)
+                {
+                    Cv2.CvtColor(src, bgr1, ColorConversionCodes.GRAY2BGR);
+                    return bgr1;
+                }
+
+                using var tmp = new Mat();
+                src.ConvertTo(tmp, MatType.CV_8UC1);
+                Cv2.CvtColor(tmp, bgr1, ColorConversionCodes.GRAY2BGR);
+                return bgr1;
+            }
+
+            throw new ArgumentException("Expected 1, 3, or 4 channel Mat.", nameof(src));
+        }
+
+        private static Mat BuildScaleLut(double scale)
+        {
+            var lut = new Mat(1, 256, MatType.CV_8UC1);
+            for (int i = 0; i < 256; i++)
+            {
+                int v = (int)Math.Round(i * scale);
+                if (v < 0) v = 0;
+                if (v > 255) v = 255;
+                lut.Set(0, i, (byte)v);
+            }
+            return lut;
+        }
+
+        private static Mat BuildHueLut(int shift)
+        {
+            var lut = new Mat(1, 256, MatType.CV_8UC1);
+            for (int i = 0; i < 256; i++)
+            {
+                int v = i;
+                if (i < 180)
+                {
+                    v = (i + shift) % 180;
+                    if (v < 0) v += 180;
+                }
+                lut.Set(0, i, (byte)v);
+            }
+            return lut;
+        }
+
     }
 
 }
