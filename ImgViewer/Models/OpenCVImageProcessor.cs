@@ -340,89 +340,133 @@ namespace ImgViewer.Models
         public event Action<string>? ErrorOccured;
 
 
-
-
-        public Stream GetStreamForSaving(ImageFormat format, TiffCompression compression)
+        public bool TryGetStreamForSave(ImageFormat imageFormat, out MemoryStream? ms, out string error)
         {
-
-            using var img = WorkingImage; // clone for thread safety
+            
+            var img = WorkingImage; // clone for thread safety
             if (img == null || img.Empty())
-                throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
+            {
+                ms = null;
+                error = "Can't create stream for saving: WorkingImage is null or empty";
+                return false;
+            }
+            error = string.Empty;
+            switch (imageFormat)
+            {
+                case ImageFormat.Bmp:
+                    {
+                        byte[] bmpData = img.ImEncode(".bmp");
+                        ms = new MemoryStream(bmpData, 0, bmpData.Length);
+                        break;
+                    }
+                case ImageFormat.Jpeg:
+                    {
 
-            using var bin = new Mat();
-            if (img.Type() != MatType.CV_8UC1)
-            {
-                // convert to binary for TIFF saving
-                using var gray = new Mat();
-                Cv2.CvtColor(img, gray, ColorConversionCodes.BGR2GRAY);
-                Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-                // make stream from bin
-
+                        byte[] jpgData = img.ImEncode(".jpg");
+                        ms = new MemoryStream(jpgData, 0, jpgData.Length);
+                        break;
+                    }
+                case ImageFormat.Png:
+                    {
+                        byte[] pngData = img.ImEncode(".png");
+                        ms = new MemoryStream(pngData, 0, pngData.Length);
+                        break;
+                    }
+                case ImageFormat.Pdf:
+                    {
+                        error = "PDF saving is not implemented yet.";
+                        ms = null;
+                        return false;
+                    }
+                default:
+                    ms = null;
+                    error = $"Unsupported image format for saving: {imageFormat}";
+                    return false;
             }
-           
-            if (format == ImageFormat.Tiff)
-            {
-                var paramsList = new List<int>();
-                switch (compression)
-                {
-                    case TiffCompression.None:
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.None);
-                        break;
-                    case TiffCompression.CCITTG4:
-                        if (img.Channels() != 1)
-                        {
-                            // для G4 нужно 1-битное изображение
-                            //using var gray = new Mat();
-                            //Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
-                            //_currentImage = gray.Clone();
-                            //using var bin = new Mat();
-                            //Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-                            //_currentImage = bin.Clone();
-                            //if (_currentImage.Type() != MatType.CV_8UC1)
-                            //    _currentImage.ConvertTo(_currentImage, MatType.CV_8UC1);
-                        }
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.CCITTG4);
-                        break;
-                    case TiffCompression.CCITTG3:
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.CCITTG3);
-                        break;
-                    case TiffCompression.LZW:
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.LZW);
-                        break;
-                    case TiffCompression.Deflate:
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.Deflate);
-                        break;
-                    case TiffCompression.JPEG:
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.JPEG);
-                        break;
-                    case TiffCompression.PackBits:
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.PackBits);
-                        break;
-                    default:
-                        // default to None
-                        paramsList.Add((int)ImwriteFlags.TiffCompression);
-                        paramsList.Add((int)TiffCompression.None);
-                        break;
-                }
-                //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
-                //byte[] pngData = img.ImEncode(".png");
-                //return new MemoryStream(pngData);
-                byte[] bmpData = bin.ImEncode(".bmp");
-                return new MemoryStream(bmpData);
-            }
-            else
-            {
-                // для других форматов просто PNG
-                return MatToStream(bin);
-            }
+            return true;
         }
+
+        //public Stream? GetStreamForSaving(ImageFormat format, TiffCompression? compression = null)
+        //{
+
+        //    using var img = WorkingImage; // clone for thread safety
+        //    if (img == null || img.Empty())
+        //        throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
+
+        //    using var bin = new Mat();
+        //    if (img.Type() != MatType.CV_8UC1)
+        //    {
+        //        // convert to binary for TIFF saving
+        //        using var gray = new Mat();
+        //        Cv2.CvtColor(img, gray, ColorConversionCodes.BGR2GRAY);
+        //        Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+        //        // make stream from bin
+
+        //    }
+           
+        //    if (format == ImageFormat.Tiff)
+        //    {
+        //        var paramsList = new List<int>();
+        //        switch (compression)
+        //        {
+        //            case TiffCompression.None:
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.None);
+        //                break;
+        //            case TiffCompression.CCITTG4:
+        //                if (img.Channels() != 1)
+        //                {
+        //                    // для G4 нужно 1-битное изображение
+        //                    //using var gray = new Mat();
+        //                    //Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
+        //                    //_currentImage = gray.Clone();
+        //                    //using var bin = new Mat();
+        //                    //Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+        //                    //_currentImage = bin.Clone();
+        //                    //if (_currentImage.Type() != MatType.CV_8UC1)
+        //                    //    _currentImage.ConvertTo(_currentImage, MatType.CV_8UC1);
+        //                }
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.CCITTG4);
+        //                break;
+        //            case TiffCompression.CCITTG3:
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.CCITTG3);
+        //                break;
+        //            case TiffCompression.LZW:
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.LZW);
+        //                break;
+        //            case TiffCompression.Deflate:
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.Deflate);
+        //                break;
+        //            case TiffCompression.JPEG:
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.JPEG);
+        //                break;
+        //            case TiffCompression.PackBits:
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.PackBits);
+        //                break;
+        //            default:
+        //                // default to None
+        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
+        //                paramsList.Add((int)TiffCompression.None);
+        //                break;
+        //        }
+        //        //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
+        //        //byte[] pngData = img.ImEncode(".png");
+        //        //return new MemoryStream(pngData);
+        //        byte[] bmpData = bin.ImEncode(".bmp");
+        //        return new MemoryStream(bmpData);
+        //    }
+        //    else
+        //    {
+        //        // для других форматов просто PNG
+        //        return MatToStream(bin);
+        //    }
+        //}
 
 
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi)
@@ -445,12 +489,16 @@ namespace ImgViewer.Models
                         tiffInfo.IsMultiPage = false;
                         break;
                     }
+                case TiffCompression.JPEG:
                 case TiffCompression.LZW:
+                case TiffCompression.Deflate:
+                case TiffCompression.PackBits:
+                case TiffCompression.None:
                     {
-                        var (lzwPixels, lzwWidth, lzwHeight, _, bitsPerPixel) = GetBinPixelsFromMat(compression, photometricMinIsWhite: false, useOtsu: true);
-                        tiffInfo.Pixels = lzwPixels;
-                        tiffInfo.Width = lzwWidth;
-                        tiffInfo.Height = lzwHeight;
+                        var (pixels, width, height, bitsPerPixel) = GetPixelsFromMat();
+                        tiffInfo.Pixels = pixels;
+                        tiffInfo.Width = width;
+                        tiffInfo.Height = height;
                         tiffInfo.Dpi = dpi;
                         tiffInfo.BitsPerPixel = bitsPerPixel; // updated to use lzwBitsPerPixel correctly
                         tiffInfo.Compression = compression; // added line to set compression for LZW
@@ -463,6 +511,51 @@ namespace ImgViewer.Models
                     break;
             }
             return tiffInfo;
+        }
+
+        private (byte[] pixels,  int width, int height, int bitsPerPixel) GetPixelsFromMat()
+        {
+
+            using var src = WorkingImage; // cloned
+            if (src == null || src.Empty())
+                throw new InvalidOperationException("src Mat is null or empty");
+            using var tmpDepth = new Mat();
+            using var tmpColor = new Mat();
+            Mat work = src;
+            if (src.Depth() != MatType.CV_8U)
+            {
+                work.ConvertTo(tmpDepth, MatType.CV_8U);
+                work = tmpDepth;
+            }
+
+            if (work.Type() == MatType.CV_8UC3)
+            {
+                Cv2.CvtColor(work, tmpColor, ColorConversionCodes.BGR2RGB);
+                work = tmpColor;
+            }
+            else if (work.Type() == MatType.CV_8UC4)
+            {
+                Cv2.CvtColor(work, tmpColor, ColorConversionCodes.BGRA2RGBA);
+                work = tmpColor;
+            }
+            int width = work.Cols;
+            int height = work.Rows;
+            int channels = work.Channels();
+            int bitsPerPixel = channels * 8;
+            int rowBytes = checked(width * channels);
+            int bufferSize = checked(rowBytes * height);
+            var pixels = new byte[bufferSize];
+            if (work.Step() == width * channels && work.IsContinuous())
+            {
+                // можно скопировать сразу весь буфер
+                Marshal.Copy(work.Ptr(0), pixels, 0, bufferSize);
+                return (pixels, width, height, bitsPerPixel);
+            }
+            for (int y = 0; y < height; y++)
+            {
+                Marshal.Copy(work.Ptr(y), pixels, y * width * channels, width * channels);
+            }
+            return (pixels, width, height, bitsPerPixel);
         }
 
         private (byte[] binPixels, int width, int height, int strideBytes, int bitsPerPixel) GetBinPixelsFromMat(TiffCompression compression,

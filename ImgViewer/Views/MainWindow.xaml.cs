@@ -1608,14 +1608,16 @@ namespace ImgViewer.Views
             if (_viewModel.OriginalImage == null) return;
             var dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.InitialDirectory = _manager.LastSavedFolder;
-            //dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
-            dlg.Filter = "TIFF Image|*.tif;*.tiff";
+            dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
+            //dlg.Filter = "TIFF Image|*.tif;*.tiff";
+            
 
             if (dlg.ShowDialog() == true)
             {
                 var path = dlg.FileName;
                 TiffCompression compression = _manager.CurrentTiffCompression;
                 var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                
                 //if (ext == ".tif" || ext == ".tiff")
                 //{
                 //    var tiffOptionsWindow = new TiffSavingOptionsWindow();
@@ -1641,15 +1643,31 @@ namespace ImgViewer.Views
                 //        _ => ImageFormat.Png
                 //    },
                 //    compression);
-                _manager.SaveProcessedImageToTiff(path,
-                    ext switch
-                    {
-                        ".tif" or ".tiff" => ImageFormat.Tiff,
-                        ".png" => ImageFormat.Png,
-                        ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-                        ".bmp" => ImageFormat.Bmp,
-                        _ => ImageFormat.Png
-                    });
+                
+                switch (ext)
+                {
+                    case ".tif":
+                    case ".tiff":
+                        _manager.SaveProcessedImageToTiff(path, compression, 300);
+                        break;
+                    case ".png":
+                    case ".jpg":
+                    case ".jpeg":
+                    case ".bmp":
+                        _manager.SaveProcessedImage(path, ext switch
+                            {
+                                ".png" => ImageFormat.Png,
+                                ".jpg" or ".jpeg" => ImageFormat.Jpeg,
+                                ".bmp" => ImageFormat.Bmp
+                            });
+                        break;
+                    default:
+                        System.Windows.MessageBox.Show("Unsupported file extension. Supported: .tif, .tiff, .png, .jpg, .jpeg, .bmp",
+                                                       "Error",
+                                                       MessageBoxButton.OK,
+                                                       MessageBoxImage.Error);
+                        return;
+                }
             }
 
         }

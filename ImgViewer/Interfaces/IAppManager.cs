@@ -38,8 +38,8 @@ namespace ImgViewer.Interfaces
 
         public Task SetImageForProcessing(ImageSource bmp);
         public Task ApplyCommandToProcessingImage(ProcessorCommand command, Dictionary<string, object> parameters);
-        public Task SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDesvription = null);
-        public Task SaveProcessedImageToTiff(string outputPath, ImageFormat format);
+        public Task SaveProcessedImage(string outputPath, ImageFormat imageFormat, string? imageDesvription = null);
+        public Task SaveProcessedImageToTiff(string outputPath, TiffCompression compression, int dpi);
         public void SetSplitPreviewImages(ImageSource left, ImageSource right);
         public void ClearSplitPreviewImages();
         //private Task ProcessFolder(string srcFolder, Pipeline pipeline, CancellationToken batchToken);

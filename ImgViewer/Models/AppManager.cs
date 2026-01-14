@@ -465,12 +465,14 @@ namespace ImgViewer.Models
 
         }
 
-        public async Task SaveProcessedImageToTiff(string outputPath, ImageFormat format)
+
+        public async Task SaveProcessedImageToTiff(string outputPath, TiffCompression compression, int dpi = 300)
         {
             var tiffInfo = new TiffInfo();
             try
             {
-                tiffInfo = await Task.Run(() => _imageProcessor.GetTiffInfo(TiffCompression.CCITTG4, 300));
+                compression = _appSettings.TiffCompression;
+                tiffInfo = await Task.Run(() => _imageProcessor.GetTiffInfo(compression, dpi));
                 _fileProcessor.SaveTiff(
                     tiffInfo,
                     outputPath,
@@ -485,18 +487,25 @@ namespace ImgViewer.Models
         }
 
 
-        public async Task SaveProcessedImage(string outputPath, ImageFormat format, TiffCompression compression, string imageDescription = null)
+        public async Task SaveProcessedImage(string outputPath, ImageFormat imageFormat, string imageDescription = null)
         {
             try
             {
-                using var stream = _imageProcessor.GetStreamForSaving(ImageFormat.Tiff, compression);
-                if (stream.CanSeek)
-                    stream.Position = 0;
-
-                string json = IsSavePipelineToMd ? _pipeline.BuildPipelineForSave() : null;
-
-
-                await Task.Run(() => _fileProcessor.SaveTiff(stream, outputPath, compression, 300, true, json));
+                if (!_imageProcessor.TryGetStreamForSave(
+                    imageFormat,
+                    out MemoryStream? ms,
+                    out string error))
+                {
+                    throw new Exception(error);
+                }
+                if (ms != null)
+                {
+                    await Task.Run(() => _fileProcessor.SaveStreamToFile(
+                        ms,
+                        outputPath));
+                }
+                
+                ms?.Dispose();
             }
             catch (OperationCanceledException)
             {

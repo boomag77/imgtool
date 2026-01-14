@@ -1,9 +1,12 @@
 ﻿using BitMiracle.LibTiff.Classic;
+using ImageMagick;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
+using System.Windows.Media.Media3D;
 
 public enum TiffCompression
 {
@@ -23,16 +26,110 @@ namespace ImgViewer.Models
     {
 
         // public entry point
-        public static void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true, string? metadataJson = null)
-        {
-            if (stream == null) throw new ArgumentNullException(nameof(stream));
-            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
+        //public static void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi = 300, bool overwrite = true, string? metadataJson = null)
+        //{
+        //    if (stream == null) throw new ArgumentNullException(nameof(stream));
+        //    if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
 
+        //    // ensure output folder
+        //    var dir = Path.GetDirectoryName(path);
+        //    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+        //        Directory.CreateDirectory(dir);
+
+        //    if (File.Exists(path))
+        //    {
+        //        if (overwrite)
+        //            File.Delete(path);
+        //        else
+        //            throw new IOException($"File already exists: {path}");
+        //    }
+
+        //    // make a seekable copy of stream (OpenCV streams may be non-seekable)
+        //    MemoryStream ms = stream as MemoryStream;
+        //    bool createdCopy = false;
+        //    if (ms == null || !ms.CanSeek)
+        //    {
+        //        ms = new MemoryStream();
+        //        stream.CopyTo(ms);
+        //        createdCopy = true;
+        //    }
+        //    ms.Position = 0;
+
+        //    try
+        //    {
+        //        // If CCITT requested -> use LibTiff.NET pipeline (guaranteed)
+        //        if (compression == TiffCompression.CCITTG4 || compression == TiffCompression.CCITTG3)
+        //        {
+        //            // decode stream to System.Drawing.Bitmap
+        //            using var bmp = (Bitmap)Image.FromStream(ms);
+
+
+
+        //            // convert to binary 0/255 bytes (grayscale + Otsu)
+        //            var binPixels = ConvertBitmapToBinary(bmp, out int width, out int height);
+        //            // detect if need to invert (we want background white, foreground black typical for fax)
+        //            bool invert = ShouldInvertBinary(binPixels, width, height);
+        //            if (invert)
+        //                InvertBinary(binPixels);
+        //            var strideBytes = (width + 7) >> 3; // 1 byte per pixel before packing
+        //            var packedBinPixels = new byte[strideBytes * height];
+        //            // pack to 1-bit
+        //            for (int y = 0; y < height; y++)
+        //            {
+        //                PackRowTo1BitInto(
+        //                    srcRow: binPixels.AsSpan(y * width, width),
+        //                    width: width,
+        //                    dstPacked: packedBinPixels.AsSpan(y * strideBytes, strideBytes));
+        //            }
+        //            // write via LibTiff.NET
+        //            SaveBinaryBytesAsCcitt(
+        //                packedBinPixels,
+        //                strideBytes,
+        //                bitsPerPixel: 1,
+        //                width, height,
+        //                path,
+        //                dpi,
+        //                compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
+        //                photometricMinIsWhite: false,
+        //                metadataJson: metadataJson);
+        //        }
+        //        else
+        //        {
+        //            // For non-CCITT compressions, use Magick.NET if available (or fallback to saving decoded TIFF from System.Drawing)
+        //            // Try to use Magick.NET settings if you prefer; here we'll do a safe fallback: decode and re-encode via System.Drawing (uncompressed TIFF) then let Magick handle compression if present.
+        //            // Simpler: write the decoded image to disk using Image.Save with requested encoder params if available.
+
+        //            // decode to Bitmap and use Magick if present; otherwise save PNG or TIFF
+
+        //            ms.Position = 0;
+        //            using var bmp = (Bitmap)Image.FromStream(ms);
+        //            // try Magick.NET write if present (optional) - but simplest: save as tiff using GDI+ (no compression)
+        //            // Note: GDI+ doesn't support many TIFF compressions; recommended to add Magick.NET here.
+        //            bmp.Save(path, ImageFormat.Tiff); // uncompressed likely
+        //        }
+        //    }
+        //    finally
+        //    {
+        //        if (createdCopy) ms.Dispose();
+        //    }
+        //}
+        public static bool SaveTiff(byte[] pixels,
+                                    int width, int height, int bpp,
+                                    TiffCompression compression, int dpi,
+                                    string path, bool overwrite = true,
+                                    bool photometricMinIsWhite = true,
+                                    int jpegQuality = 95,
+                                    string? metadataJson = null)
+        {
+            if (bpp < 8)
+                throw new ArgumentException("Bits per pixel must be at least 8 for this method.");
+            if (compression == TiffCompression.JPEG && bpp  != 8 && bpp != 24)
+                throw new ArgumentException("JPEG compression supports only 8 or 24 bits per pixel.");
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
             // ensure output folder
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
-
             if (File.Exists(path))
             {
                 if (overwrite)
@@ -40,75 +137,84 @@ namespace ImgViewer.Models
                 else
                     throw new IOException($"File already exists: {path}");
             }
-
-            // make a seekable copy of stream (OpenCV streams may be non-seekable)
-            MemoryStream ms = stream as MemoryStream;
-            bool createdCopy = false;
-            if (ms == null || !ms.CanSeek)
+            var compressionMethod = compression switch
             {
-                ms = new MemoryStream();
-                stream.CopyTo(ms);
-                createdCopy = true;
+                TiffCompression.None => Compression.NONE,
+                TiffCompression.LZW => Compression.LZW,
+                TiffCompression.Deflate => Compression.DEFLATE,
+                TiffCompression.JPEG => Compression.JPEG,
+                TiffCompression.PackBits => Compression.PACKBITS,
+                _ => throw new ArgumentException("Unsupported compression method."),
+            };
+            using var tif = Tiff.Open(path, "w");
+            if (tif == null) throw new InvalidOperationException("Cannot open output tiff.");
+
+            tif.SetField(TiffTag.IMAGEWIDTH, width);
+            tif.SetField(TiffTag.IMAGELENGTH, height);
+            var bps = bpp switch
+            {
+                8 => (short)8,
+                24 => (short)8,
+                32 => (short)8,
+                _ => throw new ArgumentException("Unsupported bits per pixel."),
+            };
+            tif.SetField(TiffTag.BITSPERSAMPLE, bps);
+            var spp = bpp switch
+            {
+                8 => 1,
+                24 => 3,
+                32 => 4,
+                _ => throw new ArgumentException("Unsupported bits per pixel."),
+            };
+            tif.SetField(TiffTag.SAMPLESPERPIXEL, spp);
+            if (bps == 8 && (compression == TiffCompression.LZW || compression == TiffCompression.Deflate))
+                tif.SetField(TiffTag.PREDICTOR, Predictor.HORIZONTAL);
+            tif.SetField(TiffTag.COMPRESSION, compressionMethod);
+            if (compression == TiffCompression.JPEG)
+            {
+                tif.SetField(TiffTag.JPEGQUALITY, Math.Clamp(jpegQuality, 1, 100));
             }
-            ms.Position = 0;
-
-            try
+            var photometric = (spp == 1) ? (photometricMinIsWhite ? Photometric.MINISWHITE : Photometric.MINISBLACK) :
+                               (spp == 3 || spp == 4) ? Photometric.RGB :
+                               throw new ArgumentException("Unsupported samples per pixel for photometric interpretation.");
+            tif.SetField(TiffTag.PHOTOMETRIC, photometric);
+            int rowsPerStrip = Math.Min(height, 128);
+            tif.SetField(TiffTag.ROWSPERSTRIP, rowsPerStrip);
+            if (bpp > 8)
             {
-                // If CCITT requested -> use LibTiff.NET pipeline (guaranteed)
-                if (compression == TiffCompression.CCITTG4 || compression == TiffCompression.CCITTG3)
+                tif.SetField(TiffTag.PLANARCONFIG, PlanarConfig.CONTIG);
+            }
+            if (bpp == 32)
                 {
-                    // decode stream to System.Drawing.Bitmap
-                    using var bmp = (Bitmap)Image.FromStream(ms);
-
-
-
-                    // convert to binary 0/255 bytes (grayscale + Otsu)
-                    var binPixels = ConvertBitmapToBinary(bmp, out int width, out int height);
-                    // detect if need to invert (we want background white, foreground black typical for fax)
-                    bool invert = ShouldInvertBinary(binPixels, width, height);
-                    if (invert)
-                        InvertBinary(binPixels);
-                    var strideBytes = (width + 7) >> 3; // 1 byte per pixel before packing
-                    var packedBinPixels = new byte[strideBytes * height];
-                    // pack to 1-bit
-                    for (int y = 0; y < height; y++)
-                    {
-                        PackRowTo1BitInto(
-                            srcRow: binPixels.AsSpan(y * width, width),
-                            width: width,
-                            dstPacked: packedBinPixels.AsSpan(y * strideBytes, strideBytes));
-                    }
-                    // write via LibTiff.NET
-                    SaveBinaryBytesAsCcitt(
-                        packedBinPixels,
-                        strideBytes,
-                        bitsPerPixel: 1,
-                        width, height,
-                        path,
-                        dpi,
-                        compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
-                        photometricMinIsWhite: false,
-                        metadataJson: metadataJson);
-                }
-                else
-                {
-                    // For non-CCITT compressions, use Magick.NET if available (or fallback to saving decoded TIFF from System.Drawing)
-                    // Try to use Magick.NET settings if you prefer; here we'll do a safe fallback: decode and re-encode via System.Drawing (uncompressed TIFF) then let Magick handle compression if present.
-                    // Simpler: write the decoded image to disk using Image.Save with requested encoder params if available.
-
-                    // decode to Bitmap and use Magick if present; otherwise save PNG or TIFF
-
-                    ms.Position = 0;
-                    using var bmp = (Bitmap)Image.FromStream(ms);
-                    // try Magick.NET write if present (optional) - but simplest: save as tiff using GDI+ (no compression)
-                    // Note: GDI+ doesn't support many TIFF compressions; recommended to add Magick.NET here.
-                    bmp.Save(path, ImageFormat.Tiff); // uncompressed likely
-                }
+                tif.SetField(TiffTag.EXTRASAMPLES, 1, new short[] { (short)ExtraSample.UNASSALPHA });
             }
-            finally
+
+            if (dpi > 0)
             {
-                if (createdCopy) ms.Dispose();
+                tif.SetField(TiffTag.XRESOLUTION, (double)dpi);
+                tif.SetField(TiffTag.YRESOLUTION, (double)dpi);
+                tif.SetField(TiffTag.RESOLUTIONUNIT, ResUnit.INCH);
             }
+
+            if (!string.IsNullOrEmpty(metadataJson))
+            {
+                tif.SetField(TiffTag.IMAGEDESCRIPTION, metadataJson);
+            }
+
+            //int packedStride = strideBytes;
+            //var srcRow = new byte[width];
+            //var packedRow = new byte[packedStride];
+            var rowBytes = width * spp * (bps / 8);
+            int need = checked(rowBytes * height);
+            if (pixels.Length < need)
+                throw new ArgumentException("Pixel data length is less than required for specified width, height, and bpp.");
+            for (int y = 0; y < height; y++)
+            {
+                bool ok = tif.WriteScanline(pixels, y * rowBytes, y, 0);
+                if (!ok) throw new IOException($"WriteScanline failed at row {y}"); 
+            }
+
+            return tif.WriteDirectory();
         }
 
         // ---------------- helpers ----------------
@@ -295,7 +401,7 @@ namespace ImgViewer.Models
 
 
         // Save binary via LibTiff.NET with chosen compression (CCITT G3/G4)
-        public static void SaveBinaryBytesAsCcitt(
+        public static bool SaveBinaryBytesAsCcitt(
             byte[] packedBinPixels,
             int strideBytes,
             int bitsPerPixel,
@@ -351,7 +457,7 @@ namespace ImgViewer.Models
                 if (!ok) throw new IOException($"WriteScanline failed at row {y}");
             }
 
-            tif.WriteDirectory();
+            return tif.WriteDirectory();
         }
     }
 }

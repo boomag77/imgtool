@@ -381,6 +381,7 @@ namespace ImgViewer.Models
             return true;
         }
 
+        // ImgWorkerPool uses this method to save CCITT TIFFs
         public void SaveTiff(TiffInfo tiffInfo, string path, bool overwrite = true, string? metadataJson = null)
         {
             if (!IsValidPath(path))
@@ -390,18 +391,46 @@ namespace ImgViewer.Models
             }
             try
             {
-                //using var tiffSaver = new TiffWriter();
-                TiffWriter.SaveBinaryBytesAsCcitt(
-                    tiffInfo.Pixels,
-                    tiffInfo.StrideBytes,
-                    tiffInfo.BitsPerPixel,
-                    tiffInfo.Width,
-                    tiffInfo.Height,
-                    path,
-                    tiffInfo.Dpi,
-                    tiffInfo.Compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
-                    false,
-                    metadataJson);
+                if (tiffInfo.Compression == TiffCompression.CCITTG3 ||
+                    tiffInfo.Compression == TiffCompression.CCITTG4)
+                {
+                    var ok = TiffWriter.SaveBinaryBytesAsCcitt(
+                                    tiffInfo.Pixels,
+                                    tiffInfo.StrideBytes,
+                                    tiffInfo.BitsPerPixel,
+                                    tiffInfo.Width,
+                                    tiffInfo.Height,
+                                    path,
+                                    tiffInfo.Dpi,
+                                    tiffInfo.Compression == TiffCompression.CCITTG3 ? Compression.CCITTFAX3 : Compression.CCITTFAX4,
+                                    false,
+                                    metadataJson
+                    );
+                    if (!ok)    
+                    {
+                        throw new Exception("Failed to save CCITT TIFF, TiffWriter returned error.");
+                    }
+                }
+                else
+                {
+                    var ok = TiffWriter.SaveTiff(
+                                    tiffInfo.Pixels,
+                                    tiffInfo.Width,
+                                    tiffInfo.Height,
+                                    tiffInfo.BitsPerPixel,
+                                    tiffInfo.Compression,
+                                    tiffInfo.Dpi,
+                                    path,
+                                    overwrite, false,
+                                    jpegQuality: 95,
+                                    metadataJson
+                    );
+                    if (!ok)
+                    {
+                        throw new Exception("Failed to save TIFF, TiffWriter returned error.");
+                    }
+                }
+
             }
             catch (OperationCanceledException)
             {
@@ -415,30 +444,30 @@ namespace ImgViewer.Models
             }
         }
 
-        public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true, string? metadataJson = null)
-        {
-            if (!IsValidPath(path))
-            {
-                //return;
-                throw new ArgumentException("Invalid file path.", nameof(path));
-            }
-            try
-            {
-                TiffWriter.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
-            }
-            catch (OperationCanceledException)
-            {
-                // forward cancellation
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // forward exception
+        //public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true, string? metadataJson = null)
+        //{
+        //    if (!IsValidPath(path))
+        //    {
+        //        //return;
+        //        throw new ArgumentException("Invalid file path.", nameof(path));
+        //    }
+        //    try
+        //    {
+        //        TiffWriter.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
+        //    }
+        //    catch (OperationCanceledException)
+        //    {
+        //        // forward cancellation
+        //        throw;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        // forward exception
 
-                throw;
+        //        throw;
 
-            }
-        }
+        //    }
+        //}
 
 
         private static void InvertBinary(byte[] bin)
@@ -447,16 +476,24 @@ namespace ImgViewer.Models
                 bin[i] = (byte)(bin[i] == 0 ? 255 : 0);
         }
 
-        public void Save(Stream stream, string path)
+        public void SaveStreamToFile(MemoryStream ms, string path)
         {
-            using (var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write))
+            try
             {
-                if (stream.CanSeek)
+                using (var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write))
                 {
-                    stream.Position = 0;
+                    if (ms.CanSeek)
+                    {
+                        ms.Position = 0;
+                    }
+                    ms.CopyTo(fileStream);
                 }
-                stream.CopyTo(fileStream);
             }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to save stream to file '{path}': {ex.Message}", ex);
+            }
+
         }
 
         public byte[] LoadImageBytes(string path)

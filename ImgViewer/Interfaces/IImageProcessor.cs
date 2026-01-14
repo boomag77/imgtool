@@ -9,7 +9,7 @@ namespace ImgViewer.Interfaces
 
         public object CurrentImage { set; }
         public void UpdateCancellationToken(CancellationToken token);
-        Stream? GetStreamForSaving(ImageFormat format, TiffCompression compression);
+        public bool TryGetStreamForSave(ImageFormat format, out MemoryStream? ms, out string error);
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi);
         Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
 
