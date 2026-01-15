@@ -60,7 +60,7 @@ namespace ImgViewer.Models
             _imageProcessor = new OpenCvImageProcessor(this, _imgProcCts.Token, Environment.ProcessorCount - 1, true);
 
             _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
-
+            _appSettings.ErrorOccured += (msg) => ReportError(msg, null, "App Settings Error");
 
         }
 

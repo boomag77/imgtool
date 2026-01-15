@@ -27,6 +27,8 @@ namespace ImgViewer.Models
         //   "MyApp",             // <-- поменяй на своё
         //   "settings.json");
 
+        public event Action<string> ErrorOccured;
+
         public double EraseOperationOffset
         {
             get
@@ -71,7 +73,8 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"AppSettings: failed to load settings: {ex.Message}");
+                ErrorOccured?.Invoke($"Failed to load app settings: {ex.Message}");
+                //Debug.WriteLine($"AppSettings: failed to load settings: {ex.Message}");
             }
         }
 
@@ -81,7 +84,7 @@ namespace ImgViewer.Models
             set
             {
                 _tiffCompression = value;
-                Debug.WriteLine($"App Settings: Compression set to: {_tiffCompression}");
+                //Debug.WriteLine($"App Settings: Compression set to: {_tiffCompression}");
                 ScheduleSave();
             }
         }
@@ -110,13 +113,13 @@ namespace ImgViewer.Models
         {
             get
             {
-                Debug.WriteLine($"App Settings: SavePipeLineToMd get: {_savePipelineToMd}");
+                //Debug.WriteLine($"App Settings: SavePipeLineToMd get: {_savePipelineToMd}");
                 return _savePipelineToMd;
             }
             set
             {
                 _savePipelineToMd = value;
-                Debug.WriteLine($"App Settings: SavePipeLineToMd set: {_savePipelineToMd}");
+                //Debug.WriteLine($"App Settings: SavePipeLineToMd set: {_savePipelineToMd}");
                 ScheduleSave();
             }
         }
@@ -144,7 +147,8 @@ namespace ImgViewer.Models
                 catch (OperationCanceledException) { /* ignored */ }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"AppSettings: error saving settings: {ex}");
+                    ErrorOccured?.Invoke($"Error saving app settings: {ex.Message}");
+                    //Debug.WriteLine($"AppSettings: error saving settings: {ex}");
                 }
                 finally
                 {
@@ -199,7 +203,8 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"AppSettings: Save failed: {ex.Message}");
+                ErrorOccured?.Invoke($"Error saving app settings: {ex.Message}");
+                //Debug.WriteLine($"AppSettings: Save failed: {ex.Message}");
             }
         }
 
@@ -226,7 +231,8 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"AppSettings: Load failed: {ex.Message}");
+                ErrorOccured?.Invoke($"Failed to load app settings: {ex.Message}");
+                //Debug.WriteLine($"AppSettings: Load failed: {ex.Message}");
             }
         }
 
