@@ -291,15 +291,6 @@ namespace ImgViewer.Models
                 if (ImageExts.Contains(ext))
                     count++;
 
-                // сравниваем расширения
-                //if (ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                //    ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                //    ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
-                //    ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
-                //    ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
-                //{
-                //    count++;
-                //}
             }
             return count;
         }
@@ -372,6 +363,7 @@ namespace ImgViewer.Models
         {
             var splitResults = imgProc.GetSplitResults();
             if (splitResults == null || splitResults.Length == 0)
+
                 return false;
 
             try
@@ -538,13 +530,6 @@ namespace ImgViewer.Models
                 IEnumerable<string> files;
                 try
                 {
-                    //files = Directory.EnumerateFiles(_sourceFolderPath)
-                    //             .Where(file =>
-                    //                        file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                    //                        file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                    //                        file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                    //                        file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-                    //                        file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
                     files = EnumerateImages(_sourceFolderPath);
                 }
                 catch (Exception ex)
@@ -552,7 +537,7 @@ namespace ImgViewer.Models
                     RegisterFileError(_sourceFolderPath, "Error enumerating files in source folder.", ex);
                     throw;
                 }
-                //_totalCount = files.Count();
+
                 foreach (var file in files)
                 {
                     _token.ThrowIfCancellationRequested();
@@ -560,8 +545,6 @@ namespace ImgViewer.Models
                     var baseName = Path.GetFileNameWithoutExtension(file);
                     if (!overWriteExistingOutputs && _existingOutputNames.Contains(baseName))
                     {
-                        // skip existing output
-                        //_processedCount++;
                         int processedCount = Interlocked.Increment(ref _processedCount);
                         ReportProgress(processedCount);
                         continue;
@@ -569,7 +552,7 @@ namespace ImgViewer.Models
                     var sourceFile = new SourceImageFile
                     {
                         Path = file,
-                        Layout = GetLayoutFromFileName(file)
+                        Layout = GetLayoutFromFileName(file.AsSpan()[^1])
                     };
                     //_filesQueue.Add(sourceFile, _token);
                     await _filesCh.Writer.WriteAsync(sourceFile, _token);
@@ -595,29 +578,34 @@ namespace ImgViewer.Models
             }
 
         }
-        private static SourceFileLayout? GetLayoutFromFileName(string path)
+        //private static SourceFileLayout GetLayoutFromFileName(string path)
+        //{
+        //    ReadOnlySpan<char> name = Path.GetFileNameWithoutExtension(path).AsSpan();
+        //    if (name.IsEmpty)
+        //        return SourceFileLayout.Right;
+
+        //    for (int i = name.Length - 1; i >= 0; i--)
+        //    {
+        //        char c = name[i];
+        //        if (!char.IsDigit(c))
+        //            continue;
+
+        //        int digit = c - '0';
+        //        return (digit % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
+        //    }
+
+        //    return SourceFileLayout.Right;
+        //}
+
+        private static SourceFileLayout GetLayoutFromFileName(char lastChar)
+
         {
-            var name = Path.GetFileNameWithoutExtension(path); // e.g. "page001"
-
-            if (string.IsNullOrEmpty(name))
+            if (!char.IsDigit(lastChar))
+            {
                 return SourceFileLayout.Right;
-
-            int i = name.Length - 1;
-
-            // идём с конца, пока цифры
-            while (i >= 0 && char.IsDigit(name[i]))
-                i--;
-
-            int start = i + 1; // первая цифра в хвостовом числе
-            string digits = (start < name.Length)
-                ? name.Substring(start)    // всё от первой цифры до конца
-                : string.Empty;
-
-            if (digits.Length > 0 && int.TryParse(digits, out int num))
-                return (num % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
-
-            // нет числового суффикса → Right по умолчанию
-            return null;
+            }
+            int digit = (int)(lastChar - '0');
+            return (digit % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
         }
 
         //private void StartSavingWorkerIfNeeded()
@@ -793,7 +781,7 @@ namespace ImgViewer.Models
 
                             }
 
-                            imgProc.ApplyCommand
+                            imgProc.TryApplyCommand
                                 (op.Command,
                                 op.Params,
                                 batchProcessing: true,

@@ -11,9 +11,9 @@ namespace ImgViewer.Interfaces
         public void UpdateCancellationToken(CancellationToken token);
         public bool TryGetStreamForSave(ImageFormat format, out MemoryStream? ms, out string error);
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi);
-        Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
+        //Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
 
-        bool ApplyCommand(ProcessorCommand commandName,
+        bool TryApplyCommand(ProcessorCommand commandName,
             Dictionary<string, object> parameters,
             bool batchProcessing = false,
             string currentFilePath = null,

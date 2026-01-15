@@ -1166,7 +1166,7 @@ namespace ImgViewer.Models
 
 
 
-        public Mat ProcessSingle(Mat src,
+        private Mat ProcessSingle(Mat src,
                            ProcessorCommand command,
                            Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing)
         {
@@ -1438,7 +1438,6 @@ namespace ImgViewer.Models
                                                     featherPx,
                                                     useTeleaHybrid
                                                 );
-                                                break;
                                             case "By Contrast":
                                                 return RemoveBordersByRowColWhite(src,
                                                         threshFrac: treshFrac,
@@ -1446,11 +1445,9 @@ namespace ImgViewer.Models
                                                         centralSample: centralSample,
                                                         maxRemoveFrac: maxRemoveFrac
                                                     );
-                                                break;
                                             case "Manual":
 
                                                 return RemoveBorders_Manual(src, top, bottom, left, right, applyManualCut, bgColor, manualCutDebug);
-                                                break;
                                             case "Integral":
                                                 return RemoveBorders_Integral(token,
                                                         batchProcessing,
@@ -1468,7 +1465,6 @@ namespace ImgViewer.Models
                                                         kInterpolation,
                                                         integralCut,
                                                         null);
-                                                break;
 
                                         }
                                     }
@@ -2317,7 +2313,7 @@ namespace ImgViewer.Models
 
 
 
-        public bool ApplyCommand(
+        public bool TryApplyCommand(
                                 ProcessorCommand command,
                                 Dictionary<string, object> parameters = null,
                                 bool batchProcessing = false,

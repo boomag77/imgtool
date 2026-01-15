@@ -51,16 +51,12 @@ namespace ImgViewer.Models
 
         {
 
-
-
-
             if (src == null) throw new ArgumentNullException(nameof(src));
             if (src.Empty()) return src.Clone();
 
             using var srcClone = src.Clone();
-
-
             Mat working = srcClone;
+
             bool disposeWorking = false;
            
 
@@ -130,16 +126,6 @@ namespace ImgViewer.Models
                     using var darkMask = new Mat();
                     Cv2.Threshold(gray, darkMask, thr, 255, ThresholdTypes.BinaryInv); // dark->255
 
-
-
-
-                    // small open to reduce noise
-                    //token.ThrowIfCancellationRequested();
-                    //using (var kOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3)))
-                    //{
-                    //    token.ThrowIfCancellationRequested();
-                    //    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kOpen);check 
-                    //}
 
                     // 2) connected components
                     using var labels = new Mat();
@@ -1427,20 +1413,20 @@ namespace ImgViewer.Models
         }
 
         public static Mat RemoveBorders_LabBricks(CancellationToken token,
-    Mat src,
-    int brickThickness,
-    double bordersColorTolerance,
-    int safetyOffsetPx,
-    BrickInpaintMode inpaintMode,
-    double inpaintRadius,
-    bool maxBordersDepthsAutoDetection,
-    MaxBorderDepthsFrac maxBorderDepthsFrac,
-    double seedContrastFactor,
-    double seedBrightnessFactor,
-    double textureAllowanceFactor,
-    int kInterpolation,
-    out BorderDepthStats depthStats,
-    Scalar? fillColor = null)
+                                                    Mat src,
+                                                    int brickThickness,
+                                                    double bordersColorTolerance,
+                                                    int safetyOffsetPx,
+                                                    BrickInpaintMode inpaintMode,
+                                                    double inpaintRadius,
+                                                    bool maxBordersDepthsAutoDetection,
+                                                    MaxBorderDepthsFrac maxBorderDepthsFrac,
+                                                    double seedContrastFactor,
+                                                    double seedBrightnessFactor,
+                                                    double textureAllowanceFactor,
+                                                    int kInterpolation,
+                                                    out BorderDepthStats depthStats,
+                                                    Scalar? fillColor = null)
         {
             depthStats = default;
             Debug.WriteLine($"Bricj thickness: {brickThickness}");
@@ -1512,12 +1498,6 @@ namespace ImgViewer.Models
             double pageB = meanB.Val0;
             double pageLStd = Math.Max(4.0, stdL.Val0);
 
-            // TODO: MOVE THIS PARAMETRS OUT TO UI!!!!!!!!!!!!!!!!!!!!!
-
-            // "сильный" бордюр (seed)
-            //double colorDistStrongThr = 8.0 + 0.3 * pageLStd;
-            //double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd);
-            //double textureThr = pageLStd * 0.7;
 
             seedContrastFactor = Math.Max(0.3, Math.Min(3.0, seedContrastFactor));
             seedBrightnessFactor = Math.Max(0.3, Math.Min(3.0, seedBrightnessFactor));
@@ -1527,14 +1507,6 @@ namespace ImgViewer.Models
             double LDiffStrongThr = Math.Max(4.0, 0.8 * pageLStd) * seedBrightnessFactor;
             double textureThr = (pageLStd * 0.7) * textureAllowanceFactor;
 
-            //int maxDepth = Math.Min(Math.Min(rows, cols) / 3, brickThickness * 16);
-            //maxDepth = Math.Max(brickThickness, maxDepth);
-            //int maxDepth = ComputeMaxBorderDepth(rows, cols, brickThickness);
-            //int maxDepthX = ComputeMaxBorderDepthHorizontal(cols, brickThickness);
-            //int maxDepthY = ComputeMaxBorderDepthVertical(rows, brickThickness);
-
-            //int maxDepthCapX = ComputeMaxBorderDepthHorizontal(cols, brickThickness); // keep as safety cap
-            //int maxDepthCapY = ComputeMaxBorderDepthVertical(rows, brickThickness);   // keep as safety cap
             int maxDepthCapX = cols / 2;
             int maxDepthCapY = rows / 2;
 
@@ -1744,10 +1716,6 @@ namespace ImgViewer.Models
                 }
                 if (wRight > 0)
                 {
-                    //var rect = new Rect(cols - wRight, y0, wRight, bandH);
-                    //using var roi = new Mat(borderMask, rect);
-                    //roi.SetTo(255);
-                    // interate rightDepth array for later smoothing
                     for (int y = y0; y < y1; y++)
                     {
                         if (y >= 0 && y < rows)

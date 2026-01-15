@@ -433,7 +433,7 @@ namespace ImgViewer.Models
             {
                 await Task.Run(() =>
                 {
-                    _imageProcessor.ApplyCommand(
+                    _imageProcessor.TryApplyCommand(
                                             command,
                                             parameters,
                                             batchProcessing: false);

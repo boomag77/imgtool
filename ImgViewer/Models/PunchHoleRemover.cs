@@ -91,7 +91,6 @@ public static class PunchHoleRemover
                 gray.CopyTo(maskedGray, searchMask);
 
 
-                /// ??????
                 if (maskedGray.Type() != MatType.CV_8UC1)
                 {
                     var tmp = new Mat();
@@ -100,7 +99,6 @@ public static class PunchHoleRemover
                     maskedGray = tmp;
                 }
 
-                // ???????
 
                 // если по маске вообще нет данных — смысла вызывать Hough нет
                 if (Cv2.CountNonZero(maskedGray) == 0)

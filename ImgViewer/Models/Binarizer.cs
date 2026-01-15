@@ -105,29 +105,15 @@ namespace ImgViewer.Models
 
         }
 
-        private static Mat BinarizeThreshold(Mat src, int threshold = 128)
+        private static Mat BinarizeThreshold(Mat gray, int threshold = 128)
         {
-
-            //var gray = Helper.MatToGray(src);
             var bin = new Mat();
-
-
-            Cv2.Threshold(src, bin, threshold, 255, ThresholdTypes.Binary);
-
-            // Конвертируем обратно в BGR — тогда весь pipeline, ожидающий 3 канала, продолжит работать
-            //var color = new Mat();
-            //Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
-
+            Cv2.Threshold(gray, bin, threshold, 255, ThresholdTypes.Binary);
             return bin;
         }
 
         private static Mat Sauvola(Mat src, int windowSize = 25, double k = 0.34, double R = 180.0, int pencilStrokeBoost = 0)
         {
-
-            //using Mat gray = Helper.MatToGray(src);
-            
-
-
             if (windowSize % 2 == 0) windowSize++; // ensure odd
 
             // Convert to double for precision
@@ -180,17 +166,15 @@ namespace ImgViewer.Models
 
         private static Mat SauvolaBinarize(Mat src, BinarizeParameters p)
         {
-
-            //Debug.WriteLine($"clahe grid size {p.SauvolaClaheGridSize}");
             var binMat = BinarizeForHandwritten(src,
-                                                      p.SauvolaUseClahe,
-                                                      p.SauvolaClaheClip,
-                                                      p.SauvolaClaheGridSize,
-                                                      p.SauvolaWindowSize,
-                                                      p.SauvolaK,
-                                                      p.SauvolaR,
-                                                      p.SauvolaMorphRadius,
-                                                      p.PencilStrokeBoost);
+                                                p.SauvolaUseClahe,
+                                                p.SauvolaClaheClip,
+                                                p.SauvolaClaheGridSize,
+                                                p.SauvolaWindowSize,
+                                                p.SauvolaK,
+                                                p.SauvolaR,
+                                                p.SauvolaMorphRadius,
+                                                p.PencilStrokeBoost);
 
             return binMat;
 
