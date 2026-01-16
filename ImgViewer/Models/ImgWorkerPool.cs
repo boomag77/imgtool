@@ -439,9 +439,9 @@ namespace ImgViewer.Models
 
             foreach (var move in pendingMoves)
             {
-                if (File.Exists(move.Final))
-                    File.Delete(move.Final);
-                File.Move(move.Temp, move.Final);
+                //if (File.Exists(move.Final))
+                //    File.Delete(move.Final);
+                File.Move(move.Temp, move.Final, overwrite: true);
             }
         }
 
@@ -457,9 +457,9 @@ namespace ImgViewer.Models
             Cv2.ImEncode(encodeExt, mat, out var buffer);
             var tempPath = finalPath + ".tmp";
             File.WriteAllBytes(tempPath, buffer);
-            if (File.Exists(finalPath))
-                File.Delete(finalPath);
-            File.Move(tempPath, finalPath);
+            //if (File.Exists(finalPath))
+            //    File.Delete(finalPath);
+            File.Move(tempPath, finalPath, overwrite: true);
         }
 
 
@@ -497,8 +497,6 @@ namespace ImgViewer.Models
             _disposed = true;
 
             try { _tokenRegistration.Dispose(); } catch { }
-            //try { _filesQueue?.Dispose(); } catch { }
-            //try { _saveQueue?.Dispose(); } catch { }
         }
 
         IEnumerable<string> EnumerateImages(string folder)
@@ -523,7 +521,6 @@ namespace ImgViewer.Models
                         _token.ThrowIfCancellationRequested();
                         try { File.Delete(file); } catch { /* log if needed */ }
                     }
-
 
                 }
 
@@ -564,7 +561,7 @@ namespace ImgViewer.Models
             catch (OperationCanceledException)
             {
 #if DEBUG
-                Debug.WriteLine("EnqueueFiles cancelled by token");
+                //Debug.WriteLine("EnqueueFiles cancelled by token");
 #endif
             }
             catch (Exception ex)
@@ -682,7 +679,7 @@ namespace ImgViewer.Models
             catch (OperationCanceledException)
             {
 #if DEBUG
-                Debug.WriteLine("ImageSaverWorker cancelled!");
+                //Debug.WriteLine("ImageSaverWorker cancelled!");
 #endif
                 throw;
 
