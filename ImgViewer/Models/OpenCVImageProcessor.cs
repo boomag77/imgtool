@@ -1568,15 +1568,12 @@ namespace ImgViewer.Models
                                             debugMask.Dispose();
                                             debugOverlay.Dispose();
                                             return resultDDC;
-                                            break;
                                         case "EAST":
-                                            //return SmartCrop(src);
                                             return SmartCrop(
                                                 src,
                                                 tds,
                                                 eastDebug
                                             );
-                                            break;
                                     }
                                 }
                             }
@@ -1657,14 +1654,10 @@ namespace ImgViewer.Models
                             mask.Dispose();
                             return resultLR;
 
-
-                            break;
                         case ProcessorCommand.DotsRemove:
                             return src.Clone();
-                            break;
                         case ProcessorCommand.ChannelsCorrection:
                             return src.Clone();
-                            break;
                         case ProcessorCommand.PunchHolesRemove:
 
                             Debug.WriteLine("Starting Punch removing");
@@ -2150,13 +2143,6 @@ namespace ImgViewer.Models
                     return CutByAverageDepth(src, depthStats);
                 return result;
             }
-            catch (OperationCanceledException) when (!batchProcessing)
-            {
-#if DEBUG
-                Debug.WriteLine("Document Detection cancelled (UI)!");
-#endif
-                return src.Clone();
-            }
             catch (OperationCanceledException)
             {
 #if DEBUG
@@ -2166,9 +2152,8 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"Error in ApplyCommand: {ex}");
-#endif
+                ErrorOccured?.Invoke($"Error in Integral Border Removal: {ex.Message}");
+                //Debug.WriteLine($"Error in ApplyCommand: {ex}");
                 return src.Clone();
             }
         }

@@ -15,15 +15,13 @@ public class Despeckler
                                         bool inputIsBinary = false,
                                         bool applyMaskToSource = true)    // <-- new parameter
     {
-        //Debug.WriteLine($"Small Area mult: {settings.SmallAreaMultiplier}");
-        //Debug.WriteLine($"Radius fraction: {settings.ProximityRadiusFraction}");
         var startTime = DateTime.Now;
         try
         {
             token.ThrowIfCancellationRequested();
 
             if (src == null) throw new ArgumentNullException(nameof(src));
-            if (src.Empty()) return src.Clone(); // TODO: check if this is correct
+            if (src.Empty()) return new Mat(); // TODO: check if this is correct
 
             // helpers
             static int ClampInt(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
@@ -406,15 +404,6 @@ public class Despeckler
                         }
                     }
 
-                    // --- 1. минимальная дистанция до крупных компонент (bigBoxes) ---
-                    //double minDistToBig = double.MaxValue;
-                    //foreach (var br in bigBoxes)
-                    //{
-                    //    double d = DistPointToRect(center, br);
-                    //    if (d < minDistToBig) minDistToBig = d;
-                    //}
-                    //bool nearBig = minDistToBig < proximityRadius;
-
 
 
                     double minD2 = double.MaxValue;
@@ -456,22 +445,6 @@ public class Despeckler
 
                     bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
 
-                    //bool partOfCluster = false;
-                    //if (settings.KeepClusters)
-                    //{
-                    //    foreach (var c2 in smallComps)
-                    //    {
-                    //        if (c2.label == c.label) continue;
-
-                    //        var c2Center = Center(c2.bbox);
-                    //        if (Math.Abs(c2Center.Y - center.Y) <= rowCheckRange &&
-                    //            Math.Abs(c2Center.X - center.X) <= clusterHoriz)
-                    //        {
-                    //            partOfCluster = true;
-                    //            break;
-                    //        }
-                    //    }
-                    //}
                     bool partOfCluster = false;
 
                     if (buckets != null) // значит KeepClusters == true и индекс построен
@@ -528,48 +501,6 @@ public class Despeckler
                     {
                         toRemoveLabels.Add(c.label);
                     }
-                    //token.ThrowIfCancellationRequested();
-                    //var rect = c.bbox;
-                    //var center = Center(rect);
-
-                    //double minDistToBig = double.MaxValue;
-                    //foreach (var br in bigBoxes)
-                    //{
-                    //    double d = DistPointToRect(center, br);
-                    //    if (d < minDistToBig) minDistToBig = d;
-                    //}
-                    //bool nearBig = minDistToBig < proximityRadius;
-
-                    //bool onTextLine = false;
-                    //for (int ry = Math.Max(0, center.Y - rowCheckRange); ry <= Math.Min(binRows - 1, center.Y + rowCheckRange); ry++)
-                    //{
-                    //    if (textRows.Contains(ry)) { onTextLine = true; break; }
-                    //}
-
-                    //bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
-
-                    //bool partOfCluster = false;
-                    //if (settings.KeepClusters)
-                    //{
-                    //    foreach (var c2 in smallComps)
-                    //    {
-                    //        if (c2.label == c.label) continue;
-                    //        if (Math.Abs(Center(c2.bbox).Y - center.Y) <= rowCheckRange &&
-                    //            Math.Abs(Center(c2.bbox).X - center.X) <= clusterHoriz)
-                    //        {
-                    //            partOfCluster = true;
-                    //            break;
-                    //        }
-                    //    }
-                    //}
-
-                    //if (nearBig || (onTextLine && squareLike) || partOfCluster)
-                    //{
-                    //    toKeepLabels.Add(c.label);
-                    //    continue;
-                    //}
-
-                    //toRemoveLabels.Add(c.label);
                 }
                 Debug.WriteLine(
                    $"Despeckle: comps={comps.Count}, small={smallComps.Length}, toRemove={toRemoveLabels.Count}"
@@ -580,54 +511,6 @@ public class Despeckler
 
                 using var removeMask = new Mat(bin.Size(), MatType.CV_8UC1, Scalar.All(0)); // will accumulate removed pixels
 
-                //if (toRemoveLabels.Count > 0)
-                //{
-                //    // быстрая проверка принадлежности метки к списку удаляемых
-                //    var toRemoveSet = new HashSet<int>(toRemoveLabels);
-
-                //    // безопасный доступ к данным labels и removeMask
-                //    var labelsIdx = labels.GetGenericIndexer<int>();   // labels: CV_32SC1
-                //    var maskIdx = removeMask.GetGenericIndexer<byte>(); // removeMask: CV_8UC1
-
-                //    for (int y = 0; y < labels.Rows; y++)
-                //    {
-                //        // периодически даём возможность отмены
-                //        if ((y & 31) == 0)
-                //            token.ThrowIfCancellationRequested();
-
-                //        for (int x = 0; x < labels.Cols; x++)
-                //        {
-                //            int lbl = labelsIdx[y, x];
-                //            if (toRemoveSet.Contains(lbl))
-                //            {
-                //                maskIdx[y, x] = 255; // помечаем пиксель на удаление
-                //            }
-                //        }
-                //    }
-                //}
-                //if (toRemoveLabels.Count > 0)
-                //{
-                //    // LUT вместо HashSet.Contains() в пиксельном цикле
-                //    var removeLut = new bool[nLabels];
-                //    foreach (var lbl in toRemoveLabels)
-                //        if ((uint)lbl < (uint)nLabels)
-                //            removeLut[lbl] = true;
-
-                //    var labelsIdx = labels.GetGenericIndexer<int>();    // labels: CV_32SC1
-                //    var maskIdx = removeMask.GetGenericIndexer<byte>(); // removeMask: CV_8UC1
-
-                //    for (int y = 0; y < labels.Rows; y++)
-                //    {
-                //        if ((y & 31) == 0) token.ThrowIfCancellationRequested();
-
-                //        for (int x = 0; x < labels.Cols; x++)
-                //        {
-                //            int lbl = labelsIdx[y, x];
-                //            if ((uint)lbl < (uint)removeLut.Length && removeLut[lbl])
-                //                maskIdx[y, x] = 255;
-                //        }
-                //    }
-                //}
 
                 if (toRemoveLabels.Count > 0)
                 {
@@ -806,7 +689,6 @@ public class Despeckler
             var elapsed = DateTime.Now - startTime;
             Debug.WriteLine($"Despeckler: elapsed {elapsed.TotalMilliseconds} ms");
         }
-        return null;
     }
 
     public static Mat DespeckleEffective(
