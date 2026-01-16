@@ -155,6 +155,32 @@ public class Despeckler
                 }
 
                 // Now we have 'bin' as CV_8UC1 where text == 255, background == 0
+                if (settings.EnableDustRemoval)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int medianK = Math.Max(1, settings.DustMedianKsize);
+                    if (medianK % 2 == 0) medianK += 1;
+
+                    int openK = Math.Max(1, settings.DustOpenKernel);
+                    if (openK % 2 == 0) openK += 1;
+
+                    int openIter = Math.Max(1, settings.DustOpenIter);
+
+                    var dustBin = bin.Clone();
+                    if (medianK > 1)
+                        Cv2.MedianBlur(dustBin, dustBin, medianK);
+
+                    if (openK > 1)
+                    {
+                        using var dustKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(openK, openK));
+                        Cv2.MorphologyEx(dustBin, dustBin, MorphTypes.Open, dustKernel, iterations: openIter);
+                    }
+
+                    if (localBinCreated)
+                        bin.Dispose();
+                    bin = dustBin;
+                    localBinCreated = true;
+                }
 
                 token.ThrowIfCancellationRequested();
                 // Mask of original text pixels: 255 where bin == 255
@@ -330,6 +356,55 @@ public class Despeckler
                     var c = smallComps[i];
                     var rect = c.bbox;
                     var center = smallCenters[i];
+                    if (settings.EnableDustShapeFilter)
+                    {
+                        double minSolidity = ClampDouble(settings.DustMinSolidity, 0.05, 1.0);
+                        double maxAspect = ClampDouble(settings.DustMaxAspectRatio, 1.0, 20.0);
+
+                        double aspect = rect.Height <= 0 ? maxAspect : (double)rect.Width / rect.Height;
+                        if (aspect < 1.0) aspect = 1.0 / aspect;
+
+                        if (aspect >= maxAspect)
+                        {
+                            toRemoveLabels.Add(c.label);
+                            continue;
+                        }
+
+                        using var compMask = new Mat(rect.Height, rect.Width, MatType.CV_8UC1, Scalar.All(0));
+                        for (int yy = rect.Top; yy < rect.Bottom; yy++)
+                        {
+                            if ((yy & 31) == 0) token.ThrowIfCancellationRequested();
+                            for (int xx = rect.Left; xx < rect.Right; xx++)
+                            {
+                                if (labels.Get<int>(yy, xx) == c.label)
+                                    compMask.Set<byte>(yy - rect.Top, xx - rect.Left, 255);
+                            }
+                        }
+
+                        Cv2.FindContours(compMask, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+                        if (contours != null && contours.Length > 0)
+                        {
+                            double maxArea = 0;
+                            int maxIdx = -1;
+                            for (int ci = 0; ci < contours.Length; ci++)
+                            {
+                                double area = Cv2.ContourArea(contours[ci]);
+                                if (area > maxArea) { maxArea = area; maxIdx = ci; }
+                            }
+
+                            if (maxIdx >= 0)
+                            {
+                                var hull = Cv2.ConvexHull(contours[maxIdx]);
+                                double hullArea = Math.Max(1.0, Cv2.ContourArea(hull));
+                                double solidity = c.area / hullArea;
+                                if (solidity <= minSolidity)
+                                {
+                                    toRemoveLabels.Add(c.label);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
 
                     // --- 1. минимальная дистанция до крупных компонент (bigBoxes) ---
                     //double minDistToBig = double.MaxValue;
@@ -732,6 +807,400 @@ public class Despeckler
             Debug.WriteLine($"Despeckler: elapsed {elapsed.TotalMilliseconds} ms");
         }
         return null;
+    }
+
+    public static Mat DespeckleEffective(
+                                        CancellationToken token,
+                                        Mat src,
+                                        DespeckleSettings? settings = null,
+                                        bool debug = false,
+                                        bool inputIsBinary = false,
+                                        bool applyMaskToSource = true)
+    {
+        var startTime = DateTime.Now;
+        try
+        {
+            token.ThrowIfCancellationRequested();
+
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return src.Clone();
+
+            static int ClampInt(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+            static double ClampDouble(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v);
+
+            settings ??= new DespeckleSettings();
+
+            Mat bin = null!;
+            bool localBinCreated = false;
+
+            try
+            {
+                if (inputIsBinary)
+                {
+                    Mat grayBin = new Mat();
+                    if (src.Channels() == 1)
+                    {
+                        src.CopyTo(grayBin);
+                    }
+                    else if (src.Channels() == 3)
+                    {
+                        Cv2.CvtColor(src, grayBin, ColorConversionCodes.BGR2GRAY);
+                    }
+                    else if (src.Channels() == 4)
+                    {
+                        Cv2.CvtColor(src, grayBin, ColorConversionCodes.BGRA2GRAY);
+                    }
+                    else
+                    {
+                        throw new ArgumentException("inputIsBinary == true requires 1, 3 or 4 channel image.");
+                    }
+
+                    token.ThrowIfCancellationRequested();
+                    double white = Cv2.CountNonZero(grayBin);
+                    double total = grayBin.Rows * grayBin.Cols;
+                    if (white >= total / 2.0)
+                        Cv2.BitwiseNot(grayBin, grayBin);
+                    bin = grayBin;
+                    localBinCreated = true;
+                }
+                else
+                {
+                    token.ThrowIfCancellationRequested();
+                    Mat gray = new Mat();
+                    if (src.Channels() == 1)
+                    {
+                        src.CopyTo(gray);
+                    }
+                    else if (src.Channels() == 3)
+                    {
+                        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+                    }
+                    else if (src.Channels() == 4)
+                    {
+                        Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
+                    }
+                    else
+                    {
+                        throw new ArgumentException("Unsupported image format.");
+                    }
+
+                    Mat binLocal = new Mat();
+                    int grayCols = gray.Cols;
+                    if (grayCols > 0 && grayCols < 1200)
+                    {
+                        using var bg = new Mat();
+                        Cv2.GaussianBlur(gray, bg, new Size(41, 41), 0);
+                        using var corr = new Mat();
+                        Cv2.Absdiff(gray, bg, corr);
+                        using var denoised = new Mat();
+                        Cv2.GaussianBlur(corr, denoised, new Size(3, 3), 0);
+                        Cv2.Threshold(denoised, binLocal, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+                        double whitePixels = Cv2.CountNonZero(binLocal);
+                        double total = binLocal.Rows * binLocal.Cols;
+                        if (whitePixels >= total / 2.0)
+                            Cv2.BitwiseNot(binLocal, binLocal);
+                    }
+                    else
+                    {
+                        int blockSize = ClampInt(grayCols / 40, 11, 101) | 1;
+                        int c = 14;
+                        Cv2.AdaptiveThreshold(gray, binLocal, 255,
+                            AdaptiveThresholdTypes.GaussianC,
+                            ThresholdTypes.Binary,
+                            blockSize, c);
+
+                        double whitePixels = Cv2.CountNonZero(binLocal);
+                        double total = binLocal.Rows * binLocal.Cols;
+                        if (whitePixels >= total / 2.0)
+                            Cv2.BitwiseNot(binLocal, binLocal);
+                    }
+
+                    gray.Dispose();
+                    bin = binLocal;
+                    localBinCreated = true;
+                }
+
+                if (settings.EnableDustRemoval)
+                {
+                    token.ThrowIfCancellationRequested();
+                    int medianK = Math.Max(1, settings.DustMedianKsize);
+                    if (medianK % 2 == 0) medianK += 1;
+
+                    int openK = Math.Max(1, settings.DustOpenKernel);
+                    if (openK % 2 == 0) openK += 1;
+
+                    int openIter = Math.Max(1, settings.DustOpenIter);
+
+                    var dustBin = bin.Clone();
+                    if (medianK > 1)
+                        Cv2.MedianBlur(dustBin, dustBin, medianK);
+
+                    if (openK > 1)
+                    {
+                        using var dustKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(openK, openK));
+                        Cv2.MorphologyEx(dustBin, dustBin, MorphTypes.Open, dustKernel, iterations: openIter);
+                    }
+
+                    if (localBinCreated)
+                        bin.Dispose();
+                    bin = dustBin;
+                    localBinCreated = true;
+                }
+
+                token.ThrowIfCancellationRequested();
+                using var textMask = new Mat();
+                Cv2.InRange(bin, new Scalar(255), new Scalar(255), textMask);
+
+                Mat labelingMat = bin.Clone();
+                if (settings.UseDilateBeforeCC && settings.DilateIter > 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                    Mat k;
+                    switch (settings.DilateKernel)
+                    {
+                        case "3x1": k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 1)); break;
+                        case "3x3": k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3)); break;
+                        default: k = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3)); break;
+                    }
+                    var tmp = new Mat();
+                    Cv2.Dilate(labelingMat, tmp, k, iterations: settings.DilateIter);
+                    labelingMat.Dispose();
+                    k.Dispose();
+                    labelingMat = tmp;
+                }
+
+                using var labels = new Mat();
+                using var stats = new Mat();
+                using var centroids = new Mat();
+                token.ThrowIfCancellationRequested();
+                int nLabels = Cv2.ConnectedComponentsWithStats(labelingMat, labels, stats, centroids, PixelConnectivity.Connectivity8, MatType.CV_32S);
+
+                if (nLabels <= 1)
+                {
+                    labelingMat.Dispose();
+                    var retEmpty = applyMaskToSource ? src.Clone() : bin.Clone();
+                    return retEmpty;
+                }
+
+                var heights = new List<int>(nLabels - 1);
+                for (int lbl = 1; lbl < nLabels; lbl++)
+                {
+                    heights.Add(stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Height));
+                }
+
+                int medianHeight = 20;
+                if (heights.Count > 0)
+                {
+                    var ordered = heights.Where(h => h >= 3).OrderBy(h => h).ToArray();
+                    medianHeight = ordered.Length > 0 ? ordered[ordered.Length / 2] : 20;
+                }
+
+                int smallAreaThrPx = settings.SmallAreaRelative
+                    ? Math.Max(1, (int)Math.Round(settings.SmallAreaMultiplier * medianHeight * medianHeight))
+                    : Math.Max(1, settings.SmallAreaAbsolutePx);
+
+                int maxDotHeight = Math.Max(1, (int)Math.Round(settings.MaxDotHeightFraction * medianHeight));
+                double rowCheckRange = Math.Max(1.0, settings.ProximityRadiusFraction * medianHeight);
+                double squarenessTolerance = ClampDouble(settings.SquarenessTolerance, 0.0, 1.0);
+
+                int binRows = bin.Rows;
+                int binCols = bin.Cols;
+
+                using var projSum = new Mat();
+                Cv2.Reduce(bin, projSum, dim: ReduceDimension.Column, rtype: ReduceTypes.Sum, dtype: MatType.CV_32S);
+                var horProj = new int[binRows];
+                for (int y = 0; y < binRows; y++)
+                {
+                    if ((y & 63) == 0) token.ThrowIfCancellationRequested();
+                    horProj[y] = projSum.Get<int>(y, 0) / 255;
+                }
+
+                int projThr = Math.Max(10, binCols / 40);
+                var textRowFlags = new bool[binRows];
+                for (int y = 0; y < binRows; y++)
+                    textRowFlags[y] = horProj[y] > projThr;
+
+                var removeLut = new bool[nLabels];
+                for (int lbl = 1; lbl < nLabels; lbl++)
+                {
+                    if ((lbl & 127) == 0) token.ThrowIfCancellationRequested();
+
+                    int left = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Left);
+                    int top = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Top);
+                    int width = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Width);
+                    int height = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Height);
+                    int area = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Area);
+
+                    if (width <= 0 || height <= 0)
+                        continue;
+
+                    bool isSmall = area < smallAreaThrPx || height <= maxDotHeight;
+                    if (!isSmall)
+                        continue;
+
+                    int cy = top + height / 2;
+                    bool onTextLine = false;
+                    int r0 = Math.Max(0, (int)Math.Round(cy - rowCheckRange));
+                    int r1 = Math.Min(binRows - 1, (int)Math.Round(cy + rowCheckRange));
+                    for (int ry = r0; ry <= r1; ry++)
+                    {
+                        if (textRowFlags[ry]) { onTextLine = true; break; }
+                    }
+
+                    bool squareLike = Math.Abs(width - height) <= Math.Max(1, height * squarenessTolerance);
+                    if (settings.KeepClusters && onTextLine && squareLike)
+                        continue;
+
+                    if (settings.EnableDustShapeFilter)
+                    {
+                        double minSolidity = ClampDouble(settings.DustMinSolidity, 0.05, 1.0);
+                        double maxAspect = ClampDouble(settings.DustMaxAspectRatio, 1.0, 20.0);
+
+                        double aspect = height <= 0 ? maxAspect : (double)width / height;
+                        if (aspect < 1.0) aspect = 1.0 / aspect;
+                        if (aspect >= maxAspect)
+                        {
+                            removeLut[lbl] = true;
+                            continue;
+                        }
+
+                        using var compMask = new Mat(height, width, MatType.CV_8UC1, Scalar.All(0));
+                        for (int yy = top; yy < top + height; yy++)
+                        {
+                            if ((yy & 31) == 0) token.ThrowIfCancellationRequested();
+                            for (int xx = left; xx < left + width; xx++)
+                            {
+                                if (labels.Get<int>(yy, xx) == lbl)
+                                    compMask.Set<byte>(yy - top, xx - left, 255);
+                            }
+                        }
+
+                        Cv2.FindContours(compMask, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+                        if (contours != null && contours.Length > 0)
+                        {
+                            double maxArea = 0;
+                            int maxIdx = -1;
+                            for (int ci = 0; ci < contours.Length; ci++)
+                            {
+                                double cArea = Cv2.ContourArea(contours[ci]);
+                                if (cArea > maxArea) { maxArea = cArea; maxIdx = ci; }
+                            }
+
+                            if (maxIdx >= 0)
+                            {
+                                var hull = Cv2.ConvexHull(contours[maxIdx]);
+                                double hullArea = Math.Max(1.0, Cv2.ContourArea(hull));
+                                double solidity = area / hullArea;
+                                if (solidity <= minSolidity)
+                                {
+                                    removeLut[lbl] = true;
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    removeLut[lbl] = true;
+                }
+
+                using var removeMask = new Mat(bin.Size(), MatType.CV_8UC1, Scalar.All(0));
+                var po = new ParallelOptions
+                {
+                    CancellationToken = token,
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                };
+
+                unsafe
+                {
+                    int rows = labels.Rows;
+                    int cols = labels.Cols;
+
+                    int* labelsPtr = (int*)labels.DataPointer;
+                    long labelsStep = labels.Step() / sizeof(int);
+
+                    byte* maskPtr = (byte*)removeMask.DataPointer;
+                    long maskStep = removeMask.Step();
+
+                    Parallel.For(0, rows, po, y =>
+                    {
+                        int* lrow = labelsPtr + y * labelsStep;
+                        byte* mrow = maskPtr + y * maskStep;
+
+                        for (int x = 0; x < cols; x++)
+                        {
+                            int lbl = lrow[x];
+                            if ((uint)lbl < (uint)removeLut.Length && removeLut[lbl])
+                                mrow[x] = 255;
+                        }
+                    });
+                }
+
+                using var intersect = new Mat();
+                Cv2.BitwiseAnd(removeMask, textMask, intersect);
+
+                Mat cleanedBinary = bin.Clone();
+                cleanedBinary.SetTo(new Scalar(0), intersect);
+
+                if (applyMaskToSource)
+                {
+                    token.ThrowIfCancellationRequested();
+                    Mat outMat;
+
+                    if (src.Channels() == 1)
+                    {
+                        Mat srcGray = new Mat();
+                        if (src.Type() != MatType.CV_8UC1)
+                        {
+                            Cv2.CvtColor(src, srcGray,
+                                src.Channels() == 4 ? ColorConversionCodes.BGRA2GRAY : ColorConversionCodes.BGR2GRAY);
+                            outMat = srcGray;
+                        }
+                        else
+                        {
+                            outMat = src.Clone();
+                            srcGray.Dispose();
+                        }
+
+                        outMat.SetTo(new Scalar(255), intersect);
+                        return outMat;
+                    }
+
+                    Mat srcColor = new Mat();
+                    if (src.Channels() == 3)
+                        src.CopyTo(srcColor);
+                    else if (src.Channels() == 4)
+                        Cv2.CvtColor(src, srcColor, ColorConversionCodes.BGRA2BGR);
+                    else
+                        Cv2.CvtColor(src, srcColor, ColorConversionCodes.GRAY2BGR);
+
+                    srcColor.SetTo(new Scalar(255, 255, 255), intersect);
+                    return srcColor;
+                }
+
+                return cleanedBinary;
+            }
+            finally
+            {
+                if (localBinCreated && bin != null && !bin.IsDisposed)
+                    bin.Dispose();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("Despeckler(Eff): cancelled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Despeckler(Eff) failed: {ex}");
+            return src.Clone();
+        }
+        finally
+        {
+            var elapsed = DateTime.Now - startTime;
+            Debug.WriteLine($"Despeckler(Eff): elapsed {elapsed.TotalMilliseconds} ms");
+        }
     }
 
 }

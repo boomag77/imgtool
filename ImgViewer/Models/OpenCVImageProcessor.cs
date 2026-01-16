@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using static ImgViewer.Models.BordersRemover;
 
 namespace ImgViewer.Models
 {
@@ -44,58 +45,52 @@ namespace ImgViewer.Models
             {
                 if (value == null || value.Empty()) return;
                 Mat old;
-                Mat? previewSnap = null;
+                var previewSnap = new Mat();
                 lock (_imageLock)
                 {
                     old = _currentImage;
                     _currentImage = value;
                     if (_appManager != null)
-                        //previewSnap = new Mat(value, new Rect(0, 0, value.Cols, value.Rows));
                         previewSnap = value.Clone();
                 }
                 old?.Dispose();
-                if (_appManager == null) { previewSnap?.Dispose(); return; }
+                if (_appManager == null) { previewSnap.Dispose(); return; }
                 try
                 {
                     _appManager.SetBmpImageOnPreview(MatToBitmapSource(previewSnap));
                 }
                 finally
                 {
-                    previewSnap?.Dispose();
+                    previewSnap.Dispose();
                 }
 
             }
         }
 
-        //Mat Load(byte[] rawPixels) => Cv2.ImDecode(rawPixels, ImreadModes.Color);
-        //Mat Load(ReadOnlySpan<byte> rawPixels)
+
+        //Mat Load(BitmapSource bmp) => BitmapSourceToMat(bmp);
+
+        //public void SetSpanData(ReadOnlySpan<byte> rawPixels)
         //{
-        //    Cv2.ImDecode(rawPixels, ImreadModes.Color);
+        //    try
+        //    {
+        //        ClearSplitResults();
+        //        Mat? mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
+        //        if (mat == null || mat.Empty())
+        //        {
+        //            mat?.Dispose();
+        //            return;
+        //        }
+        //        WorkingImage = mat;
+        //    }
+        //    catch (OperationCanceledException)
+        //    {
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        ErrorOccured?.Invoke($"Failed to set Current Image from span: {ex.Message}");
+        //    }
         //}
-            
-        Mat Load(BitmapSource bmp) => BitmapSourceToMat(bmp);
-
-        public void SetSpanData(ReadOnlySpan<byte> rawPixels)
-        {
-            try
-            {
-                ClearSplitResults();
-                Mat? mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
-                if (mat == null || mat.Empty())
-                {
-                    mat?.Dispose();
-                    return;
-                }
-                WorkingImage = mat;
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                ErrorOccured?.Invoke($"Failed to set Current Image from span: {ex.Message}");
-            }
-        }
 
         public object CurrentImage
         {
@@ -182,12 +177,12 @@ namespace ImgViewer.Models
 
         }
 
-        private byte[] RentBinaryBuffer(int size)
-        {
-            if (_binaryBuffer == null || _binaryBuffer.Length < size)
-                _binaryBuffer = new byte[size];
-            return _binaryBuffer;
-        }
+        //private byte[] RentBinaryBuffer(int size)
+        //{
+        //    if (_binaryBuffer == null || _binaryBuffer.Length < size)
+        //        _binaryBuffer = new byte[size];
+        //    return _binaryBuffer;
+        //}
 
         private Mat BitmapSourceToMat(BitmapSource src)
         {
@@ -342,7 +337,7 @@ namespace ImgViewer.Models
 
         public bool TryGetStreamForSave(ImageFormat imageFormat, out MemoryStream? ms, out string error)
         {
-            
+
             var img = WorkingImage; // clone for thread safety
             if (img == null || img.Empty())
             {
@@ -385,88 +380,6 @@ namespace ImgViewer.Models
             }
             return true;
         }
-
-        //public Stream? GetStreamForSaving(ImageFormat format, TiffCompression? compression = null)
-        //{
-
-        //    using var img = WorkingImage; // clone for thread safety
-        //    if (img == null || img.Empty())
-        //        throw new InvalidOperationException("Can't create stream for saving: WorkingImage is null or empty");
-
-        //    using var bin = new Mat();
-        //    if (img.Type() != MatType.CV_8UC1)
-        //    {
-        //        // convert to binary for TIFF saving
-        //        using var gray = new Mat();
-        //        Cv2.CvtColor(img, gray, ColorConversionCodes.BGR2GRAY);
-        //        Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-        //        // make stream from bin
-
-        //    }
-           
-        //    if (format == ImageFormat.Tiff)
-        //    {
-        //        var paramsList = new List<int>();
-        //        switch (compression)
-        //        {
-        //            case TiffCompression.None:
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.None);
-        //                break;
-        //            case TiffCompression.CCITTG4:
-        //                if (img.Channels() != 1)
-        //                {
-        //                    // для G4 нужно 1-битное изображение
-        //                    //using var gray = new Mat();
-        //                    //Cv2.CvtColor(_currentImage, gray, ColorConversionCodes.BGR2GRAY);
-        //                    //_currentImage = gray.Clone();
-        //                    //using var bin = new Mat();
-        //                    //Cv2.Threshold(gray, bin, 128, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-        //                    //_currentImage = bin.Clone();
-        //                    //if (_currentImage.Type() != MatType.CV_8UC1)
-        //                    //    _currentImage.ConvertTo(_currentImage, MatType.CV_8UC1);
-        //                }
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.CCITTG4);
-        //                break;
-        //            case TiffCompression.CCITTG3:
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.CCITTG3);
-        //                break;
-        //            case TiffCompression.LZW:
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.LZW);
-        //                break;
-        //            case TiffCompression.Deflate:
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.Deflate);
-        //                break;
-        //            case TiffCompression.JPEG:
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.JPEG);
-        //                break;
-        //            case TiffCompression.PackBits:
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.PackBits);
-        //                break;
-        //            default:
-        //                // default to None
-        //                paramsList.Add((int)ImwriteFlags.TiffCompression);
-        //                paramsList.Add((int)TiffCompression.None);
-        //                break;
-        //        }
-        //        //byte[] tiffData = _currentImage.ImEncode(".tiff", paramsList.ToArray());
-        //        //byte[] pngData = img.ImEncode(".png");
-        //        //return new MemoryStream(pngData);
-        //        byte[] bmpData = bin.ImEncode(".bmp");
-        //        return new MemoryStream(bmpData);
-        //    }
-        //    else
-        //    {
-        //        // для других форматов просто PNG
-        //        return MatToStream(bin);
-        //    }
-        //}
 
 
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi)
@@ -513,7 +426,7 @@ namespace ImgViewer.Models
             return tiffInfo;
         }
 
-        private (byte[] pixels,  int width, int height, int bitsPerPixel) GetPixelsFromMat()
+        private (byte[] pixels, int width, int height, int bitsPerPixel) GetPixelsFromMat()
         {
 
             using var src = WorkingImage; // cloned
@@ -956,20 +869,20 @@ namespace ImgViewer.Models
         }
 
 
-        private void ApplyBinarize(BinarizeMethod method, BinarizeParameters parameters)
-        {
-            switch (method)
-            {
-                case BinarizeMethod.Threshold:
-                    break;
-                case BinarizeMethod.Adaptive:
-                    break;
-                case BinarizeMethod.Sauvola:
-                    break;
-                case BinarizeMethod.Majority:
-                    break;
-            }
-        }
+        //private void ApplyBinarize(BinarizeMethod method, BinarizeParameters parameters)
+        //{
+        //    switch (method)
+        //    {
+        //        case BinarizeMethod.Threshold:
+        //            break;
+        //        case BinarizeMethod.Adaptive:
+        //            break;
+        //        case BinarizeMethod.Sauvola:
+        //            break;
+        //        case BinarizeMethod.Majority:
+        //            break;
+        //    }
+        //}
 
         private T ToStruct<T>(Dictionary<string, object> dict)
         where T : struct
@@ -1164,8 +1077,6 @@ namespace ImgViewer.Models
             return new Scalar(meanB, meanG, meanR, 255);
         }
 
-
-
         private Mat ProcessSingle(Mat src,
                            ProcessorCommand command,
                            Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing)
@@ -1179,34 +1090,16 @@ namespace ImgViewer.Models
                     switch (command)
                     {
                         case ProcessorCommand.Binarize:
-
-
                             var binParams = ToStruct<BinarizeParameters>(parameters);
                             return Binarizer.Binarize(src, binParams.Method, binParams);
-
                         case ProcessorCommand.Enhance:
                             if (TryApplyEnhanceCommand(src, _token, parameters ?? new Dictionary<string, object>(), out Mat? result))
                                 return result!;
                             break;
                         case ProcessorCommand.Deskew:
-
-                            //foreach (var kv in parameters)
-                            //{
-                            //    Debug.WriteLine(kv.Key.ToString());
-                            //    Debug.WriteLine(kv.Value.ToString());
-
-                            //}
                             return NewDeskew(src, parameters);
-
                         case ProcessorCommand.BordersRemove:
                             {
-                                //BordersDeskew();
-                                //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
-                                //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
-                                //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
-                                //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
-                                //либо используйте более устойчивую выборку(несколько областей).
-                                //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
                                 double treshFrac = 0.40;
                                 int contrastThr = 50;
                                 double centralSample = 0.10;
@@ -1220,19 +1113,19 @@ namespace ImgViewer.Models
                                 int minAreaPx = 2000;
                                 double minSpanFraction = 0.6;
                                 double solidityThreshold = 0.6;
-                                  double minDepthFraction = 0.05;
-                                  int featherPx = 12;
-                                  int top = 0, bottom = 0, left = 0, right = 0;
-                                  bool manualCutDebug = false;
-                                  bool useTeleaHybrid = true;
-                                  bool applyManualCut = false;
+                                double minDepthFraction = 0.05;
+                                int featherPx = 12;
+                                int top = 0, bottom = 0, left = 0, right = 0;
+                                bool manualCutDebug = false;
+                                bool useTeleaHybrid = true;
+                                bool applyManualCut = false;
 
-                                  int contourCannyLow = 50;
-                                  int contourCannyHigh = 150;
-                                  int contourMorphKernel = 5;
-                                  double contourMinAreaFrac = 0.10;
-                                  int contourPaddingPx = 10;
-                                  bool contourCut = true;
+                                int contourCannyLow = 50;
+                                int contourCannyHigh = 150;
+                                int contourMorphKernel = 5;
+                                double contourMinAreaFrac = 0.10;
+                                int contourPaddingPx = 10;
+                                bool contourCut = true;
 
                                 // integral method parameters
                                 int brickThickness = 16;
@@ -1314,30 +1207,30 @@ namespace ImgViewer.Models
                                             centralSample = SafeDouble(kv.Value, centralSample);
                                             break;
 
-                                          case "maxRemoveFrac":
-                                              maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
-                                              break;
-                                          case "contourCannyLow":
-                                              contourCannyLow = SafeInt(kv.Value, contourCannyLow);
-                                              break;
-                                          case "contourCannyHigh":
-                                              contourCannyHigh = SafeInt(kv.Value, contourCannyHigh);
-                                              break;
-                                          case "contourMorphKernel":
-                                              contourMorphKernel = SafeInt(kv.Value, contourMorphKernel);
-                                              break;
-                                          case "contourMinAreaFrac":
-                                              contourMinAreaFrac = SafeDouble(kv.Value, contourMinAreaFrac);
-                                              break;
-                                          case "contourPaddingPx":
-                                              contourPaddingPx = SafeInt(kv.Value, contourPaddingPx);
-                                              break;
-                                          case "contourCut":
-                                              contourCut = SafeBool(kv.Value, contourCut);
-                                              break;
-                                          case "manualTop":
-                                              top = SafeInt(kv.Value, top);
-                                              break;
+                                        case "maxRemoveFrac":
+                                            maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
+                                            break;
+                                        case "contourCannyLow":
+                                            contourCannyLow = SafeInt(kv.Value, contourCannyLow);
+                                            break;
+                                        case "contourCannyHigh":
+                                            contourCannyHigh = SafeInt(kv.Value, contourCannyHigh);
+                                            break;
+                                        case "contourMorphKernel":
+                                            contourMorphKernel = SafeInt(kv.Value, contourMorphKernel);
+                                            break;
+                                        case "contourMinAreaFrac":
+                                            contourMinAreaFrac = SafeDouble(kv.Value, contourMinAreaFrac);
+                                            break;
+                                        case "contourPaddingPx":
+                                            contourPaddingPx = SafeInt(kv.Value, contourPaddingPx);
+                                            break;
+                                        case "contourCut":
+                                            contourCut = SafeBool(kv.Value, contourCut);
+                                            break;
+                                        case "manualTop":
+                                            top = SafeInt(kv.Value, top);
+                                            break;
                                         case "manualBottom":
                                             bottom = SafeInt(kv.Value, bottom);
                                             break;
@@ -1471,8 +1364,7 @@ namespace ImgViewer.Models
                                                         maxRemoveFrac: maxRemoveFrac
                                                     );
                                             case "By Contours":
-                                                return BordersRemover.RemoveBordersByContours(
-                                                    token,
+                                                return RemoveBordersByContours(
                                                     src,
                                                     contourCannyLow,
                                                     contourCannyHigh,
@@ -1510,8 +1402,6 @@ namespace ImgViewer.Models
                             }
                             break;
                         case ProcessorCommand.Despeckle:
-                            //applyDespeckleCurrent();
-
                             bool smallAreaRelative = true;
                             double smallAreaMultiplier = 0.25;
                             int smallAreaAbsolutePx = 64;
@@ -1522,7 +1412,15 @@ namespace ImgViewer.Models
                             bool useDilateBeforeCC = true;
                             string dilateKernel = "1x3";
                             int dilateIter = 1;
+                            bool enableDustRemoval = false;
+                            int dustMedianKsize = 3;
+                            int dustOpenKernel = 3;
+                            int dustOpenIter = 1;
+                            bool enableDustShapeFilter = false;
+                            double dustMinSolidity = 0.6;
+                            double dustMaxAspectRatio = 3.0;
                             bool showDespeckleDebug = false;
+                            string despeckleMethod = "Classic";
 
                             DespeckleSettings settings = new DespeckleSettings();
                             foreach (var kv in parameters)
@@ -1562,6 +1460,30 @@ namespace ImgViewer.Models
                                     case "dilateIter":
                                         settings.DilateIter = SafeInt(kv.Value, dilateIter);
                                         break;
+                                    case "despeckleMethod":
+                                        despeckleMethod = kv.Value?.ToString() ?? despeckleMethod;
+                                        break;
+                                    case "enableDustRemoval":
+                                        settings.EnableDustRemoval = SafeBool(kv.Value, enableDustRemoval);
+                                        break;
+                                    case "dustMedianKsize":
+                                        settings.DustMedianKsize = SafeInt(kv.Value, dustMedianKsize);
+                                        break;
+                                    case "dustOpenKernel":
+                                        settings.DustOpenKernel = SafeInt(kv.Value, dustOpenKernel);
+                                        break;
+                                    case "dustOpenIter":
+                                        settings.DustOpenIter = SafeInt(kv.Value, dustOpenIter);
+                                        break;
+                                    case "enableDustShapeFilter":
+                                        settings.EnableDustShapeFilter = SafeBool(kv.Value, enableDustShapeFilter);
+                                        break;
+                                    case "dustMinSolidity":
+                                        settings.DustMinSolidity = SafeDouble(kv.Value, dustMinSolidity);
+                                        break;
+                                    case "dustMaxAspectRatio":
+                                        settings.DustMaxAspectRatio = SafeDouble(kv.Value, dustMaxAspectRatio);
+                                        break;
                                     case "showDespeckleDebug":
                                         settings.ShowDespeckleDebug = batchProcessing ? false : SafeBool(kv.Value, showDespeckleDebug);
                                         break;
@@ -1570,10 +1492,9 @@ namespace ImgViewer.Models
                             }
 
                             //_currentImage = DespeckleApplyToSource(_currentImage, settings, true, false, true);
+                            if (despeckleMethod.Equals("Effective", StringComparison.OrdinalIgnoreCase))
+                                return DespeckleEffective(src, settings);
                             return Despeckle(src, settings);
-                            //_currentImage = DespeckleAfterBinarization(_currentImage, settings);
-
-                            break;
                         case ProcessorCommand.SmartCrop:
 
                             // U-net
@@ -1888,7 +1809,6 @@ namespace ImgViewer.Models
 
 
                             return PunchHolesRemove(src, specs, roundness, fillRatio, offsets);
-
                         case ProcessorCommand.PageSplit:
                             {
                                 var splitParameters = parameters ?? new Dictionary<string, object>();
@@ -1908,8 +1828,6 @@ namespace ImgViewer.Models
             return src.Clone();
         }
 
-        
-
         private bool TryApplyEnhanceCommand(Mat src, CancellationToken token, Dictionary<string, object> parameters, out Mat? result)
         {
             try
@@ -1918,14 +1836,14 @@ namespace ImgViewer.Models
                 if (parameters.TryGetValue("enhanceMethod", out var methodObj))
                     method = methodObj?.ToString();
 
-                  string methodName = method?.Trim() ?? string.Empty;
-                  bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
-                  bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
-                                  methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
-                  bool isColorAdjust = methodName.Equals("Color Adjust", StringComparison.OrdinalIgnoreCase);
-                  bool isBrightnessContrast = methodName.Equals("Brightness & Contrast", StringComparison.OrdinalIgnoreCase) ||
-                                              methodName.Equals("Brightness/Contrast", StringComparison.OrdinalIgnoreCase) ||
-                                              methodName.Equals("Brightness and Contrast", StringComparison.OrdinalIgnoreCase);
+                string methodName = method?.Trim() ?? string.Empty;
+                bool isRetinex = methodName.Equals("Homomorphic Retinex", StringComparison.OrdinalIgnoreCase);
+                bool isLevels = methodName.Equals("Levels & Gamma", StringComparison.OrdinalIgnoreCase) ||
+                                methodName.Equals("Levels and Gamma", StringComparison.OrdinalIgnoreCase);
+                bool isColorAdjust = methodName.Equals("Color Adjust", StringComparison.OrdinalIgnoreCase);
+                bool isBrightnessContrast = methodName.Equals("Brightness & Contrast", StringComparison.OrdinalIgnoreCase) ||
+                                            methodName.Equals("Brightness/Contrast", StringComparison.OrdinalIgnoreCase) ||
+                                            methodName.Equals("Brightness and Contrast", StringComparison.OrdinalIgnoreCase);
 
                 if (isRetinex)
                 {
@@ -2008,11 +1926,11 @@ namespace ImgViewer.Models
                     return true;
                 }
 
-                  if (isLevels)
-                  {
-                      double blackPct = 1.0;
-                      double whitePct = 95.0;
-                      double levelsGamma = 0.85;
+                if (isLevels)
+                {
+                    double blackPct = 1.0;
+                    double whitePct = 95.0;
+                    double levelsGamma = 0.85;
                     double targetWhite = 255.0;
 
                     foreach (var kv in parameters)
@@ -2034,77 +1952,77 @@ namespace ImgViewer.Models
                         }
                     }
 
-                      result = ApplyLevelsAndGamma(src, token, blackPct, whitePct, levelsGamma, targetWhite);
-                      return true;
-                  }
+                    result = ApplyLevelsAndGamma(src, token, blackPct, whitePct, levelsGamma, targetWhite);
+                    return true;
+                }
 
-                  if (isColorAdjust)
-                  {
-                      double red = 0;
-                      double green = 0;
-                      double blue = 0;
-                      double hue = 0;
-                      double saturation = 0;
+                if (isColorAdjust)
+                {
+                    double red = 0;
+                    double green = 0;
+                    double blue = 0;
+                    double hue = 0;
+                    double saturation = 0;
 
-                      foreach (var kv in parameters)
-                      {
-                          switch (kv.Key)
-                          {
-                              case "colorRed":
-                                  red = SafeDouble(kv.Value, red);
-                                  break;
-                              case "colorGreen":
-                                  green = SafeDouble(kv.Value, green);
-                                  break;
-                              case "colorBlue":
-                                  blue = SafeDouble(kv.Value, blue);
-                                  break;
-                              case "colorHue":
-                                  hue = SafeDouble(kv.Value, hue);
-                                  break;
-                              case "colorSaturation":
-                                  saturation = SafeDouble(kv.Value, saturation);
-                                  break;
-                          }
-                      }
+                    foreach (var kv in parameters)
+                    {
+                        switch (kv.Key)
+                        {
+                            case "colorRed":
+                                red = SafeDouble(kv.Value, red);
+                                break;
+                            case "colorGreen":
+                                green = SafeDouble(kv.Value, green);
+                                break;
+                            case "colorBlue":
+                                blue = SafeDouble(kv.Value, blue);
+                                break;
+                            case "colorHue":
+                                hue = SafeDouble(kv.Value, hue);
+                                break;
+                            case "colorSaturation":
+                                saturation = SafeDouble(kv.Value, saturation);
+                                break;
+                        }
+                    }
 
-                      red = Math.Max(-100.0, Math.Min(100.0, red));
-                      green = Math.Max(-100.0, Math.Min(100.0, green));
-                      blue = Math.Max(-100.0, Math.Min(100.0, blue));
-                      hue = Math.Max(-180.0, Math.Min(180.0, hue));
-                      saturation = Math.Max(-100.0, Math.Min(100.0, saturation));
+                    red = Math.Max(-100.0, Math.Min(100.0, red));
+                    green = Math.Max(-100.0, Math.Min(100.0, green));
+                    blue = Math.Max(-100.0, Math.Min(100.0, blue));
+                    hue = Math.Max(-180.0, Math.Min(180.0, hue));
+                    saturation = Math.Max(-100.0, Math.Min(100.0, saturation));
 
-                      result = Enhancer.AdjustColor(token, src, red, green, blue, hue, saturation);
-                      return true;
-                  }
+                    result = Enhancer.AdjustColor(token, src, red, green, blue, hue, saturation);
+                    return true;
+                }
 
-                  if (isBrightnessContrast)
-                  {
-                      double brightness = 0;
-                      double contrast = 0;
+                if (isBrightnessContrast)
+                {
+                    double brightness = 0;
+                    double contrast = 0;
 
-                      foreach (var kv in parameters)
-                      {
-                          switch (kv.Key)
-                          {
-                              case "brightness":
-                                  brightness = SafeDouble(kv.Value, brightness);
-                                  break;
-                              case "contrast":
-                                  contrast = SafeDouble(kv.Value, contrast);
-                                  break;
-                          }
-                      }
+                    foreach (var kv in parameters)
+                    {
+                        switch (kv.Key)
+                        {
+                            case "brightness":
+                                brightness = SafeDouble(kv.Value, brightness);
+                                break;
+                            case "contrast":
+                                contrast = SafeDouble(kv.Value, contrast);
+                                break;
+                        }
+                    }
 
-                      brightness = Math.Max(-100.0, Math.Min(100.0, brightness));
-                      contrast = Math.Max(-100.0, Math.Min(100.0, contrast));
+                    brightness = Math.Max(-100.0, Math.Min(100.0, brightness));
+                    contrast = Math.Max(-100.0, Math.Min(100.0, contrast));
 
-                      result = Enhancer.AdjustBrightnessContrast(token, src, brightness, contrast);
-                      return true;
-                  }
+                    result = Enhancer.AdjustBrightnessContrast(token, src, brightness, contrast);
+                    return true;
+                }
 
-                  double claheClipLimit = 4.0;
-                  int claheGridSize = 8;
+                double claheClipLimit = 4.0;
+                int claheGridSize = 8;
 
                 if (parameters.TryGetValue("claheClipLimit", out var clipObj))
                     claheClipLimit = SafeDouble(clipObj, claheClipLimit);
@@ -2417,7 +2335,40 @@ namespace ImgViewer.Models
 
         private Mat Despeckle(Mat src, DespeckleSettings settings)
         {
-            return Despeckler.DespeckleApplyToSource(_token, src, settings, settings.ShowDespeckleDebug, true, true);
+            try
+            {
+                Mat result = Despeckler.DespeckleApplyToSource(_token, src, settings, settings.ShowDespeckleDebug, true, true);
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("Despeckle cancelled!");
+                return src.Clone();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Despeckle failed: {ex}");
+                return src.Clone();
+            }
+        }
+
+        private Mat DespeckleEffective(Mat src, DespeckleSettings settings)
+        {
+            try
+            {
+                Mat result = Despeckler.DespeckleEffective(_token, src, settings, settings.ShowDespeckleDebug, true, true);
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("DespeckleEffective cancelled!");
+                return src.Clone();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DespeckleEffective failed: {ex}");
+                return src.Clone();
+            }
         }
 
         private Mat RemoveLines(Mat src,
@@ -2640,7 +2591,6 @@ namespace ImgViewer.Models
                 ErrorOccured?.Invoke($"Page split failed: {ex.Message}");
             }
         }
-
         private void ExecutePageSplitBatch(Mat src, Dictionary<string, object> parameters)
         {
             ClearSplitResults();
@@ -2701,7 +2651,6 @@ namespace ImgViewer.Models
                 ErrorOccured?.Invoke($"Page split failed: {ex.Message}");
             }
         }
-
         private PageSplitter.Settings BuildPageSplitterSettings(Dictionary<string, object> parameters)
         {
             var settings = new PageSplitter.Settings();
@@ -2761,7 +2710,6 @@ namespace ImgViewer.Models
 
             return settings;
         }
-
         public Mat[]? GetSplitResults()
         {
             lock (_splitLock)
@@ -2782,7 +2730,6 @@ namespace ImgViewer.Models
                 return clones.Count > 0 ? clones.ToArray() : null;
             }
         }
-
         public void ClearSplitResults()
         {
             lock (_splitLock)
@@ -2790,7 +2737,6 @@ namespace ImgViewer.Models
                 ClearSplitResultsUnsafe();
             }
         }
-
         private void SetSplitResults(Mat left, Mat right)
         {
             if (left == null || right == null)
@@ -2802,7 +2748,6 @@ namespace ImgViewer.Models
                 _splitWorkingImages = new[] { left, right };
             }
         }
-
         private void ClearSplitResultsUnsafe()
         {
             if (_splitWorkingImages == null)
@@ -2818,210 +2763,6 @@ namespace ImgViewer.Models
 
 
 
-
-        //public Mat DespeckleAfterBinarization(Mat bin, DespeckleSettings? settings = null, bool debug = false)
-        //{
-        //    if (bin == null) throw new ArgumentNullException(nameof(bin));
-        //    if (bin.Type() != MatType.CV_8UC1) throw new ArgumentException("Expect CV_8UC1 binary image (text=0).");
-
-        //    // default settings if null
-        //    settings ??= new DespeckleSettings
-        //    {
-        //        SmallAreaRelative = true,
-        //        SmallAreaMultiplier = 0.25,
-        //        SmallAreaAbsolutePx = 64,
-        //        MaxDotHeightFraction = 0.35,
-        //        ProximityRadiusFraction = 0.8,
-        //        SquarenessTolerance = 0.6,
-        //        KeepClusters = true,
-        //        UseDilateBeforeCC = true,
-        //        DilateKernel = "1x3", // "1x3", "3x1" or "3x3"
-        //        DilateIter = 1,
-        //        ShowDespeckleDebug = false
-        //    };
-
-        //    if (settings.SmallAreaMultiplier <= 0) settings.SmallAreaMultiplier = 0.25;
-        //    if (settings.SmallAreaAbsolutePx <= 0) settings.SmallAreaAbsolutePx = 64;
-        //    if (settings.DilateIter < 0) settings.DilateIter = 0;
-
-        //    if (!(settings.DilateKernel == "1x3" || settings.DilateKernel == "3x1" || settings.DilateKernel == "3x3"))
-        //    {
-        //        // fallback to default
-        //        settings.DilateKernel = "1x3";
-        //    }
-
-        //    if (!settings.SmallAreaRelative && settings.SmallAreaAbsolutePx <= 0)
-        //        settings.SmallAreaAbsolutePx = 64;
-
-        //    // If despeckling disabled by giving absurd values, still allow quick exit:
-        //    // (you can add explicit Enable flag in settings if needed)
-        //    // Start processing
-        //    Mat work = bin.Clone();
-
-        //    // origBlackMask: 255 where original had text (pixel == 0)
-        //    using var origBlackMask = new Mat();
-        //    Cv2.InRange(work, new Scalar(0), new Scalar(0), origBlackMask); // 255 where text==0
-
-        //    // labelingMat: copy of work; we may dilate labelingMat to merge touching dots->glyphs,
-        //    // but we will intersect removal masks with origBlackMask so only original pixels removed.
-        //    Mat labelingMat = work.Clone();
-
-        //    if (settings.UseDilateBeforeCC && settings.DilateIter > 0)
-        //    {
-        //        Mat kernel;
-        //        switch (settings.DilateKernel)
-        //        {
-        //            case "3x1":
-        //                kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 1));
-        //                break;
-        //            case "3x3":
-        //                kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
-        //                break;
-        //            default: // "1x3"
-        //                kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3));
-        //                break;
-        //        }
-        //        var tmp = new Mat();
-        //        Cv2.Dilate(labelingMat, tmp, kernel, iterations: settings.DilateIter);
-        //        labelingMat.Dispose();
-        //        kernel.Dispose();
-        //        labelingMat = tmp;
-        //    }
-
-        //    // connected components (on labelingMat)
-        //    using var labels = new Mat();
-        //    using var stats = new Mat();
-        //    using var centroids = new Mat();
-        //    int nLabels = Cv2.ConnectedComponentsWithStats(labelingMat, labels, stats, centroids, PixelConnectivity.Connectivity8, MatType.CV_32S);
-
-        //    var comps = new List<(int label, Rect bbox, int area)>();
-        //    for (int lbl = 1; lbl < nLabels; lbl++) // label 0 = background
-        //    {
-        //        int left = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Left);
-        //        int top = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Top);
-        //        int width = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Width);
-        //        int height = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Height);
-        //        int area = stats.Get<int>(lbl, (int)ConnectedComponentsTypes.Area);
-        //        comps.Add((lbl, new Rect(left, top, width, height), area));
-        //    }
-
-        //    if (comps.Count == 0)
-        //    {
-        //        labelingMat.Dispose();
-        //        return work;
-        //    }
-
-        //    // median char height (robust)
-        //    var heights = comps.Select(c => c.bbox.Height).Where(h => h >= 3).ToArray();
-        //    int medianHeight = heights.Length > 0 ? heights.OrderBy(h => h).ElementAt(heights.Length / 2) : 20;
-
-        //    // compute thresholds
-        //    int smallAreaThrPx = settings.SmallAreaRelative
-        //        ? Math.Max(1, (int)Math.Round(settings.SmallAreaMultiplier * medianHeight * medianHeight))
-        //        : Math.Max(1, settings.SmallAreaAbsolutePx);
-
-        //    int maxDotHeight = Math.Max(1, (int)Math.Round(settings.MaxDotHeightFraction * medianHeight));
-        //    double proximityRadius = Math.Max(1.0, settings.ProximityRadiusFraction * medianHeight);
-        //    double squarenessTolerance = Math.Max(0.0, Math.Min(1.0, settings.SquarenessTolerance));
-
-        //    int rows = work.Rows, cols = work.Cols;
-        //    var horProj = new int[rows];
-        //    for (int y = 0; y < rows; y++) horProj[y] = cols - Cv2.CountNonZero(work.Row(y)); // black px per row
-        //    int projThr = Math.Max(1, cols / 100);
-        //    var textRows = new HashSet<int>(Enumerable.Range(0, rows).Where(y => horProj[y] > projThr));
-
-        //    Point Center(Rect r) => new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
-
-        //    var bigBoxes = comps.Where(c => c.bbox.Height >= medianHeight * 0.6 || c.area > smallAreaThrPx * 4)
-        //                        .Select(c => c.bbox).ToArray();
-
-        //    static double DistPointToRect(Point p, Rect r)
-        //    {
-        //        int dx = Math.Max(Math.Max(r.Left - p.X, 0), p.X - r.Right);
-        //        int dy = Math.Max(Math.Max(r.Top - p.Y, 0), p.Y - r.Bottom);
-        //        return Math.Sqrt(dx * dx + dy * dy);
-        //    }
-
-        //    var smallComps = comps.Where(c => c.area < smallAreaThrPx || c.bbox.Height <= maxDotHeight).ToArray();
-        //    var toRemoveLabels = new List<int>();
-        //    var toKeepLabels = new HashSet<int>();
-
-        //    int rowCheckRange = Math.Max(1, medianHeight / 3);
-        //    int clusterHoriz = Math.Max(3, (int)(medianHeight * 0.6));
-
-        //    foreach (var c in smallComps)
-        //    {
-        //        var rect = c.bbox;
-        //        var center = Center(rect);
-
-        //        double minDistToBig = double.MaxValue;
-        //        foreach (var br in bigBoxes)
-        //        {
-        //            double d = DistPointToRect(center, br);
-        //            if (d < minDistToBig) minDistToBig = d;
-        //        }
-        //        bool nearBig = minDistToBig < proximityRadius;
-
-        //        bool onTextLine = false;
-        //        for (int ry = Math.Max(0, center.Y - rowCheckRange); ry <= Math.Min(rows - 1, center.Y + rowCheckRange); ry++)
-        //        {
-        //            if (textRows.Contains(ry)) { onTextLine = true; break; }
-        //        }
-
-        //        bool squareLike = Math.Abs(rect.Width - rect.Height) <= Math.Max(1, rect.Height * squarenessTolerance);
-
-        //        bool partOfCluster = false;
-        //        if (settings.KeepClusters)
-        //        {
-        //            foreach (var c2 in smallComps)
-        //            {
-        //                if (c2.label == c.label) continue;
-        //                if (Math.Abs(Center(c2.bbox).Y - center.Y) <= rowCheckRange &&
-        //                    Math.Abs(Center(c2.bbox).X - center.X) <= clusterHoriz)
-        //                {
-        //                    partOfCluster = true;
-        //                    break;
-        //                }
-        //            }
-        //        }
-
-        //        if (nearBig || (onTextLine && squareLike) || partOfCluster)
-        //        {
-        //            toKeepLabels.Add(c.label);
-        //            continue;
-        //        }
-
-        //        toRemoveLabels.Add(c.label);
-        //    }
-
-        //    // remove: build mask from labels and intersect with original black mask (so we never delete pixels created by dilation)
-        //    foreach (int lbl in toRemoveLabels)
-        //    {
-        //        using var mask = new Mat();
-        //        Cv2.InRange(labels, new Scalar(lbl), new Scalar(lbl), mask); // 255 where label==lbl (on labelingMat)
-        //        using var intersect = new Mat();
-        //        Cv2.BitwiseAnd(mask, origBlackMask, intersect); // ensure only original black pixels removed
-        //        work.SetTo(new Scalar(255), intersect);
-        //    }
-
-        //    // debug visualization
-        //    if (debug || settings.ShowDespeckleDebug)
-        //    {
-        //        var vis = new Mat();
-        //        Cv2.CvtColor(bin, vis, ColorConversionCodes.GRAY2BGR);
-        //        foreach (var c in comps)
-        //        {
-        //            var color = toKeepLabels.Contains(c.label) ? Scalar.Green : toRemoveLabels.Contains(c.label) ? Scalar.Red : Scalar.Yellow;
-        //            Cv2.Rectangle(vis, c.bbox, color, 1);
-        //        }
-
-        //        labelingMat.Dispose();
-        //        return vis;
-        //    }
-
-        //    labelingMat.Dispose();
-        //    return work;
-        //}
 
         private Mat SmartCrop(Mat src, TextDetectionSettings tds, bool debug = true)
         {
@@ -3069,27 +2810,6 @@ namespace ImgViewer.Models
             BitmapSource bmpSource = MatToBitmapSource(mat);
             return BitmapSourceToStream(bmpSource);
         }
-
-        //public Stream? LoadAsPNGStream(string path, int targetBPP)
-        //{
-        //    try
-        //    {
-        //        using var mat = Cv2.ImRead(path, ImreadModes.Color);
-        //        BitmapSource bmpSource = MatToBitmapSource(mat);
-        //        // Сохраняем в MemoryStream как PNG
-        //        var encoder = new PngBitmapEncoder();
-        //        encoder.Frames.Add(BitmapFrame.Create(bmpSource));
-        //        var ms = new MemoryStream();
-        //        encoder.Save(ms);
-        //        ms.Position = 0;
-        //        return ms;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        ErrorOccured?.Invoke($"Error loading image {path}: {ex.Message}");
-        //        return null;
-        //    }
-        //}
 
         // Safe Mat -> BitmapSource conversion (no use of .Depth or non-existent members)
         private BitmapSource MatToBitmapSource(Mat mat)
@@ -3222,25 +2942,6 @@ namespace ImgViewer.Models
         }
 
 
-
-        // OLD METHOD
-        //private BitmapSource MatToBitmapSource(Mat mat)
-        //{
-        //    if (mat == null || mat.Empty())
-        //    {
-        //        Debug.WriteLine("MatToBitmapSource: input Mat is null or empty.");
-        //        return null;
-        //    }
-
-        //    // Быстрая конвертация через OpenCvSharp.Extensions:
-        //    //var bmp = mat.ToBitmap(); // создаёт System.Drawing.Bitmap (GDI+) — не идеально для WPF
-        //    // Но лучше: создать WriteableBitmap и скопировать байты
-        //    var wb = new WriteableBitmap(mat.Width, mat.Height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null);
-        //    int stride = mat.Cols * mat.ElemSize();
-        //    wb.WritePixels(new System.Windows.Int32Rect(0, 0, mat.Width, mat.Height), mat.Data, mat.Rows * stride, stride);
-        //    wb.Freeze();
-        //    return wb;
-        //}
 
 
         public static Scalar SampleCentralGrayScalar(Mat src, int sampleSizePx = 0, double sampleFraction = 0.10)
@@ -3468,33 +3169,6 @@ namespace ImgViewer.Models
             return colorResult;
         }
 
-
-
-        //private Mat BinarizeThreshold(Mat src, int threshold = 128)
-        //{
-        //    if (src == null || src.Empty()) return new Mat();
-
-        //    using var gray = new Mat();
-        //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-        //    Cv2.Threshold(gray, gray, threshold, 255, ThresholdTypes.Binary);
-
-        //    // Конвертируем обратно в BGR — тогда весь pipeline, ожидающий 3 канала, продолжит работать
-        //    using var color = new Mat();
-        //    Cv2.CvtColor(gray, color, ColorConversionCodes.GRAY2BGR);
-
-        //    return color.Clone(); // сохраняем результат как 3-канальную матрицу
-        //}
-
-        //threshFrac(0..1) : чем выше — тем жёстче требование к считать строку бордюром.
-        //0.6 — хорошая стартовая точка.Для очень толстых рамок можно поднять до 0.75–0.9
-        //contrastThr: порог яркости.Для слабых контрастов уменьшите (15..25); для сильных — увеличьте.
-        //centralSample: если документ сильно смещён в кадре, уменьшите (например 0.2),
-        //либо используйте более устойчивую выборку(несколько областей).
-        //maxRemoveFrac: защита от катастрофического удаления.Оставьте не выше 0.3.
-
-
-
-
         public static Deskewer.Parameters ParseParametersSimple(Dictionary<string, object>? parameters)
         {
             const int defaultCanny1 = 50;
@@ -3710,88 +3384,34 @@ namespace ImgViewer.Models
 
         }
 
-        //private void BordersDeskew()
-        //{
-        //    if (_currentImage == null || _currentImage.Empty()) return;
-        //    using var src = _currentImage.Clone();
-        //    //_currentImage = Deskewer.Deskew(src, true);
-        //}
 
-        //public void Deskew()
-        //{
-        //    if (_currentImage == null || _currentImage.Empty()) return;
-
-
-
-
-        //    double angle = GetSkewAngleByHough(_currentImage, cannyThresh1: 50, cannyThresh2: 150, houghThreshold: 80, minLineLength: Math.Min(_currentImage.Width, 200), maxLineGap: 20);
-        //    Debug.WriteLine($"Deskew: angle by Hough = {angle}");
-
-        //    if (double.IsNaN(angle))
-        //    {
-        //        angle = GetSkewAngleByProjection(_currentImage, minAngle: -15, maxAngle: 15, coarseStep: 1.0, refineStep: 0.2);
-        //    }
-
-
-        //    if (double.IsNaN(angle) || Math.Abs(angle) < 0.005) // если угол ~0 — не поворачивать
-        //    {
-        //        Debug.WriteLine($"Deskew: angle is zero or NaN ({angle}), skipping rotation.");
-        //        return;
-        //    }
-
-
-        //    using var src = _currentImage.Clone();
-        //    double rotation = -angle;
-        //    double rad = rotation * Math.PI / 180.0;
-        //    double absCos = Math.Abs(Math.Cos(rad));
-        //    double absSin = Math.Abs(Math.Sin(rad));
-        //    int newW = (int)Math.Round(src.Width * absCos + src.Height * absSin);
-        //    int newH = (int)Math.Round(src.Width * absSin + src.Height * absCos);
-
-        //    var center = new Point2f(src.Width / 2f, src.Height / 2f);
-        //    var M = Cv2.GetRotationMatrix2D(center, rotation, 1.0);
-        //    M.Set(0, 2, M.Get<double>(0, 2) + (newW / 2.0 - center.X));
-        //    M.Set(1, 2, M.Get<double>(1, 2) + (newH / 2.0 - center.Y));
-
-        //    using var rotated = new Mat();
-        //    Cv2.WarpAffine(src, rotated, M, new OpenCvSharp.Size(newW, newH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255)); // 0 - black background
-
-
-        //    var result = rotated.Clone();
-        //    _currentImage = result;
-        //}
-
-
-
-
-
-
-
-
-        //Mat PrecomputeDarkMask_BackgroundNormalized(Mat src)
-        //{
-        //    var gray = new Mat();
-        //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-
-        //    // оценка фона большим ядром (например 101x101)
-        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(101, 101));
-        //    var bg = new Mat();
-        //    Cv2.MorphologyEx(gray, bg, MorphTypes.Open, kernel);
-
-        //    // вычитаем фон — получаем более ровную яркость
-        //    var norm = new Mat();
-        //    Cv2.Subtract(gray, bg, norm);
-
-        //    // optional contrast
-        //    Cv2.Normalize(norm, norm, 0, 255, NormTypes.MinMax);
-
-        //    // Otsu или адаптивный порог
-        //    var darkMask = new Mat();
-        //    Cv2.Threshold(norm, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
-
-        //    gray.Dispose(); bg.Dispose(); norm.Dispose();
-        //    return darkMask;
-        //}
+        private Mat RemoveBordersByContours(Mat src,
+                                                int cannyLow,
+                                                int cannyHigh,
+                                                int morphKernel,
+                                                double minAreaFrac,
+                                                int paddingPx,
+                                                BordersRemovalMode mode,
+                                                Scalar? bgColor = null)
+        {
+            try
+            {
+                var result = BordersRemover.RemoveBordersByContours(_token, src, cannyLow, cannyHigh, morphKernel, minAreaFrac, paddingPx, mode, bgColor);
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                string logMessage = "Border removal (By contours) cancelled.";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
+            }
+            catch (Exception ex)
+            {
+                string logMessage = $"Error while removing borders (By contours): {ex.Message}";
+                Debug.WriteLine(logMessage);
+                return src.Clone();
+            }
+        }
 
         private Mat RemoveBordersByRowColWhite(Mat src,
                                                 double threshFrac,
@@ -3924,353 +3544,6 @@ namespace ImgViewer.Models
             return (byte)Math.Round(thr);
         }
 
-
-        //Mat PrecomputeDarkMask_Otsu(Mat src)
-        //{
-        //    var gray = new Mat();
-        //    Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-
-        //    // небольшая фильтрация шума
-        //    Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
-
-        //    // Otsu + инверсия: dark -> 255
-        //    var darkMask = new Mat();
-        //    Cv2.Threshold(gray, darkMask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
-
-        //    // убираем мелкие отверстия/шум
-        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-        //    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
-
-        //    gray.Dispose();
-        //    return darkMask; // caller обязан Dispose
-        //}
-
-        //Mat PrecomputeDarkMask_Adaptive(Mat src, int blockSize = 31, int C = 10)
-        //{
-        //    var gray = new Mat();
-        //    // лучше работать с яркостным каналом Y
-        //    var ycrcb = new Mat();
-        //    Cv2.CvtColor(src, ycrcb, ColorConversionCodes.BGR2YCrCb);
-        //    Cv2.ExtractChannel(ycrcb, gray, 0); // Y канал
-        //    ycrcb.Dispose();
-
-        //    // опционально CLAHE, чтобы усилить контраст
-        //    var clahe = Cv2.CreateCLAHE(2.0, new OpenCvSharp.Size(8, 8));
-        //    clahe.Apply(gray, gray);
-
-        //    // сглаживание
-        //    Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
-
-        //    var darkMask = new Mat();
-        //    // AdaptiveThreshold: используем BinaryInv чтобы тёмные стали 255
-        //    Cv2.AdaptiveThreshold(gray, darkMask, 255,
-        //        AdaptiveThresholdTypes.GaussianC, ThresholdTypes.BinaryInv, blockSize, C);
-
-        //    // морфологическая очистка
-        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-        //    Cv2.MorphologyEx(darkMask, darkMask, MorphTypes.Open, kernel);
-
-        //    gray.Dispose();
-        //    clahe.Dispose();
-        //    return darkMask;
-        //}
-
-
-
-
-
-        //public Mat FillBlackBorderAreas(
-        //    Mat src,
-        //    Scalar? bgColor = null,
-        //    byte blackThreshold = 8,
-        //    double minSpanFraction = 0.8,    // доля ширины/высоты, чтобы считать компонент "полосой"
-        //    int minAreaPx = 2000,            // если компонент >= этой площади — можно считать большим
-        //    double solidityThreshold = 0.55  // если заполненность bbox >= threshold => считать сплошной
-        //)
-        //{
-        //    if (src == null) throw new ArgumentNullException(nameof(src));
-        //    if (src.Empty()) return src;
-
-        //    using var srcClone = src.Clone();
-
-        //    Mat working;
-        //    bool createdWorking = false;
-        //    if (srcClone.Channels() == 1)
-        //    {
-        //        working = new Mat();
-        //        Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
-        //        createdWorking = true;
-        //    }
-        //    else if (srcClone.Type() != MatType.CV_8UC3)
-        //    {
-        //        working = new Mat();
-        //        srcClone.ConvertTo(working, MatType.CV_8UC3);
-        //        createdWorking = true;
-        //    }
-        //    else
-        //    {
-        //        working = srcClone;
-        //        createdWorking = false;
-        //    }
-
-        //    try
-        //    {
-        //        int rows = working.Rows;
-        //        int cols = working.Cols;
-
-        //        // --- опред. цвета фона (углы) ---
-        //        Scalar chosenBg;
-        //        if (bgColor.HasValue) chosenBg = bgColor.Value;
-        //        else
-        //        {
-        //            int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
-        //            var cornerMeans = new List<Scalar>();
-        //            var rects = new[]
-        //            {
-        //                new Rect(0, 0, cornerSize, cornerSize),
-        //                new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
-        //                new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
-        //                new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
-        //            };
-        //            foreach (var r in rects)
-        //            {
-        //                if (r.Width <= 0 || r.Height <= 0) continue;
-        //                using var patch = new Mat(working, r);
-        //                var mean = Cv2.Mean(patch);
-        //                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
-        //                if (brightness > blackThreshold * 1.5) cornerMeans.Add(mean);
-        //            }
-        //            if (cornerMeans.Count > 0)
-        //            {
-        //                double b = 0, g = 0, rr = 0;
-        //                foreach (var s in cornerMeans) { b += s.Val0; g += s.Val1; rr += s.Val2; }
-        //                chosenBg = new Scalar(b / cornerMeans.Count, g / cornerMeans.Count, rr / cornerMeans.Count);
-        //            }
-        //            else chosenBg = new Scalar(255, 255, 255);
-        //        }
-
-        //        // --- маска тёмных пикселей ---
-        //        using var gray = new Mat();
-        //        Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
-
-        //        using var darkMask = new Mat();
-        //        Cv2.Threshold(gray, darkMask, blackThreshold, 255, ThresholdTypes.BinaryInv); // dark -> 255
-
-        //        // --- компоненты связности ---
-        //        using var labels = new Mat();
-        //        using var stats = new Mat();
-        //        using var cents = new Mat();
-        //        int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, cents);
-
-        //        var filled = working.Clone();
-
-        //        if (nLabels > 1)
-        //        {
-        //            for (int i = 1; i < nLabels; i++)
-        //            {
-        //                int x = stats.At<int>(i, 0);
-        //                int y = stats.At<int>(i, 1);
-        //                int w = stats.At<int>(i, 2);
-        //                int h = stats.At<int>(i, 3);
-        //                int area = stats.At<int>(i, 4);
-
-        //                bool touchesLeft = x <= 0;
-        //                bool touchesTop = y <= 0;
-        //                bool touchesRight = (x + w) >= (cols);
-        //                bool touchesBottom = (y + h) >= (rows);
-
-        //                bool touchesAny = touchesLeft || touchesTop || touchesRight || touchesBottom;
-        //                if (!touchesAny) continue;
-
-        //                // основные эвристики:
-        //                bool considerAsBorder = false;
-
-        //                // 1) span: если касается top/bottom — смотрим ширину
-        //                if (touchesTop || touchesBottom)
-        //                {
-        //                    double widthFraction = (double)w / cols;
-        //                    if (widthFraction >= minSpanFraction) considerAsBorder = true;
-        //                }
-
-        //                // 2) span: если касается left/right — смотрим высоту
-        //                if (touchesLeft || touchesRight)
-        //                {
-        //                    double heightFraction = (double)h / rows;
-        //                    if (heightFraction >= minSpanFraction) considerAsBorder = true;
-        //                }
-
-        //                // 3) площадь: очень большие объекты можно закрашивать
-        //                if (area >= minAreaPx) considerAsBorder = true;
-
-        //                // 4) противоположные стороны -> явно полоса
-        //                if ((touchesLeft && touchesRight) || (touchesTop && touchesBottom))
-        //                    considerAsBorder = true;
-
-        //                // 5) solidity = area / (w*h) — для сплошной заливки близко к 1, для текста значительно меньше.
-        //                double solidity = 0.0;
-        //                if (w > 0 && h > 0) solidity = (double)area / (w * h);
-        //                if (solidity >= solidityThreshold) considerAsBorder = true;
-
-        //                // Доп. эвристика: плотность внутри (простая) — если плотность пикселей низкая, это обычно текст (пропускаем)
-        //                // (но уже учтено в solidity)
-
-        //                if (!considerAsBorder) continue;
-
-        //                // наконец — маска этой компоненты
-        //                using var compMask = new Mat();
-        //                Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask);
-
-        //                // Но перед заливкой: можно дополнительно убедиться, что средняя яркость
-        //                // внутри bbox не слишком похожа на внутреннюю область документа (опционально).
-        //                // Для простоты — сразу зальём:
-        //                //-------
-
-        //                filled.SetTo(chosenBg, compMask);
-        //            }
-        //        }
-
-        //        var result = filled.Clone();
-        //        filled.Dispose();
-        //        return result;
-        //    }
-        //    finally
-        //    {
-        //        if (createdWorking && working != null) working.Dispose();
-        //    }
-        //}
-
-        //public Mat FillBlackBorderAreasOld(Mat src, Scalar? bgColor = null, byte blackThreshold = 8)
-        //{
-        //    if (src == null) throw new ArgumentNullException(nameof(src));
-        //    if (src.Empty()) return src;
-
-        //    // работаем с клоном входа
-        //    using var srcClone = src.Clone();
-
-        //    Mat working = null;
-        //    bool createdWorking = false;
-        //    if (srcClone.Channels() == 1)
-        //    {
-        //        working = new Mat();
-        //        Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
-        //        createdWorking = true;
-        //    }
-        //    else if (srcClone.Type() != MatType.CV_8UC3)
-        //    {
-        //        working = new Mat();
-        //        srcClone.ConvertTo(working, MatType.CV_8UC3);
-        //        createdWorking = true;
-        //    }
-        //    else
-        //    {
-        //        working = srcClone;
-        //        createdWorking = false;
-        //    }
-
-        //    try
-        //    {
-        //        int rows = working.Rows;
-        //        int cols = working.Cols;
-
-        //        // --- определяем цвет фона (простая стратегия по углам) ---
-        //        Scalar chosenBg;
-        //        if (bgColor.HasValue)
-        //        {
-        //            chosenBg = bgColor.Value;
-        //        }
-        //        else
-        //        {
-        //            int cornerSize = Math.Max(8, Math.Min(32, Math.Min(rows, cols) / 30));
-        //            var corners = new List<Scalar>();
-        //            var rects = new[]
-        //            {
-        //        new Rect(0, 0, cornerSize, cornerSize),
-        //        new Rect(Math.Max(0, cols - cornerSize), 0, cornerSize, cornerSize),
-        //        new Rect(0, Math.Max(0, rows - cornerSize), cornerSize, cornerSize),
-        //        new Rect(Math.Max(0, cols - cornerSize), Math.Max(0, rows - cornerSize), cornerSize, cornerSize)
-        //    };
-
-        //            foreach (var r in rects)
-        //            {
-        //                if (r.Width <= 0 || r.Height <= 0) continue;
-        //                using var patch = new Mat(working, r);
-        //                var mean = Cv2.Mean(patch);
-        //                double brightness = (mean.Val0 + mean.Val1 + mean.Val2) / 3.0;
-        //                if (brightness > blackThreshold * 1.5)
-        //                    corners.Add(mean);
-        //            }
-
-        //            if (corners.Count > 0)
-        //            {
-        //                double b = 0, g = 0, r = 0;
-        //                foreach (var s in corners) { b += s.Val0; g += s.Val1; r += s.Val2; }
-        //                chosenBg = new Scalar(b / corners.Count, g / corners.Count, r / corners.Count);
-        //            }
-        //            else
-        //            {
-        //                chosenBg = new Scalar(255, 255, 255);
-        //            }
-        //        }
-
-        //        // --- маска темных пикселей ---
-        //        using var gray = new Mat();
-        //        Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
-
-        //        using var darkMask = new Mat();
-        //        Cv2.Threshold(gray, darkMask, blackThreshold, 255, ThresholdTypes.BinaryInv); // темные -> 255
-
-        //        // --- connected components: создаём Mats заранее (не используя out) ---
-        //        var labels = new Mat();
-        //        var stats = new Mat();
-        //        var centroids = new Mat();
-
-        //        try
-        //        {
-        //            // В разных версиях OpenCvSharp есть разные перегрузки; эта вызовет нужную версию
-        //            int nLabels = Cv2.ConnectedComponentsWithStats(darkMask, labels, stats, centroids);
-
-        //            // Копия для заполнения
-        //            var filled = working.Clone();
-
-        //            if (nLabels > 1)
-        //            {
-        //                for (int i = 1; i < nLabels; i++)
-        //                {
-        //                    int x = stats.At<int>(i, 0);
-        //                    int y = stats.At<int>(i, 1);
-        //                    int w = stats.At<int>(i, 2);
-        //                    int h = stats.At<int>(i, 3);
-
-        //                    bool touches = (x <= 0) || (y <= 0) || (x + w >= cols - 1) || (y + h >= rows - 1);
-        //                    if (!touches) continue;
-
-        //                    // compMask: где labels == i
-        //                    using var compMask = new Mat();
-        //                    Cv2.InRange(labels, new Scalar(i), new Scalar(i), compMask); // эквивалент labels==i
-
-        //                    // заполняем эту компоненту цветом фона
-        //                    filled.SetTo(chosenBg, compMask);
-        //                }
-        //            }
-
-        //            var result = filled.Clone();
-        //            filled.Dispose();
-        //            return result;
-        //        }
-        //        finally
-        //        {
-        //            labels.Dispose();
-        //            stats.Dispose();
-        //            centroids.Dispose();
-        //        }
-        //    }
-        //    finally
-        //    {
-        //        if (createdWorking && working != null)
-        //            working.Dispose();
-        //    }
-        //}
-
         private Mat RotateImageForDetection(Mat srcGrayBinary, double angle)
         {
             // Поворот без смены размера (вырезаем белые поля при подсчётах — это ok для оценки)
@@ -4339,227 +3612,7 @@ namespace ImgViewer.Models
             return -median;
         }
 
-        //public double GetSkewAngleByProjection(Mat src, double minAngle = -15, double maxAngle = 15, double coarseStep = 1.0, double refineStep = 0.1)
-        //{
-        //    // Метод: ищем угол, при котором горизонтальные проекции (row sums) дают наиболее выраженные пики => максимальная дисперсия
-        //    // Для скорости работаем на уменьшенной серой бинарной картинке.
-        //    int detectWidth = 1000;
-        //    Mat small = src.Width > detectWidth ? src.Resize(new OpenCvSharp.Size(detectWidth, (int)(src.Height * (detectWidth / (double)src.Width)))) : src.Clone();
 
-        //    using var gray = new Mat();
-        //    Cv2.CvtColor(small, gray, ColorConversionCodes.BGR2GRAY);
-
-        //    // Adaptive threshold или Otsu
-        //    using var bw = new Mat();
-        //    Cv2.Threshold(gray, bw, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-        //    // Инвертируем: текст = 1
-        //    Cv2.BitwiseNot(bw, bw);
-
-        //    // Убираем мелкие шумы (опционно)
-        //    using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
-        //    Cv2.MorphologyEx(bw, bw, MorphTypes.Open, kernel);
-
-        //    Func<Mat, double> scoreFor = (Mat m) =>
-        //    {
-        //        // считаем сумму по строкам (double[])
-        //        var rowSums = new double[m.Rows];
-        //        Func<Mat, double> scoreFor = (Mat m) =>
-        //        {
-        //            int rows = m.Rows;
-        //            int cols = m.Cols;
-        //            int stride = (int)m.Step();
-        //            var buffer = new byte[stride * rows];
-        //            Marshal.Copy(m.Data, buffer, 0, buffer.Length);
-
-        //            double[] rowSums = new double[rows];
-        //            for (int r = 0; r < rows; r++)
-        //            {
-        //                int off = r * stride;
-        //                double sum = 0;
-        //                for (int c = 0; c < cols; c++)
-        //                    sum += buffer[off + c];
-        //                rowSums[r] = sum;
-        //            }
-
-        //            double mean = rowSums.Average();
-        //            double var = rowSums.Select(v => (v - mean) * (v - mean)).Average();
-        //            return var;
-        //        };
-        //        // Нормализуем и считаем дисперсию — большие пики (строки текста) дают большую дисперсию
-        //        double mean = rowSums.Average();
-        //        double var = rowSums.Select(v => (v - mean) * (v - mean)).Average();
-        //        return var;
-        //    };
-
-        //    // coarse search
-        //    double bestAngle = 0;
-        //    double bestScore = double.MinValue;
-        //    for (double a = minAngle; a <= maxAngle; a += coarseStep)
-        //    {
-        //        using var rot = RotateImageForDetection(bw, a);
-        //        double s = scoreFor(rot);
-        //        if (s > bestScore) { bestScore = s; bestAngle = a; }
-        //    }
-
-        //    // refine around bestAngle
-        //    double refineMin = Math.Max(minAngle, bestAngle - coarseStep);
-        //    double refineMax = Math.Min(maxAngle, bestAngle + coarseStep);
-        //    for (double a = refineMin; a <= refineMax; a += refineStep)
-        //    {
-        //        using var rot = RotateImageForDetection(bw, a);
-        //        double s = scoreFor(rot);
-        //        if (s > bestScore) { bestScore = s; bestAngle = a; }
-        //    }
-
-        //    small.Dispose();
-        //    return -bestAngle; // возвращаем знак для поворота (чтобы выпрямить)
-        //}
-
-        // Sauvola локальная бинаризация (быстро через boxFilter)
-        // srcGray: CV_8UC1 grayscale
-        // windowSize: локальное окно (нечетное) — 15..51 (25 обычный старт)
-        // k: обычно 0.2..0.5 (0.34 хороший старт)
-        // R: динамический диапазон (обычно 128)
-
-        //private Mat Sauvola(Mat srcGray, int windowSize = 25, double k = 0.34, double R = 128.0, int pencilStrokeBoost = 0)
-        //{
-
-        //    if (srcGray.Empty()) throw new ArgumentException("srcGray is empty");
-
-
-
-        //    Mat gray = srcGray;
-        //    if (gray.Type() != MatType.CV_8UC1)
-        //    {
-        //        gray = new Mat();
-        //        Cv2.CvtColor(srcGray, gray, ColorConversionCodes.BGR2GRAY);
-        //    }
-
-        //    if (windowSize % 2 == 0) windowSize++; // ensure odd
-
-        //    // Convert to double for precision
-        //    Mat srcD = new Mat();
-        //    gray.ConvertTo(srcD, MatType.CV_64F);
-
-        //    // mean = boxFilter(src, ksize) normalized
-        //    Mat mean = new Mat();
-        //    Cv2.BoxFilter(srcD, mean, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
-
-        //    // meanSq: compute boxFilter(src*src)
-        //    Mat sq = new Mat();
-        //    Cv2.Multiply(srcD, srcD, sq);
-        //    Mat meanSq = new Mat();
-        //    Cv2.BoxFilter(sq, meanSq, MatType.CV_64F, new OpenCvSharp.Size(windowSize, windowSize), anchor: new OpenCvSharp.Point(-1, -1), normalize: true, borderType: BorderTypes.Reflect101);
-
-        //    // std = sqrt(meanSq - mean*mean)
-        //    Mat std = new Mat();
-        //    Cv2.Subtract(meanSq, mean.Mul(mean), std); // std now holds variance
-        //    Cv2.Max(std, 0.0, std); // clamp small negatives
-        //    Cv2.Sqrt(std, std);
-
-        //    // threshold = mean * (1 + k * (std/R - 1))
-        //    Mat thresh = new Mat();
-        //    Cv2.Divide(std, R, thresh);                 // thresh = std / R
-        //    Cv2.Subtract(thresh, 1.0, thresh);          // thresh = std/R - 1
-        //    Cv2.Multiply(thresh, k, thresh);            // thresh = k*(std/R -1)
-        //    Cv2.Add(thresh, 1.0, thresh);               // thresh = 1 + k*(std/R -1)
-        //    Cv2.Multiply(mean, thresh, thresh);         // thresh = mean * (...)
-
-        //    double pencilMargin = (double)pencilStrokeBoost; // TODO: вынести в BinarizeParameters (SauvolaPencilMargin)
-        //    using var threshShifted = new Mat();
-        //    Cv2.Add(thresh, new Scalar(pencilMargin), threshShifted);
-        //    Cv2.Min(threshShifted, new Scalar(255.0), threshShifted);
-
-        //    // binarize: srcD > thresh -> 255 else 0
-        //    Mat bin = new Mat();
-        //    Cv2.Compare(srcD, threshShifted, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
-        //    bin.ConvertTo(bin, MatType.CV_8UC1, 255.0);  // ensure 0/255
-
-        //    // Clean-up mats
-        //    srcD.Dispose(); mean.Dispose(); sq.Dispose(); meanSq.Dispose(); std.Dispose(); thresh.Dispose();
-
-        //    return bin;
-        //}
-
-        //private Mat SauvolaBinarize(Mat src, BinarizeParameters p)
-        //{
-        //    //Debug.WriteLine($"clahe grid size {p.SauvolaClaheGridSize}");
-        //    using var binMat = BinarizeForHandwritten(src,
-        //                                              p.SauvolaUseClahe,
-        //                                              p.SauvolaClaheClip,
-        //                                              p.SauvolaClaheGridSize,
-        //                                              p.SauvolaWindowSize,
-        //                                              p.SauvolaK,
-        //                                              p.SauvolaR,
-        //                                              p.SauvolaMorphRadius,
-        //                                              p.PencilStrokeBoost);
-
-        //    Mat bin8;
-        //    if (binMat.Type() != MatType.CV_8UC1)
-        //    {
-        //        bin8 = new Mat();
-        //        binMat.ConvertTo(bin8, MatType.CV_8UC1);
-        //    }
-        //    else
-        //    {
-        //        bin8 = binMat.Clone(); // сделаем клон, чтобы безопасно Dispose оригинала ниже
-        //    }
-
-        //    try
-        //    {
-        //        var colorMat = new Mat();
-        //        Cv2.CvtColor(bin8, colorMat, ColorConversionCodes.GRAY2BGR);
-        //        return colorMat;
-        //    }
-        //    finally
-        //    {
-        //        bin8.Dispose();
-        //    }
-
-        //}
-
-
-
-
-
-        //private Mat BinarizeForHandwritten(Mat src, bool useClahe = true, double claheClip = 12.0, int claheGridSize = 8,
-        //                                     int sauvolaWindow = 35, double sauvolaK = 0.34, double sauvolaR = 180, int morphRadius = 0, int pencilStrokeBoost = 0)
-        //{
-        //    var claheGrid = new OpenCvSharp.Size(claheGridSize, claheGridSize);
-        //    Mat gray = src;
-        //    if (src.Type() != MatType.CV_8UC1)
-        //    {
-        //        gray = new Mat();
-        //        Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-        //    }
-        //    Mat pre = gray;
-        //    if (useClahe)
-        //    {
-        //        var clahe = Cv2.CreateCLAHE(claheClip, claheGrid);
-        //        pre = new Mat();
-        //        clahe.Apply(gray, pre);
-        //        clahe.Dispose();
-        //        if (!ReferenceEquals(gray, src)) gray.Dispose();
-        //    }
-
-        //    var bin = Sauvola(pre, sauvolaWindow, sauvolaK, sauvolaR, pencilStrokeBoost);
-
-        //    // optional morphological cleaning (open to remove small noise, close to fill holes)
-        //    if (morphRadius > 0)
-        //    {
-        //        var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(2 * morphRadius + 1, 2 * morphRadius + 1));
-        //        var cleaned = new Mat();
-        //        Cv2.MorphologyEx(bin, cleaned, MorphTypes.Open, kernel);
-        //        Cv2.MorphologyEx(cleaned, bin, MorphTypes.Close, kernel);
-        //        kernel.Dispose();
-        //        cleaned.Dispose();
-        //    }
-
-        //    if (!ReferenceEquals(pre, gray) && pre != src) pre.Dispose();
-        //    if (gray != src && gray != pre) gray.Dispose();
-
-        //    return bin;
-        //}
 
 
     }

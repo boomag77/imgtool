@@ -477,14 +477,14 @@ namespace ImgViewer.Models
         {
             //Debug.WriteLine("RemoveBordersByRowColWhite started. Before checking _currentImage");
             if (src == null || src.Empty())
-                return null;
+                return new Mat();
 
             //Debug.WriteLine("RemoveBordersByRowColWhite started.");
 
             // Подготовка источника (убедиться, что BGR CV_8UC3)
             //Mat src = _currentImage;
             Mat srcBgr = src;
-            Mat gray = new Mat();
+            var gray = new Mat();
             
             bool converted = false;
             try

@@ -79,7 +79,7 @@ namespace ImgViewer.Models
         public bool UseGaussian;
         public bool UseMorphology;
         public bool SauvolaUseClahe;
-        
+
 
 
 
@@ -172,12 +172,12 @@ namespace ImgViewer.Models
         public double Roundness { get; set; } = 0.9;
     }
 
-    public class DeskewOperation
-    {
-        OperationType _type = OperationType.Deskew;
-        DeskewAlgorithm _algo;
+    //public class DeskewOperation
+    //{
+    //    OperationType _type = OperationType.Deskew;
+    //    DeskewAlgorithm _algo;
 
-    }
+    //}
 
 
 

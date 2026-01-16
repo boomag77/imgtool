@@ -378,6 +378,20 @@ namespace ImgViewer.Models
                 despeckleRelativeFlagImmediate.PropertyChanged -= DespeckleRelativeFlag_PropertyChanged;
                 despeckleRelativeFlagImmediate.PropertyChanged += DespeckleRelativeFlag_PropertyChanged;
             }
+            var despeckleDustFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "enableDustRemoval");
+            if (despeckleDustFlagImmediate != null)
+            {
+                ApplyDespeckleVisibility();
+                despeckleDustFlagImmediate.PropertyChanged -= DespeckleDustFlag_PropertyChanged;
+                despeckleDustFlagImmediate.PropertyChanged += DespeckleDustFlag_PropertyChanged;
+            }
+            var despeckleDustShapeFlagImmediate = _parameters.FirstOrDefault(p => p.Key == "enableDustShapeFilter");
+            if (despeckleDustShapeFlagImmediate != null)
+            {
+                ApplyDespeckleVisibility();
+                despeckleDustShapeFlagImmediate.PropertyChanged -= DespeckleDustShapeFlag_PropertyChanged;
+                despeckleDustShapeFlagImmediate.PropertyChanged += DespeckleDustShapeFlag_PropertyChanged;
+            }
 
 
             var enhanceMethodParam = _parameters.FirstOrDefault(p => p.Key == "enhanceMethod");
@@ -449,10 +463,17 @@ namespace ImgViewer.Models
             if (smallAreaRelativeFlag == null)
                 return;
             bool useRelative = smallAreaRelativeFlag != null && smallAreaRelativeFlag.IsBool && smallAreaRelativeFlag.BoolValue;
+            var dustFlag = _parameters.FirstOrDefault(x => x.Key == "enableDustRemoval");
+            bool dustEnabled = dustFlag != null && dustFlag.IsBool && dustFlag.BoolValue;
+            var dustShapeFlag = _parameters.FirstOrDefault(x => x.Key == "enableDustShapeFilter");
+            bool dustShapeEnabled = dustShapeFlag != null && dustShapeFlag.IsBool && dustShapeFlag.BoolValue;
             foreach (var p in _parameters)
             {
                 switch (p.Key)
                 {
+                    case "despeckleMethod":
+                        p.IsVisible = true;
+                        break;
                     case "smallAreaRelative":
                         p.IsVisible = true;
                         break;
@@ -461,6 +482,21 @@ namespace ImgViewer.Models
                         break;
                     case "smallAreaAbsolutePx":
                         p.IsVisible = !useRelative;
+                        break;
+                    case "enableDustRemoval":
+                        p.IsVisible = true;
+                        break;
+                    case "dustMedianKsize":
+                    case "dustOpenKernel":
+                    case "dustOpenIter":
+                        p.IsVisible = dustEnabled;
+                        break;
+                    case "enableDustShapeFilter":
+                        p.IsVisible = true;
+                        break;
+                    case "dustMinSolidity":
+                    case "dustMaxAspectRatio":
+                        p.IsVisible = dustShapeEnabled;
                         break;
                 }
             }
@@ -979,6 +1015,18 @@ namespace ImgViewer.Models
         }
 
         private void DespeckleRelativeFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            ApplyDespeckleVisibility();
+        }
+
+        private void DespeckleDustFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
+            ApplyDespeckleVisibility();
+        }
+
+        private void DespeckleDustShapeFlag_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName != nameof(PipeLineParameter.BoolValue)) return;
             ApplyDespeckleVisibility();

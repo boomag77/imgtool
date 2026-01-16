@@ -295,8 +295,9 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
+                            new PipeLineParameter("Method", "despeckleMethod", new [] { "Classic", "Effective" }, 0),
                             new PipeLineParameter("Small Area Relative", "smallAreaRelative", true),
-                            new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 5, 0.01),
+                            new PipeLineParameter("Small Area Multiplier", "smallAreaMultiplier",0.50, 0.01, 50, 0.01),
                             new PipeLineParameter("Small Area Absolute Px", "smallAreaAbsolutePx", 64, 1, 1000, 1),
                             new PipeLineParameter("Max dot Height Fraction", "maxDotHeightFraction", 0.35, 0.01, 5.00, 0.01),
                             new PipeLineParameter("Proximity Radius Fraction", "proximityRadiusFraction", 0.80, 0.01, 5.00, 0.01),
@@ -305,7 +306,14 @@ public class Pipeline
                             new PipeLineParameter("UseDilateBeforeCC", "useDilateBeforeCC", false),
                             new PipeLineParameter("Dilate Kernel", "dilateKernel", new [] {"1x3", "3x1", "3x3"}),
                             new PipeLineParameter("Dilate Iterations", "dilateIter", 1, 1, 5, 1),
-                            new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 1.0, 0.1),
+                            new PipeLineParameter("Enable dust removal", "enableDustRemoval", false),
+                            new PipeLineParameter("Dust median ksize", "dustMedianKsize", 3, 1, 15, 2),
+                            new PipeLineParameter("Dust open kernel", "dustOpenKernel", 3, 1, 15, 2),
+                            new PipeLineParameter("Dust open iterations", "dustOpenIter", 1, 1, 5, 1),
+                            new PipeLineParameter("Enable dust shape filter", "enableDustShapeFilter", false),
+                            new PipeLineParameter("Dust min solidity", "dustMinSolidity", 0.60, 0.05, 1.00, 0.05),
+                            new PipeLineParameter("Dust max aspect ratio", "dustMaxAspectRatio", 3.00, 1.00, 20.00, 0.25),
+                            new PipeLineParameter("Size tolerance", "sizeTolerance", 0.4, 0.0, 5.0, 0.1),
                             new PipeLineParameter("Show candidates", "showDespeckleDebug", true)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.Despeckle, operation.CreateParameterDictionary()));
