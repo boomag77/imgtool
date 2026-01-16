@@ -414,8 +414,6 @@ public class Pipeline
                             new PipeLineParameter("Close kernel width frac", "closeKernelWidthFrac", 0.025, 0.005, 0.12, 0.001),
                             new PipeLineParameter("Close kernel height px", "closeKernelHeightPx", 3, 1, 25, 1),
                             new PipeLineParameter("Smooth window px", "smoothWindowPx", 41, 3, 301, 2),
-                            new PipeLineParameter("Min confidence", "minConfidence", 0.28, 0.0, 1.0, 0.01),
-                            new PipeLineParameter("Throw if low confidence", "throwIfLowConfidence", false),
                             new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true),
                             new PipeLineParameter("Lab gutter half width", "labGutterHalfWidthPx", 18, 1, 100, 1),
                             new PipeLineParameter("Lab neighbor width", "labNeighborWidthPx", 70, 1, 200, 1),

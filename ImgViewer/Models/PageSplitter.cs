@@ -43,10 +43,6 @@ public sealed class PageSplitter
         // Smooth projection curve
         public int SmoothWindowPx = 41; // should be odd-ish (we'll auto-fix)
 
-        // --- Confidence thresholds ---
-        public double MinConfidence = 0.28;   // if final confidence < this => return Failure (or you can ignore)
-        public bool ThrowIfLowConfidence = false;
-
         // --- Lab confirmation ---
         public bool UseLabConfirmation = true;
 
@@ -164,8 +160,20 @@ public sealed class PageSplitter
         if (_s.UseLabConfirmation)
             labConf = ComputeLabConfidence(analysis, splitX_A, token);
 
-        // 9) Blend final confidence
-        double finalConf = Clamp01(_s.WeightProjection * projConf + _s.WeightLab * labConf);
+        // 9) Blend final confidence (renormalize when one side is zero)
+        double weightedSum = 0.0;
+        double weightSum = 0.0;
+        if (projConf > 0.0)
+        {
+            weightedSum += _s.WeightProjection * projConf;
+            weightSum += _s.WeightProjection;
+        }
+        if (labConf > 0.0)
+        {
+            weightedSum += _s.WeightLab * labConf;
+            weightSum += _s.WeightLab;
+        }
+        double finalConf = weightSum > 0.0 ? Clamp01(weightedSum / weightSum) : 0.0;
 
         // 10) Map splitX to original coords
         int splitX_Orig = scale == 1.0 ? splitX_A : (int)Math.Round(splitX_A / scale);
@@ -189,19 +197,7 @@ public sealed class PageSplitter
 
         var borderColor = EstimateBorderColor(srcBgr);
 
-        if (finalConf < _s.MinConfidence)
-        {
-            result.Success = false;
-            result.Reason = $"Low confidence: final={finalConf:F3}, proj={projConf:F3}, lab={labConf:F3}";
-
-            if (_s.ThrowIfLowConfidence)
-                throw new InvalidOperationException(result.Reason);
-
-            if (createDebugOverlay)
-                result.DebugOverlay = BuildDebugOverlay(analysis, splitX_A, bandStart, bandEnd);
-
-            return result;
-        }
+        result.Reason = $"Confidence: final={finalConf:F3}, proj={projConf:F3}, lab={labConf:F3}";
 
         // Clone() so the returned Mats are independent from src lifetime
         using (var leftRoi = new Mat(src, new Rect(0, 0, leftW, origH)))

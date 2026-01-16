@@ -2707,10 +2707,6 @@ namespace ImgViewer.Models
                     settings.CloseKernelHeightPx = SafeInt(khObj, settings.CloseKernelHeightPx);
                 if (parameters.TryGetValue("smoothWindowPx", out var smoothObj))
                     settings.SmoothWindowPx = SafeInt(smoothObj, settings.SmoothWindowPx);
-                if (parameters.TryGetValue("minConfidence", out var confObj))
-                    settings.MinConfidence = SafeDouble(confObj, settings.MinConfidence);
-                if (parameters.TryGetValue("throwIfLowConfidence", out var throwObj))
-                    settings.ThrowIfLowConfidence = SafeBool(throwObj, settings.ThrowIfLowConfidence);
                 if (parameters.TryGetValue("useLabConfirmation", out var labObj))
                     settings.UseLabConfirmation = SafeBool(labObj, settings.UseLabConfirmation);
                 if (parameters.TryGetValue("labGutterHalfWidthPx", out var gutterObj))

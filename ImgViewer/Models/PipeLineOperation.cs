@@ -799,8 +799,6 @@ namespace ImgViewer.Models
                     case "closeKernelWidthFrac":
                     case "closeKernelHeightPx":
                     case "smoothWindowPx":
-                    case "minConfidence":
-                    case "throwIfLowConfidence":
                     case "useLabConfirmation":
                     case "labGutterHalfWidthPx":
                     case "labNeighborWidthPx":
