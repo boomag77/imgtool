@@ -103,6 +103,9 @@ public sealed class PageSplitter
     }
 
     public SplitResult Split(Mat src, bool createDebugOverlay = false, CancellationToken token = default)
+        => SplitAuto(src, createDebugOverlay, token);
+
+    public SplitResult SplitAuto(Mat src, bool createDebugOverlay = false, CancellationToken token = default)
     {
         if (src == null || src.Empty())
             throw new ArgumentException("src is null or empty");
@@ -215,6 +218,51 @@ public sealed class PageSplitter
 
         if (createDebugOverlay)
             result.DebugOverlay = BuildDebugOverlay(analysis, splitX_A, bandStart, bandEnd);
+
+        return result;
+    }
+
+    public SplitResult SplitManual(Mat src, double cutLinePercent, int overlapPx, CancellationToken token = default)
+    {
+        if (src == null || src.Empty())
+            throw new ArgumentException("src is null or empty");
+
+        token.ThrowIfCancellationRequested();
+
+        int origW = src.Cols;
+        int origH = src.Rows;
+
+        double clampedPercent = Clamp(cutLinePercent, 0.0, 100.0);
+        int splitX = Clamp((int)Math.Round(origW * (clampedPercent / 100.0)), 0, origW);
+        int overlap = Math.Max(0, overlapPx);
+
+        int leftW = Clamp(splitX + overlap, 1, origW);
+        int rightX = Clamp(splitX - overlap, 0, origW - 1);
+        int rightW = Clamp(origW - rightX, 1, origW);
+
+        var result = new SplitResult
+        {
+            SplitX = splitX,
+            SplitX_Analysis = splitX,
+            ProjectionConfidence = 1.0,
+            LabConfidence = 1.0,
+            FinalConfidence = 1.0,
+            Success = true
+        };
+
+        using var srcBgr = EnsureBgr(src);
+        var borderColor = EstimateBorderColor(srcBgr);
+
+        using (var leftRoi = new Mat(src, new Rect(0, 0, leftW, origH)))
+        using (var leftClone = leftRoi.Clone())
+        {
+            result.Left = AddSplitBorder(leftClone, 0, SplitBorderPadding, borderColor);
+        }
+        using (var rightRoi = new Mat(src, new Rect(rightX, 0, rightW, origH)))
+        using (var rightClone = rightRoi.Clone())
+        {
+            result.Right = AddSplitBorder(rightClone, SplitBorderPadding, 0, borderColor);
+        }
 
         return result;
     }

@@ -398,9 +398,31 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Padding (%)", "padPercent", 3.0, 0.0, 20.0, 0.1),
-                            new PipeLineParameter("Min confidence", "minConfidence", 0.01, 0.0, 1.0, 0.01),
-                            new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true)
+                            new PipeLineParameter("Method", "splitMethod", new [] { "Auto", "Manual" }, 0),
+                            new PipeLineParameter("Cut line (% width)", "manualCutLinePercent", 50.0, 0.0, 100.0, 0.5),
+                            new PipeLineParameter("Overlap (px)", "manualOverlapPx", 0, 0, 500, 1),
+                            new PipeLineParameter("Central band start (frac)", "centralBandStart", 0.40, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Central band end (frac)", "centralBandEnd", 0.60, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Padding (%)", "padPercent", 1.0, 0.0, 20.0, 0.1),
+                            new PipeLineParameter("Padding (px)", "padPx", 0, 0, 200, 1),
+                            new PipeLineParameter("Analysis max width", "analysisMaxWidth", 1400, 200, 6000, 100),
+                            new PipeLineParameter("Use CLAHE", "useClahe", true),
+                            new PipeLineParameter("CLAHE clip", "claheClipLimit", 2.0, 0.1, 10.0, 0.1),
+                            new PipeLineParameter("CLAHE grid", "claheTileGrid", 8, 2, 64, 1),
+                            new PipeLineParameter("Adaptive block size", "adaptiveBlockSize", 31, 3, 255, 2),
+                            new PipeLineParameter("Adaptive C", "adaptiveC", 10.0, -50.0, 50.0, 1.0),
+                            new PipeLineParameter("Close kernel width frac", "closeKernelWidthFrac", 0.025, 0.005, 0.12, 0.001),
+                            new PipeLineParameter("Close kernel height px", "closeKernelHeightPx", 3, 1, 25, 1),
+                            new PipeLineParameter("Smooth window px", "smoothWindowPx", 41, 3, 301, 2),
+                            new PipeLineParameter("Min confidence", "minConfidence", 0.28, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Throw if low confidence", "throwIfLowConfidence", false),
+                            new PipeLineParameter("Use Lab confirmation", "useLabConfirmation", true),
+                            new PipeLineParameter("Lab gutter half width", "labGutterHalfWidthPx", 18, 1, 100, 1),
+                            new PipeLineParameter("Lab neighbor width", "labNeighborWidthPx", 70, 1, 200, 1),
+                            new PipeLineParameter("Min L diff", "minLDiff", 6.0, 0.0, 50.0, 0.5),
+                            new PipeLineParameter("Max gutter std ratio", "maxGutterStdRatio", 0.88, 0.0, 1.5, 0.01),
+                            new PipeLineParameter("Weight projection", "weightProjection", 0.70, 0.0, 1.0, 0.01),
+                            new PipeLineParameter("Weight Lab", "weightLab", 0.30, 0.0, 1.0, 0.01)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.PageSplit, operation.CreateParameterDictionary()));
                 }

@@ -401,6 +401,17 @@ namespace ImgViewer.Models
                 retinexRobustFlagImmediate.PropertyChanged += RetinexRobustFlag_PropertyChanged;
             }
 
+            var splitMethodParam = _parameters.FirstOrDefault(p => p.Key == "splitMethod");
+            if (splitMethodParam != null)
+            {
+                ApplyPageSplitVisibility(splitMethodParam.SelectedOption);
+                splitMethodParam.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex))
+                        ApplyPageSplitVisibility(splitMethodParam.SelectedOption);
+                };
+            }
+
         }
 
         private void ApplyMorphVisibility(bool enabled)
@@ -754,6 +765,53 @@ namespace ImgViewer.Models
                 if (parameter.Key == "retinexPercentLow" || parameter.Key == "retinexPercentHigh" || parameter.Key == "retinexHistBins")
                 {
                     parameter.IsVisible = visible;
+                }
+            }
+        }
+
+        private void ApplyPageSplitVisibility(string? selectedOption)
+        {
+            var selected = (selectedOption ?? "Auto").Trim();
+            bool isManual = selected.Equals("Manual", StringComparison.OrdinalIgnoreCase);
+            bool isAuto = !isManual;
+
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "splitMethod":
+                        p.IsVisible = true;
+                        break;
+                    case "manualCutLinePercent":
+                    case "manualOverlapPx":
+                        p.IsVisible = isManual;
+                        break;
+                    case "centralBandStart":
+                    case "centralBandEnd":
+                    case "padPercent":
+                    case "padPx":
+                    case "analysisMaxWidth":
+                    case "useClahe":
+                    case "claheClipLimit":
+                    case "claheTileGrid":
+                    case "adaptiveBlockSize":
+                    case "adaptiveC":
+                    case "closeKernelWidthFrac":
+                    case "closeKernelHeightPx":
+                    case "smoothWindowPx":
+                    case "minConfidence":
+                    case "throwIfLowConfidence":
+                    case "useLabConfirmation":
+                    case "labGutterHalfWidthPx":
+                    case "labNeighborWidthPx":
+                    case "minLDiff":
+                    case "maxGutterStdRatio":
+                    case "weightProjection":
+                    case "weightLab":
+                        p.IsVisible = isAuto;
+                        break;
+                    default:
+                        break;
                 }
             }
         }

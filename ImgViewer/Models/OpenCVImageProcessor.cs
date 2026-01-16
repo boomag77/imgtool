@@ -2550,11 +2550,31 @@ namespace ImgViewer.Models
 
             try
             {
+                string method = "Auto";
+                if (parameters != null && parameters.TryGetValue("splitMethod", out var methodObj))
+                    method = methodObj?.ToString() ?? "Auto";
+
                 var splitter = new PageSplitter(BuildPageSplitterSettings(parameters));
                 PageSplitter.SplitResult? result = null;
                 try
                 {
-                    result = splitter.Split(src, false, _token);
+                    if (method.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+                    {
+                        double cutLinePercent = 50.0;
+                        int overlapPx = 0;
+                        if (parameters != null)
+                        {
+                            if (parameters.TryGetValue("manualCutLinePercent", out var cutObj))
+                                cutLinePercent = SafeDouble(cutObj, cutLinePercent);
+                            if (parameters.TryGetValue("manualOverlapPx", out var overlapObj))
+                                overlapPx = SafeInt(overlapObj, overlapPx);
+                        }
+                        result = splitter.SplitManual(src, cutLinePercent, overlapPx, _token);
+                    }
+                    else
+                    {
+                        result = splitter.SplitAuto(src, false, _token);
+                    }
                     if (result.Success && result.Left != null && result.Right != null)
                     {
                         var leftBmp = MatToBitmapSource(result.Left);
@@ -2590,11 +2610,31 @@ namespace ImgViewer.Models
             ClearSplitResults();
             try
             {
+                string method = "Auto";
+                if (parameters != null && parameters.TryGetValue("splitMethod", out var methodObj))
+                    method = methodObj?.ToString() ?? "Auto";
+
                 var splitter = new PageSplitter(BuildPageSplitterSettings(parameters));
                 PageSplitter.SplitResult? result = null;
                 try
                 {
-                    result = splitter.Split(src, false, _token);
+                    if (method.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+                    {
+                        double cutLinePercent = 50.0;
+                        int overlapPx = 0;
+                        if (parameters != null)
+                        {
+                            if (parameters.TryGetValue("manualCutLinePercent", out var cutObj))
+                                cutLinePercent = SafeDouble(cutObj, cutLinePercent);
+                            if (parameters.TryGetValue("manualOverlapPx", out var overlapObj))
+                                overlapPx = SafeInt(overlapObj, overlapPx);
+                        }
+                        result = splitter.SplitManual(src, cutLinePercent, overlapPx, _token);
+                    }
+                    else
+                    {
+                        result = splitter.SplitAuto(src, false, _token);
+                    }
                     if (result.Success && result.Left != null && result.Right != null)
                     {
                         var left = result.Left;
@@ -2628,12 +2668,7 @@ namespace ImgViewer.Models
 
         private PageSplitter.Settings BuildPageSplitterSettings(Dictionary<string, object> parameters)
         {
-            var settings = new PageSplitter.Settings
-            {
-                PadPercent = 1.0,
-                MinConfidence = 0.30,
-                UseLabConfirmation = true
-            };
+            var settings = new PageSplitter.Settings();
 
             if (parameters != null)
             {
@@ -2650,11 +2685,46 @@ namespace ImgViewer.Models
                     settings.PadPercent = 0.0;
                 }
 
+                if (parameters.TryGetValue("centralBandStart", out var bandStartObj))
+                    settings.CentralBandStart = SafeDouble(bandStartObj, settings.CentralBandStart);
+                if (parameters.TryGetValue("centralBandEnd", out var bandEndObj))
+                    settings.CentralBandEnd = SafeDouble(bandEndObj, settings.CentralBandEnd);
+                if (parameters.TryGetValue("analysisMaxWidth", out var analysisObj))
+                    settings.AnalysisMaxWidth = SafeInt(analysisObj, settings.AnalysisMaxWidth);
+                if (parameters.TryGetValue("useClahe", out var useClaheObj))
+                    settings.UseClahe = SafeBool(useClaheObj, settings.UseClahe);
+                if (parameters.TryGetValue("claheClipLimit", out var clipObj))
+                    settings.ClaheClipLimit = SafeDouble(clipObj, settings.ClaheClipLimit);
+                if (parameters.TryGetValue("claheTileGrid", out var gridObj))
+                    settings.ClaheTileGrid = SafeInt(gridObj, settings.ClaheTileGrid);
+                if (parameters.TryGetValue("adaptiveBlockSize", out var blockObj))
+                    settings.AdaptiveBlockSize = SafeInt(blockObj, settings.AdaptiveBlockSize);
+                if (parameters.TryGetValue("adaptiveC", out var cObj))
+                    settings.AdaptiveC = SafeDouble(cObj, settings.AdaptiveC);
+                if (parameters.TryGetValue("closeKernelWidthFrac", out var kwObj))
+                    settings.CloseKernelWidthFrac = SafeDouble(kwObj, settings.CloseKernelWidthFrac);
+                if (parameters.TryGetValue("closeKernelHeightPx", out var khObj))
+                    settings.CloseKernelHeightPx = SafeInt(khObj, settings.CloseKernelHeightPx);
+                if (parameters.TryGetValue("smoothWindowPx", out var smoothObj))
+                    settings.SmoothWindowPx = SafeInt(smoothObj, settings.SmoothWindowPx);
                 if (parameters.TryGetValue("minConfidence", out var confObj))
                     settings.MinConfidence = SafeDouble(confObj, settings.MinConfidence);
-
+                if (parameters.TryGetValue("throwIfLowConfidence", out var throwObj))
+                    settings.ThrowIfLowConfidence = SafeBool(throwObj, settings.ThrowIfLowConfidence);
                 if (parameters.TryGetValue("useLabConfirmation", out var labObj))
                     settings.UseLabConfirmation = SafeBool(labObj, settings.UseLabConfirmation);
+                if (parameters.TryGetValue("labGutterHalfWidthPx", out var gutterObj))
+                    settings.LabGutterHalfWidthPx = SafeInt(gutterObj, settings.LabGutterHalfWidthPx);
+                if (parameters.TryGetValue("labNeighborWidthPx", out var neighborObj))
+                    settings.LabNeighborWidthPx = SafeInt(neighborObj, settings.LabNeighborWidthPx);
+                if (parameters.TryGetValue("minLDiff", out var minLDiffObj))
+                    settings.MinLDiff = SafeDouble(minLDiffObj, settings.MinLDiff);
+                if (parameters.TryGetValue("maxGutterStdRatio", out var ratioObj))
+                    settings.MaxGutterStdRatio = SafeDouble(ratioObj, settings.MaxGutterStdRatio);
+                if (parameters.TryGetValue("weightProjection", out var weightProjObj))
+                    settings.WeightProjection = SafeDouble(weightProjObj, settings.WeightProjection);
+                if (parameters.TryGetValue("weightLab", out var weightLabObj))
+                    settings.WeightLab = SafeDouble(weightLabObj, settings.WeightLab);
             }
 
             return settings;
