@@ -140,15 +140,46 @@ public sealed class PageSplitter
         // 4) Vertical projection: fast via Reduce(SUM) over rows
         var colSum = ComputeColumnSum(inkMask); // length W, proportional to ink density
 
+        using var L = ExtractLabL(analysis);
+        ComputeColumnMeanStd(L, out var meanL, out var stdL);
+
+        // Adaptive band based on ink distribution (avoid bias to text-heavy side)
+        int bandStartDefault = Clamp((int)Math.Round(W * _s.CentralBandStart), 0, W - 1);
+        int bandEndDefault = Clamp((int)Math.Round(W * _s.CentralBandEnd), 0, W - 1);
+        if (bandEndDefault <= bandStartDefault) (bandStartDefault, bandEndDefault) = (Math.Max(0, W / 3), Math.Min(W - 1, 2 * W / 3));
+
+        int adaptiveStart, adaptiveEnd;
+        ComputeAdaptiveBand(colSum, out adaptiveStart, out adaptiveEnd);
+
+        int bandStart = Math.Max(bandStartDefault, adaptiveStart);
+        int bandEnd = Math.Min(bandEndDefault, adaptiveEnd);
+        if (bandEnd <= bandStart) (bandStart, bandEnd) = (Math.Max(0, W / 3), Math.Min(W - 1, 2 * W / 3));
+
         // 5) Smooth curve
         var smooth = SmoothMovingAverage(colSum, FixOdd(_s.SmoothWindowPx));
 
-        // 6) Find valley (min) in central band
-        int bandStart = Clamp((int)Math.Round(W * _s.CentralBandStart), 0, W - 1);
-        int bandEnd = Clamp((int)Math.Round(W * _s.CentralBandEnd), 0, W - 1);
-        if (bandEnd <= bandStart) (bandStart, bandEnd) = (Math.Max(0, W / 3), Math.Min(W - 1, 2 * W / 3));
+        // 6) Find valley using local mean + center bias to resist notes near center
+        int projSplitX = FindBestSplitIndex(colSum, smooth, meanL, stdL, bandStart, bandEnd);
 
-        int splitX_A = ArgMin(smooth, bandStart, bandEnd);
+        // 6.1) Refine locally on lightly smoothed projection
+        var fineSmooth = SmoothMovingAverage(colSum, FixOdd(Math.Max(3, _s.SmoothWindowPx / 3)));
+        int refineRadius = Math.Max(5, W / 50);
+        projSplitX = RefineLocalMin(fineSmooth, projSplitX, refineRadius);
+
+        int seamSplitX = FindSeamSplitX(L, inkMask, bandStart, bandEnd, token);
+
+        double projScore = ComputeSplitScore(colSum, smooth, meanL, stdL, bandStart, bandEnd, projSplitX);
+        double seamScore = ComputeSplitScore(colSum, smooth, meanL, stdL, bandStart, bandEnd, seamSplitX);
+
+        double bandCenter = 0.5 * (bandStart + bandEnd);
+        double projDist = Math.Abs(projSplitX - bandCenter);
+        double seamDist = Math.Abs(seamSplitX - bandCenter);
+
+        int splitX_A;
+        if (seamScore >= projScore * 0.95)
+            splitX_A = seamDist <= projDist ? seamSplitX : projSplitX;
+        else
+            splitX_A = seamScore > projScore ? seamSplitX : projSplitX;
 
         // 7) Projection confidence: compare valley vs median level in band
         double projConf = ComputeProjectionConfidence(smooth, bandStart, bandEnd, splitX_A);
@@ -158,7 +189,7 @@ public sealed class PageSplitter
         // 8) Lab confirmation (L brightness + texture)
         double labConf = 0.0;
         if (_s.UseLabConfirmation)
-            labConf = ComputeLabConfidence(analysis, splitX_A, token);
+            labConf = ComputeLabConfidenceFromL(L, splitX_A, token);
 
         // 9) Blend final confidence (renormalize when one side is zero)
         double weightedSum = 0.0;
@@ -376,6 +407,317 @@ public sealed class PageSplitter
         return outArr;
     }
 
+    private static void ComputeAdaptiveBand(double[] colSum, out int bandStart, out int bandEnd)
+    {
+        int n = colSum.Length;
+        if (n == 0)
+        {
+            bandStart = 0; bandEnd = 0; return;
+        }
+
+        double total = 0;
+        for (int i = 0; i < n; i++)
+            total += colSum[i];
+
+        if (total <= 0)
+        {
+            bandStart = 0;
+            bandEnd = n - 1;
+            return;
+        }
+
+        double target = total * 0.02; // 2% ink threshold
+        double acc = 0;
+        int left = 0;
+        for (int i = 0; i < n; i++)
+        {
+            acc += colSum[i];
+            if (acc >= target) { left = i; break; }
+        }
+
+        acc = 0;
+        int right = n - 1;
+        for (int i = n - 1; i >= 0; i--)
+        {
+            acc += colSum[i];
+            if (acc >= target) { right = i; break; }
+        }
+
+        int margin = Math.Max(5, n / 50);
+        bandStart = Clamp(left - margin, 0, n - 1);
+        bandEnd = Clamp(right + margin, 0, n - 1);
+        if (bandEnd < bandStart)
+            (bandStart, bandEnd) = (bandEnd, bandStart);
+    }
+
+    private static int RefineLocalMin(double[] data, int center, int radius)
+    {
+        int n = data.Length;
+        if (n == 0) return center;
+
+        int start = Clamp(center - radius, 0, n - 1);
+        int end = Clamp(center + radius, 0, n - 1);
+        return ArgMin(data, start, end);
+    }
+
+    private static int FindBestSplitIndex(double[] colSum, double[] smooth, double[] meanL, double[] stdL, int bandStart, int bandEnd)
+    {
+        int n = colSum.Length;
+        if (n == 0) return 0;
+        bandStart = Clamp(bandStart, 0, n - 1);
+        bandEnd = Clamp(bandEnd, 0, n - 1);
+        if (bandEnd < bandStart) (bandStart, bandEnd) = (bandEnd, bandStart);
+
+        var prefix = new double[n + 1];
+        for (int i = 0; i < n; i++) prefix[i + 1] = prefix[i] + colSum[i];
+
+        int window = Math.Max(3, n / 80);
+        if (window % 2 == 0) window++;
+        int r = window / 2;
+
+        double median = Median(smooth.Skip(bandStart).Take(bandEnd - bandStart + 1).ToArray());
+        double center = 0.5 * (bandStart + bandEnd);
+        double bandWidth = Math.Max(1.0, bandEnd - bandStart);
+
+        double minMean = double.MaxValue;
+        double maxMean = double.MinValue;
+        double minStd = double.MaxValue;
+        double maxStd = double.MinValue;
+        for (int x = bandStart; x <= bandEnd; x++)
+        {
+            double m = meanL[x];
+            double s = stdL[x];
+            if (m < minMean) minMean = m;
+            if (m > maxMean) maxMean = m;
+            if (s < minStd) minStd = s;
+            if (s > maxStd) maxStd = s;
+        }
+        double meanRange = maxMean - minMean;
+        double stdRange = maxStd - minStd;
+
+        int best = bandStart;
+        double bestScore = double.MinValue;
+        double totalInk = prefix[n];
+
+        for (int x = bandStart; x <= bandEnd; x++)
+        {
+            int a = Clamp(x - r, 0, n - 1);
+            int b = Clamp(x + r, 0, n - 1);
+            double localMean = (prefix[b + 1] - prefix[a]) / (b - a + 1);
+
+            double inkScore = median > 0.0 ? 1.0 - Clamp01(localMean / median) : 0.0;
+            double brightScore = meanRange > 1e-6 ? Clamp01((meanL[x] - minMean) / meanRange) : 0.5;
+            double textureScore = stdRange > 1e-6 ? 1.0 - Clamp01((stdL[x] - minStd) / stdRange) : 0.5;
+
+            double dist = Math.Abs(x - center) / bandWidth;
+            double centerScore = Math.Max(0.0, 1.0 - 2.5 * dist);
+
+            double balanceScore = 0.5;
+            if (totalInk > 1e-6)
+            {
+                double leftInk = prefix[x + 1];
+                double rightInk = totalInk - leftInk;
+                double imbalance = Math.Abs(leftInk - rightInk) / totalInk;
+                balanceScore = 1.0 - Clamp01(imbalance);
+            }
+
+            double score =
+                0.60 * centerScore +
+                0.20 * inkScore +
+                0.15 * balanceScore +
+                0.03 * brightScore +
+                0.02 * textureScore;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = x;
+            }
+        }
+
+        return best;
+    }
+
+    private static double ComputeSplitScore(double[] colSum, double[] smooth, double[] meanL, double[] stdL, int bandStart, int bandEnd, int x)
+    {
+        int n = colSum.Length;
+        if (n == 0) return double.MinValue;
+        bandStart = Clamp(bandStart, 0, n - 1);
+        bandEnd = Clamp(bandEnd, 0, n - 1);
+        if (bandEnd < bandStart) (bandStart, bandEnd) = (bandEnd, bandStart);
+        if (x < bandStart || x > bandEnd) return double.MinValue;
+
+        var prefix = new double[n + 1];
+        for (int i = 0; i < n; i++) prefix[i + 1] = prefix[i] + colSum[i];
+
+        double median = Median(smooth.Skip(bandStart).Take(bandEnd - bandStart + 1).ToArray());
+        double center = 0.5 * (bandStart + bandEnd);
+        double bandWidth = Math.Max(1.0, bandEnd - bandStart);
+
+        double minMean = double.MaxValue;
+        double maxMean = double.MinValue;
+        double minStd = double.MaxValue;
+        double maxStd = double.MinValue;
+        for (int i = bandStart; i <= bandEnd; i++)
+        {
+            double m = meanL[i];
+            double s = stdL[i];
+            if (m < minMean) minMean = m;
+            if (m > maxMean) maxMean = m;
+            if (s < minStd) minStd = s;
+            if (s > maxStd) maxStd = s;
+        }
+        double meanRange = maxMean - minMean;
+        double stdRange = maxStd - minStd;
+
+        int window = Math.Max(3, n / 80);
+        if (window % 2 == 0) window++;
+        int r = window / 2;
+        int a = Clamp(x - r, 0, n - 1);
+        int b = Clamp(x + r, 0, n - 1);
+        double localMean = (prefix[b + 1] - prefix[a]) / (b - a + 1);
+
+        double inkScore = median > 0.0 ? 1.0 - Clamp01(localMean / median) : 0.0;
+        double brightScore = meanRange > 1e-6 ? Clamp01((meanL[x] - minMean) / meanRange) : 0.5;
+        double textureScore = stdRange > 1e-6 ? 1.0 - Clamp01((stdL[x] - minStd) / stdRange) : 0.5;
+
+        double dist = Math.Abs(x - center) / bandWidth;
+        double centerScore = Math.Max(0.0, 1.0 - 2.5 * dist);
+
+        double balanceScore = 0.5;
+        double totalInk = prefix[n];
+        if (totalInk > 1e-6)
+        {
+            double leftInk = prefix[x + 1];
+            double rightInk = totalInk - leftInk;
+            double imbalance = Math.Abs(leftInk - rightInk) / totalInk;
+            balanceScore = 1.0 - Clamp01(imbalance);
+        }
+
+        return 0.60 * centerScore +
+               0.20 * inkScore +
+               0.15 * balanceScore +
+               0.03 * brightScore +
+               0.02 * textureScore;
+    }
+
+    private static int FindSeamSplitX(Mat L, Mat inkMask, int bandStart, int bandEnd, CancellationToken token)
+    {
+        int w = L.Cols;
+        int h = L.Rows;
+        if (w == 0 || h == 0)
+            return 0;
+
+        bandStart = Clamp(bandStart, 0, w - 1);
+        bandEnd = Clamp(bandEnd, 0, w - 1);
+        if (bandEnd < bandStart) (bandStart, bandEnd) = (bandEnd, bandStart);
+
+        using var gradX = new Mat();
+        using var gradY = new Mat();
+        using var absX = new Mat();
+        using var absY = new Mat();
+        using var grad = new Mat();
+
+        Cv2.Sobel(L, gradX, MatType.CV_16S, 1, 0, 3);
+        Cv2.Sobel(L, gradY, MatType.CV_16S, 0, 1, 3);
+        Cv2.ConvertScaleAbs(gradX, absX);
+        Cv2.ConvertScaleAbs(gradY, absY);
+        Cv2.AddWeighted(absX, 0.5, absY, 0.5, 0, grad);
+
+        var prev = new float[w];
+        var curr = new float[w];
+        var back = new int[w * h];
+        const float inf = 1e9f;
+
+        unsafe
+        {
+            byte* lBase = (byte*)L.DataPointer;
+            byte* inkBase = (byte*)inkMask.DataPointer;
+            byte* gBase = (byte*)grad.DataPointer;
+            long lStep = L.Step();
+            long iStep = inkMask.Step();
+            long gStep = grad.Step();
+
+            for (int x = 0; x < w; x++)
+            {
+                byte l = lBase[x];
+                byte ink = inkBase[x];
+                byte g = gBase[x];
+                float cost = 0.6f * (ink / 255f) + 0.25f * ((255 - l) / 255f) + 0.15f * (g / 255f);
+                if (x < bandStart || x > bandEnd)
+                    cost += 1.0f;
+                prev[x] = cost;
+                back[x] = x;
+            }
+
+            for (int y = 1; y < h; y++)
+            {
+                if ((y & 31) == 0)
+                    token.ThrowIfCancellationRequested();
+
+                byte* lRow = lBase + y * lStep;
+                byte* iRow = inkBase + y * iStep;
+                byte* gRow = gBase + y * gStep;
+
+                for (int x = 0; x < w; x++)
+                {
+                    if (x < bandStart || x > bandEnd)
+                    {
+                        curr[x] = inf;
+                        back[y * w + x] = x;
+                        continue;
+                    }
+
+                    float best = prev[x];
+                    int bestX = x;
+                    if (x > 0 && prev[x - 1] < best)
+                    {
+                        best = prev[x - 1];
+                        bestX = x - 1;
+                    }
+                    if (x + 1 < w && prev[x + 1] < best)
+                    {
+                        best = prev[x + 1];
+                        bestX = x + 1;
+                    }
+
+                    byte l = lRow[x];
+                    byte ink = iRow[x];
+                    byte g = gRow[x];
+                    float cost = 0.6f * (ink / 255f) + 0.25f * ((255 - l) / 255f) + 0.15f * (g / 255f);
+                    curr[x] = cost + best;
+                    back[y * w + x] = bestX;
+                }
+
+                var tmp = prev;
+                prev = curr;
+                curr = tmp;
+            }
+        }
+
+        int endX = bandStart;
+        float endCost = prev[bandStart];
+        for (int x = bandStart + 1; x <= bandEnd; x++)
+        {
+            if (prev[x] < endCost)
+            {
+                endCost = prev[x];
+                endX = x;
+            }
+        }
+
+        var seam = new int[h];
+        int sx = endX;
+        for (int y = h - 1; y >= 0; y--)
+        {
+            seam[y] = sx;
+            sx = back[y * w + sx];
+        }
+
+        Array.Sort(seam);
+        return seam[h / 2];
+    }
+
     private static int ArgMin(double[] data, int start, int end)
     {
         start = Clamp(start, 0, data.Length - 1);
@@ -413,16 +755,9 @@ public sealed class PageSplitter
         return Clamp01(conf);
     }
 
-    private double ComputeLabConfidence(Mat bgr, int splitX, CancellationToken token)
+    private double ComputeLabConfidenceFromL(Mat L, int splitX, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-
-        // Convert to Lab, take L channel
-        using var lab = new Mat();
-        Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
-
-        using var L = new Mat();
-        Cv2.ExtractChannel(lab, L, 0); // L channel
 
         int W = L.Cols;
         int H = L.Rows;
@@ -472,6 +807,55 @@ public sealed class PageSplitter
         // Combine Lab cues (simple AND-like blend)
         double labConf = 0.65 * brightnessScore + 0.35 * textureScore;
         return Clamp01(labConf);
+    }
+
+    private static Mat ExtractLabL(Mat bgr)
+    {
+        using var lab = new Mat();
+        Cv2.CvtColor(bgr, lab, ColorConversionCodes.BGR2Lab);
+        var L = new Mat();
+        Cv2.ExtractChannel(lab, L, 0);
+        return L;
+    }
+
+    private static void ComputeColumnMeanStd(Mat L8u, out double[] mean, out double[] std)
+    {
+        int w = L8u.Cols;
+        int h = L8u.Rows;
+        mean = new double[w];
+        std = new double[w];
+
+        if (w == 0 || h == 0)
+            return;
+
+        var sum = new double[w];
+        var sumsq = new double[w];
+
+        unsafe
+        {
+            byte* basePtr = (byte*)L8u.DataPointer;
+            long step = L8u.Step();
+            for (int y = 0; y < h; y++)
+            {
+                byte* row = basePtr + y * step;
+                for (int x = 0; x < w; x++)
+                {
+                    byte v = row[x];
+                    sum[x] += v;
+                    sumsq[x] += v * v;
+                }
+            }
+        }
+
+        double invH = 1.0 / h;
+        for (int x = 0; x < w; x++)
+        {
+            double m = sum[x] * invH;
+            double var = sumsq[x] * invH - (m * m);
+            if (var < 0) var = 0;
+            mean[x] = m;
+            std[x] = Math.Sqrt(var);
+        }
     }
 
     private static (double mean, double std) MeanStd(Mat L8u, int x0, int x1, int H)

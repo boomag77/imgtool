@@ -3,6 +3,7 @@ using Point = OpenCvSharp.Point;
 
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 namespace ImgViewer.Models;
 
@@ -16,7 +17,8 @@ public static class Deskewer
         Hough,
         Projection,
         PCA,
-        Moments
+        Moments,
+        Perspective
     }
     private static double GetSkewAngleByBorders(CancellationToken token,
                                                 Mat src,
@@ -152,6 +154,7 @@ public static class Deskewer
         public int cTresh1 { get; set; }
         public int cTresh2 { get; set; }
         public int morphKernel { get; set; }
+        public int perspectiveStrength { get; set; }
 
         public int houghTreshold { get; set; }
         public int minLineLength { get; set; }
@@ -164,7 +167,7 @@ public static class Deskewer
     }
 
 
-    public static Mat Deskew(CancellationToken token, DeskewMethod method, Mat orig, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh, int maxLineGap, double projMinAngle, double projMaxAngle, double projCoarseStep, double projRefineStep)
+    public static Mat Deskew(CancellationToken token, DeskewMethod method, Mat orig, int cTresh1, int cTresh2, int morphK, int minLL, int houghTresh, int maxLineGap, double projMinAngle, double projMaxAngle, double projCoarseStep, double projRefineStep, int perspectiveStrength)
     {
         if (orig == null || orig.Empty()) return orig;
 
@@ -177,8 +180,6 @@ public static class Deskewer
         bool canFixSign = signMask != null && !signMask.Empty();
 
         double finalAngle = double.NaN;
-
-
         if (method == DeskewMethod.ByBorders)
         {
             double borderRawAngle = GetSkewAngleByBorders(token, src,
@@ -249,7 +250,12 @@ public static class Deskewer
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
                 return src.Clone();
         }
-        else
+        else if (method == DeskewMethod.Perspective)
+        {
+            var warped = TryPerspectiveCorrect(token, src, morphK, perspectiveStrength);
+            return warped ?? src.Clone();
+        }
+else
         {
 
             var cands = new List<AngleCandidate>(5);
@@ -323,7 +329,7 @@ public static class Deskewer
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
             {
                 Debug.WriteLine($"Deskew: angle is zero or NaN ({finalAngle}), skipping rotation.");
-                return src.Clone();
+return src.Clone();
             }
 
             Debug.WriteLine($"Deskew: angle selected = {finalAngle:F3}");
@@ -332,7 +338,7 @@ public static class Deskewer
             if (double.IsNaN(finalAngle) || Math.Abs(finalAngle) < 0.005)
             {
                 Debug.WriteLine($"Deskew: angle is zero or NaN ({finalAngle}), skipping rotation.");
-                return src.Clone(); // возвращаем копию BGR
+return src.Clone(); // возвращаем копию BGR
             }
             else
             {
@@ -437,7 +443,7 @@ public static class Deskewer
         // кадрируем / дополняем до исходного размера, центрируя по содержимому
         //return CropOrPadToOriginal(rotatedBig, orig.Width, orig.Height, contentCenter);
         var result = rotatedBig.Clone();
-        return result;
+return result;
     }
 
     private static byte EstimateBlackThreshold(Mat img, int marginPercent = 10, double shiftFactor = 0.25)
@@ -536,6 +542,138 @@ public static class Deskewer
         Cv2.CvtColor(src, fallback, ColorConversionCodes.BGR2GRAY); // просто чтобы не падало
         Cv2.CvtColor(fallback, fallback, ColorConversionCodes.GRAY2BGR);
         return fallback;
+    }
+    private static Mat? TryPerspectiveCorrect(CancellationToken token, Mat src, int morphKernel, int strength)
+    {
+        if (src == null || src.Empty()) return null;
+
+        token.ThrowIfCancellationRequested();
+        using var gray = new Mat();
+        if (src.Channels() == 3)
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+        else if (src.Channels() == 4)
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGRA2GRAY);
+        else
+            src.CopyTo(gray);
+
+        int k = Math.Max(3, morphKernel);
+        if (k % 2 == 0) k += 1;
+        using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(k, k));
+
+        // Edge-based contour is more reliable for keystone distortions.
+        using var edges = new Mat();
+        Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
+        int s = Math.Max(0, Math.Min(10, strength));
+        int cannyLow = Math.Max(10, 80 - s * 6);
+        int cannyHigh = Math.Max(30, 200 - s * 10);
+        Cv2.Canny(gray, edges, cannyLow, cannyHigh);
+        int dilateIter = 1 + s / 4;
+        Cv2.Dilate(edges, edges, kernel, iterations: dilateIter);
+        Cv2.MorphologyEx(edges, edges, MorphTypes.Close, kernel, iterations: 2);
+
+        token.ThrowIfCancellationRequested();
+        Cv2.FindContours(edges, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+        // Fallback to binarized mask if edges fail.
+        if (contours == null || contours.Length == 0)
+        {
+            using var bin = new Mat();
+            Cv2.Threshold(gray, bin, 0, 255, ThresholdTypes.Otsu | ThresholdTypes.BinaryInv);
+            Cv2.MorphologyEx(bin, bin, MorphTypes.Close, kernel, iterations: 2);
+            Cv2.FindContours(bin, out contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+            if (contours == null || contours.Length == 0) return null;
+        }
+
+        double maxArea = 0;
+        int maxIdx = -1;
+        for (int i = 0; i < contours.Length; i++)
+        {
+            double area = Cv2.ContourArea(contours[i]);
+            if (area > maxArea)
+            {
+                maxArea = area;
+                maxIdx = i;
+            }
+        }
+        if (maxIdx < 0) return null;
+
+        double imageArea = src.Width * (double)src.Height;
+        double minAreaFrac = Math.Max(0.02, Math.Min(0.12, 0.12 - 0.01 * s));
+        if (maxArea < imageArea * minAreaFrac)
+            return null;
+
+        var contour = contours[maxIdx];
+        var hull = Cv2.ConvexHull(contour);
+        var approx = Cv2.ApproxPolyDP(hull, Cv2.ArcLength(hull, true) * 0.02, true);
+
+        Point2f[] quad;
+        if (approx.Length == 4)
+        {
+            quad = approx.Select(p => new Point2f(p.X, p.Y)).ToArray();
+        }
+        else
+        {
+            var rr = Cv2.MinAreaRect(hull);
+            quad = rr.Points();
+        }
+
+        var ordered = OrderQuad(quad);
+        var (dstW, dstH) = EstimateQuadSize(ordered);
+        if (dstW < 10 || dstH < 10) return null;
+
+        var dstQuad = new[]
+        {
+            new Point2f(0, 0),
+            new Point2f(dstW - 1, 0),
+            new Point2f(dstW - 1, dstH - 1),
+            new Point2f(0, dstH - 1)
+        };
+
+        using var M = Cv2.GetPerspectiveTransform(ordered, dstQuad);
+        var dst = new Mat();
+        Cv2.WarpPerspective(src, dst, M, new OpenCvSharp.Size(dstW, dstH), InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(255));
+        return dst;
+    }
+
+
+    private static Point2f[] OrderQuad(Point2f[] pts)
+    {
+        if (pts.Length != 4)
+            throw new ArgumentException("Expected 4 points.", nameof(pts));
+
+        var ordered = new Point2f[4];
+        var sums = pts.Select(p => p.X + p.Y).ToArray();
+        var diffs = pts.Select(p => p.X - p.Y).ToArray();
+
+        int tl = Array.IndexOf(sums, sums.Min());
+        int br = Array.IndexOf(sums, sums.Max());
+        int tr = Array.IndexOf(diffs, diffs.Max());
+        int bl = Array.IndexOf(diffs, diffs.Min());
+
+        ordered[0] = pts[tl];
+        ordered[1] = pts[tr];
+        ordered[2] = pts[br];
+        ordered[3] = pts[bl];
+        return ordered;
+    }
+
+    private static (int width, int height) EstimateQuadSize(Point2f[] quad)
+    {
+        double w1 = Distance(quad[0], quad[1]);
+        double w2 = Distance(quad[3], quad[2]);
+        double h1 = Distance(quad[0], quad[3]);
+        double h2 = Distance(quad[1], quad[2]);
+
+        int width = (int)Math.Round(Math.Max(w1, w2));
+        int height = (int)Math.Round(Math.Max(h1, h2));
+        return (width, height);
+    }
+
+    private static double Distance(Point2f a, Point2f b)
+    {
+        double dx = a.X - b.X;
+        double dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     private static double GetSkewAngleByMoments(CancellationToken token,
@@ -1169,6 +1307,15 @@ public static class Deskewer
     }
 
     private static double Clamp01(double x) => x < 0 ? 0 : (x > 1 ? 1 : x);
+
+    private static double Median(double[] arr)
+    {
+        if (arr == null || arr.Length == 0) return 0;
+        var tmp = (double[])arr.Clone();
+        Array.Sort(tmp);
+        int mid = tmp.Length / 2;
+        return (tmp.Length % 2 == 1) ? tmp[mid] : 0.5 * (tmp[mid - 1] + tmp[mid]);
+    }
 
 
 }

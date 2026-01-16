@@ -269,8 +269,15 @@ namespace ImgViewer.Models
                                 }
                                 break;
                             case (int)TiffCompression.JPEG:
-                                data = ExtractJpegRaw(tiff);
-                                isRaw = true;
+                                //data = ExtractJpegRaw(tiff);
+                                //isRaw = true;
+
+                                data = tiff.IsTiled()
+                                    ? ExtractDecodedPixelsByTile(tiff, width, height)
+                                    : ExtractDecodedPixelsByStrip(tiff, width, height);
+                                isRaw = false;
+                                compression = (int)TiffCompression.None; // important: data is now decompressed
+
                                 break;
                             case (int)TiffCompression.LZW:
                                 //data = ExtractDecodedPixels(tiff, width, height);
@@ -310,6 +317,62 @@ namespace ImgViewer.Models
 
             });
         }
+
+        private static byte[] ExtractDecodedPixelsByTile(Tiff image, int width, int height)
+        {
+            int bitsPerSample = GetIntTag(image, TiffTag.BITSPERSAMPLE, 8);
+            int samplesPerPixel = GetIntTag(image, TiffTag.SAMPLESPERPIXEL, 1);
+            int planar = GetIntTag(image, TiffTag.PLANARCONFIG, (int)PlanarConfig.CONTIG);
+
+            if (bitsPerSample % 8 != 0 || planar != (int)PlanarConfig.CONTIG)
+            {
+                Debug.WriteLine("Tile decode: unsupported bps or planar config, falling back to strips.");
+                return ExtractDecodedPixelsByStrip(image, width, height);
+            }
+
+            int bytesPerPixel = (bitsPerSample / 8) * samplesPerPixel;
+
+            int tileWidth = GetIntTag(image, TiffTag.TILEWIDTH, width);
+            int tileHeight = GetIntTag(image, TiffTag.TILELENGTH, height);
+
+            int tilesAcross = (width + tileWidth - 1) / tileWidth;
+            int tilesDown = (height + tileHeight - 1) / tileHeight;
+
+            int tileSize = image.TileSize();
+            if (tileSize <= 0) return Array.Empty<byte>();
+
+            byte[] output = new byte[width * height * bytesPerPixel];
+            byte[] tileBuffer = new byte[tileSize];
+
+            for (int ty = 0; ty < tilesDown; ty++)
+            {
+                for (int tx = 0; tx < tilesAcross; tx++)
+                {
+                    int x = tx * tileWidth;
+                    int y = ty * tileHeight;
+
+                    int tileIndex = image.ComputeTile(x, y, 0, 0);
+                    int read = image.ReadEncodedTile(tileIndex, tileBuffer, 0, tileSize);
+                    if (read <= 0) continue;
+
+                    int copyWidth = Math.Min(tileWidth, width - x);
+                    int copyHeight = Math.Min(tileHeight, height - y);
+
+                    int tileRowBytes = tileWidth * bytesPerPixel;
+                    int outRowBytes = width * bytesPerPixel;
+
+                    for (int row = 0; row < copyHeight; row++)
+                    {
+                        int srcOffset = row * tileRowBytes;
+                        int dstOffset = (y + row) * outRowBytes + x * bytesPerPixel;
+                        Buffer.BlockCopy(tileBuffer, srcOffset, output, dstOffset, copyWidth * bytesPerPixel);
+                    }
+                }
+            }
+
+            return output;
+        }
+
 
         private static byte[] ExtractDecodedPixels(Tiff image, int width, int height)
         {
@@ -364,6 +427,9 @@ namespace ImgViewer.Models
 
         private static byte[] ExtractJpegRaw(Tiff image)
         {
+
+
+
             int stripsCount = image.NumberOfStrips();
             if (stripsCount <= 0)
                 return Array.Empty<byte>();

@@ -513,6 +513,7 @@ namespace ImgViewer.Models
             bool isByBorders = selected.Equals("ByBorders", StringComparison.OrdinalIgnoreCase);
             bool isHough = selected.Equals("Hough", StringComparison.OrdinalIgnoreCase);
             bool isProjection = selected.Equals("Projection", StringComparison.OrdinalIgnoreCase);
+            bool isPerspective = selected.Equals("Perspective", StringComparison.OrdinalIgnoreCase);
 
             foreach (var p in _parameters)
             {
@@ -554,7 +555,10 @@ namespace ImgViewer.Models
                         p.IsVisible = isByBorders || isHough;
                         break;
                     case "morphKernel":
-                        p.IsVisible = isByBorders;
+                        p.IsVisible = isByBorders || isPerspective;
+                        break;
+                    case "perspectiveStrength":
+                        p.IsVisible = isPerspective;
                         break;
                     case "minLineLength":
                     case "houghTreshold":
@@ -867,6 +871,7 @@ namespace ImgViewer.Models
             bool isManual = false;
             bool isIntegral = false;
             bool isByContrast = false;
+            bool isByContours = false;
             var autoThreshFlag = _parameters.FirstOrDefault(x => x.Key == "autoThresh");
             bool autoThresh = autoThreshFlag != null && autoThreshFlag.IsBool && autoThreshFlag.BoolValue;
             var autoMaxBorderDepthFracFlag = _parameters.FirstOrDefault(x => x.Key == "autoMaxBorderDepthFrac");
@@ -880,6 +885,7 @@ namespace ImgViewer.Models
                     isManual = opt.Equals("Manual", StringComparison.OrdinalIgnoreCase);
                     isIntegral = opt.Equals("Integral", StringComparison.OrdinalIgnoreCase);
                     isByContrast = opt.Equals("By Contrast", StringComparison.OrdinalIgnoreCase);
+                    isByContours = opt.Equals("By Contours", StringComparison.OrdinalIgnoreCase);
                 }
 
                 else
@@ -914,6 +920,14 @@ namespace ImgViewer.Models
                     case "centralSample":
                     case "maxRemoveFrac":
                         p.IsVisible = isByContrast;
+                        break;
+                    case "contourCannyLow":
+                    case "contourCannyHigh":
+                    case "contourMorphKernel":
+                    case "contourMinAreaFrac":
+                    case "contourPaddingPx":
+                    case "contourCut":
+                        p.IsVisible = isByContours;
                         break;
                     case "bgColor":
                     case "darkThreshold":

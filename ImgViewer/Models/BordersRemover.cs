@@ -773,16 +773,186 @@ namespace ImgViewer.Models
 
                 return result;
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
             finally
             {
                 if (converted && srcBgr != null)
                     srcBgr.Dispose();
             }
+        }
 
+        public static Mat RemoveBordersByContours(
+            CancellationToken token,
+            Mat src,
+            int cannyLow = 50,
+            int cannyHigh = 150,
+            int morphKernel = 5,
+            double minAreaFrac = 0.10,
+            int paddingPx = 10,
+            BordersRemovalMode mode = BordersRemovalMode.Cut,
+            Scalar? bgColor = null)
+        {
+            if (src == null) throw new ArgumentNullException(nameof(src));
+            if (src.Empty()) return src.Clone();
+
+            using var srcClone = src.Clone();
+            Mat working = srcClone;
+            bool disposeWorking = false;
+            try
+            {
+                Scalar GetCornerBackground(Mat bgr)
+                {
+                    int rows = bgr.Rows;
+                    int cols = bgr.Cols;
+                    int cornerSize = Math.Max(5, Math.Min(32, Math.Min(rows, cols) / 30));
+                    double sb = 0, sg = 0, sr = 0; int cnt = 0;
+                    var rects = new[]
+                    {
+                        new Rect(0,0,cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cols-cornerSize),0,cornerSize,cornerSize),
+                        new Rect(0,Math.Max(0,rows-cornerSize),cornerSize,cornerSize),
+                        new Rect(Math.Max(0,cols-cornerSize), Math.Max(0,rows-cornerSize), cornerSize, cornerSize)
+                    };
+                    foreach (var r in rects)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (r.Width <= 0 || r.Height <= 0) continue;
+                        using var patch = new Mat(bgr, r);
+                        var mean = Cv2.Mean(patch);
+                        sb += mean.Val0; sg += mean.Val1; sr += mean.Val2; cnt++;
+                    }
+                    if (cnt <= 0) return new Scalar(255, 255, 255);
+                    return new Scalar(sb / cnt, sg / cnt, sr / cnt);
+                }
+
+                bool TryFindLargestContour(Mat mask, out OpenCvSharp.Point[] largest, out double maxArea)
+                {
+                    Cv2.FindContours(mask, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+                    largest = Array.Empty<OpenCvSharp.Point>();
+                    maxArea = 0;
+                    if (contours == null || contours.Length == 0)
+                        return false;
+
+                    int maxIdx = -1;
+                    for (int i = 0; i < contours.Length; i++)
+                    {
+                        double area = Cv2.ContourArea(contours[i]);
+                        if (area > maxArea)
+                        {
+                            maxArea = area;
+                            maxIdx = i;
+                        }
+                    }
+
+                    if (maxIdx < 0)
+                        return false;
+
+                    largest = contours[maxIdx];
+                    return true;
+                }
+
+                if (srcClone.Type() == MatType.CV_8UC3)
+                {
+                    // already BGR
+                }
+                else if (srcClone.Type() == MatType.CV_8UC4)
+                {
+                    working = new Mat();
+                    Cv2.CvtColor(srcClone, working, ColorConversionCodes.BGRA2BGR);
+                    disposeWorking = true;
+                }
+                else if (srcClone.Type() == MatType.CV_8UC1)
+                {
+                    working = new Mat();
+                    Cv2.CvtColor(srcClone, working, ColorConversionCodes.GRAY2BGR);
+                    disposeWorking = true;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Unsupported image type for contour border removal");
+                }
+
+                token.ThrowIfCancellationRequested();
+
+                using var gray = new Mat();
+                Cv2.CvtColor(working, gray, ColorConversionCodes.BGR2GRAY);
+                Cv2.GaussianBlur(gray, gray, new OpenCvSharp.Size(3, 3), 0);
+
+                int k = Math.Max(3, morphKernel);
+                if (k % 2 == 0) k += 1;
+                using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(k, k));
+
+                using var edges = new Mat();
+                Cv2.Canny(gray, edges, cannyLow, cannyHigh);
+                Cv2.Dilate(edges, edges, kernel, iterations: 1);
+                Cv2.MorphologyEx(edges, edges, MorphTypes.Close, kernel, iterations: 2);
+
+                double imageArea = working.Width * (double)working.Height;
+                double minArea = imageArea * Math.Clamp(minAreaFrac, 0.01, 0.95);
+                bool found = TryFindLargestContour(edges, out OpenCvSharp.Point[] contour, out double maxArea);
+
+                if (!found || maxArea < minArea)
+                {
+                    Scalar bg = bgColor ?? GetCornerBackground(working);
+                    double bgGray = (bg.Val0 + bg.Val1 + bg.Val2) / 3.0;
+                    using var diff = new Mat();
+                    Cv2.Absdiff(gray, new Scalar(bgGray), diff);
+                    Cv2.Threshold(diff, diff, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                    Cv2.MorphologyEx(diff, diff, MorphTypes.Close, kernel, iterations: 2);
+                    Cv2.MorphologyEx(diff, diff, MorphTypes.Open, kernel, iterations: 1);
+
+                    found = TryFindLargestContour(diff, out contour, out maxArea);
+                }
+
+                if (!found || maxArea < minArea)
+                    return src.Clone();
+
+                var hull = Cv2.ConvexHull(contour);
+
+                if (mode == BordersRemovalMode.Cut)
+                {
+                    var rect = Cv2.BoundingRect(hull);
+                    int pad = Math.Max(0, paddingPx);
+                    rect.X = Math.Max(0, rect.X - pad);
+                    rect.Y = Math.Max(0, rect.Y - pad);
+                    rect.Width = Math.Min(working.Width - rect.X, rect.Width + pad * 2);
+                    rect.Height = Math.Min(working.Height - rect.Y, rect.Height + pad * 2);
+
+                    if (rect.Width <= 0 || rect.Height <= 0)
+                        return src.Clone();
+
+                    using var roi = new Mat(working, rect);
+                    return roi.Clone();
+                }
+
+                Scalar chosenBg = bgColor ?? new Scalar(255, 255, 255);
+                if (!bgColor.HasValue)
+                {
+                    chosenBg = GetCornerBackground(working);
+                }
+
+                using var mask = new Mat(working.Rows, working.Cols, MatType.CV_8UC1, Scalar.All(0));
+                Cv2.FillConvexPoly(mask, hull, Scalar.All(255));
+
+                if (paddingPx > 0)
+                {
+                    int pk = Math.Min(2 * paddingPx + 1, 101);
+                    if (pk % 2 == 0) pk += 1;
+                    using var padKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(pk, pk));
+                    Cv2.Dilate(mask, mask, padKernel, iterations: 1);
+                }
+
+                using var invMask = new Mat();
+                Cv2.BitwiseNot(mask, invMask);
+
+                var result = working.Clone();
+                result.SetTo(chosenBg, invMask);
+                return result;
+            }
+            finally
+            {
+                if (disposeWorking && working != null && !working.IsDisposed)
+                    working.Dispose();
+            }
         }
 
         private static Scalar EstimatePageFillColor(

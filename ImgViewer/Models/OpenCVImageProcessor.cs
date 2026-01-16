@@ -1220,12 +1220,19 @@ namespace ImgViewer.Models
                                 int minAreaPx = 2000;
                                 double minSpanFraction = 0.6;
                                 double solidityThreshold = 0.6;
-                                double minDepthFraction = 0.05;
-                                int featherPx = 12;
-                                int top = 0, bottom = 0, left = 0, right = 0;
-                                bool manualCutDebug = false;
-                                bool useTeleaHybrid = true;
-                                bool applyManualCut = false;
+                                  double minDepthFraction = 0.05;
+                                  int featherPx = 12;
+                                  int top = 0, bottom = 0, left = 0, right = 0;
+                                  bool manualCutDebug = false;
+                                  bool useTeleaHybrid = true;
+                                  bool applyManualCut = false;
+
+                                  int contourCannyLow = 50;
+                                  int contourCannyHigh = 150;
+                                  int contourMorphKernel = 5;
+                                  double contourMinAreaFrac = 0.10;
+                                  int contourPaddingPx = 10;
+                                  bool contourCut = true;
 
                                 // integral method parameters
                                 int brickThickness = 16;
@@ -1307,12 +1314,30 @@ namespace ImgViewer.Models
                                             centralSample = SafeDouble(kv.Value, centralSample);
                                             break;
 
-                                        case "maxRemoveFrac":
-                                            maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
-                                            break;
-                                        case "manualTop":
-                                            top = SafeInt(kv.Value, top);
-                                            break;
+                                          case "maxRemoveFrac":
+                                              maxRemoveFrac = SafeDouble(kv.Value, maxRemoveFrac);
+                                              break;
+                                          case "contourCannyLow":
+                                              contourCannyLow = SafeInt(kv.Value, contourCannyLow);
+                                              break;
+                                          case "contourCannyHigh":
+                                              contourCannyHigh = SafeInt(kv.Value, contourCannyHigh);
+                                              break;
+                                          case "contourMorphKernel":
+                                              contourMorphKernel = SafeInt(kv.Value, contourMorphKernel);
+                                              break;
+                                          case "contourMinAreaFrac":
+                                              contourMinAreaFrac = SafeDouble(kv.Value, contourMinAreaFrac);
+                                              break;
+                                          case "contourPaddingPx":
+                                              contourPaddingPx = SafeInt(kv.Value, contourPaddingPx);
+                                              break;
+                                          case "contourCut":
+                                              contourCut = SafeBool(kv.Value, contourCut);
+                                              break;
+                                          case "manualTop":
+                                              top = SafeInt(kv.Value, top);
+                                              break;
                                         case "manualBottom":
                                             bottom = SafeInt(kv.Value, bottom);
                                             break;
@@ -1445,6 +1470,17 @@ namespace ImgViewer.Models
                                                         centralSample: centralSample,
                                                         maxRemoveFrac: maxRemoveFrac
                                                     );
+                                            case "By Contours":
+                                                return BordersRemover.RemoveBordersByContours(
+                                                    token,
+                                                    src,
+                                                    contourCannyLow,
+                                                    contourCannyHigh,
+                                                    contourMorphKernel,
+                                                    contourMinAreaFrac,
+                                                    contourPaddingPx,
+                                                    contourCut ? BordersRemover.BordersRemovalMode.Cut : BordersRemover.BordersRemovalMode.Fill,
+                                                    null);
                                             case "Manual":
 
                                                 return RemoveBorders_Manual(src, top, bottom, left, right, applyManualCut, bgColor, manualCutDebug);
@@ -3464,6 +3500,7 @@ namespace ImgViewer.Models
             const int defaultCanny1 = 50;
             const int defaultCanny2 = 150;
             const int defaultMorphKernel = 5;
+            const int defaultPerspectiveStrength = 5;
             const int defaultHoughThreshold = 80;
             const int defaultMinLineLength = 200;
             const int defaultMaxLineGap = 20;
@@ -3479,6 +3516,7 @@ namespace ImgViewer.Models
                 cTresh1 = defaultCanny1,
                 cTresh2 = defaultCanny2,
                 morphKernel = defaultMorphKernel,
+                perspectiveStrength = defaultPerspectiveStrength,
                 houghTreshold = defaultHoughThreshold,
                 minLineLength = defaultMinLineLength,
                 maxLineGap = defaultMaxLineGap,
@@ -3561,6 +3599,11 @@ namespace ImgViewer.Models
                                 result.Method = Deskewer.DeskewMethod.Moments;
                                 result.byBorders = false;
                             }
+                            else if (s.Equals("Perspective", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Method = Deskewer.DeskewMethod.Perspective;
+                                result.byBorders = false;
+                            }
                             else
                             {
                                 result.Method = Deskewer.DeskewMethod.Auto;
@@ -3579,6 +3622,9 @@ namespace ImgViewer.Models
 
                     case "morphKernel":
                         result.morphKernel = Math.Max(1, SafeInt(kv.Value, result.morphKernel));
+                        break;
+                    case "perspectiveStrength":
+                        result.perspectiveStrength = Math.Max(0, Math.Min(10, SafeInt(kv.Value, result.perspectiveStrength)));
                         break;
 
                     case "minLineLength":
@@ -3624,6 +3670,7 @@ namespace ImgViewer.Models
                 result.cTresh1 = defaultCanny1;
                 result.cTresh2 = defaultCanny2;
                 result.morphKernel = defaultMorphKernel;
+                result.perspectiveStrength = defaultPerspectiveStrength;
                 result.houghTreshold = defaultHoughThreshold;
                 result.minLineLength = defaultMinLineLength;
                 result.maxLineGap = defaultMaxLineGap;
@@ -3646,7 +3693,7 @@ namespace ImgViewer.Models
             p = ParseParametersSimple(parameters);
             try
             {
-                Mat result = Deskewer.Deskew(_token, p.Method, src, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold, p.maxLineGap, p.projMinAngle, p.projMaxAngle, p.projCoarseStep, p.projRefineStep);
+                Mat result = Deskewer.Deskew(_token, p.Method, src, p.cTresh1, p.cTresh2, p.morphKernel, p.minLineLength, p.houghTreshold, p.maxLineGap, p.projMinAngle, p.projMaxAngle, p.projCoarseStep, p.projRefineStep, p.perspectiveStrength);
                 return result;
             }
             catch (OperationCanceledException)

@@ -127,10 +127,11 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments" }, 0),
+                            new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments", "Perspective" }, 0),
                             new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
                             new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
                             new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
+                            new PipeLineParameter("Perspective strength", "perspectiveStrength", 5, 0, 10, 1),
                             new PipeLineParameter("Hough min line length", "minLineLength", 200, 0, 20000, 1),
                             new PipeLineParameter("Hough threshold", "houghTreshold", 80, 5, 250, 1),
                             new PipeLineParameter("Hough max line gap", "maxLineGap", 20, 0, 500, 1),
@@ -155,12 +156,19 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "Integral", "By Contrast", "Manual"}, 0),
+                            new PipeLineParameter("Algorithm", "borderRemovalAlgorithm", new [] {"Auto", "Integral", "By Contrast", "By Contours", "Manual"}, 0),
                             // By contrast
                             new PipeLineParameter("Threshold Frac", "threshFrac", 0.40, 0.05, 1.00, 0.05),
                             new PipeLineParameter("Contrast Threshold", "contrastThr", 50, 1, 255, 1),
                             new PipeLineParameter("Central Sample", "centralSample", 0.10, 0.01, 1.00, 0.01),
                             new PipeLineParameter("Max remove frac", "maxRemoveFrac", 0.45, 0.01, 1.00, 0.01),
+                            // By contours
+                            new PipeLineParameter("Contour Canny Low", "contourCannyLow", 50, 5, 200, 1),
+                            new PipeLineParameter("Contour Canny High", "contourCannyHigh", 150, 10, 300, 1),
+                            new PipeLineParameter("Contour Morph Kernel", "contourMorphKernel", 5, 1, 25, 1),
+                            new PipeLineParameter("Contour Min Area", "contourMinAreaFrac", 0.10, 0.01, 0.90, 0.01),
+                            new PipeLineParameter("Contour Padding Px", "contourPaddingPx", 10, 0, 200, 1),
+                            new PipeLineParameter("Contour Cut", "contourCut", true),
                             // Auto
                             new PipeLineParameter("Auto Threshold", "autoThresh", true),
                             new PipeLineParameter("Margin %", "marginPercent", 10, 0, 100, 1),
