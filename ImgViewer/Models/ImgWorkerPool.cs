@@ -614,15 +614,20 @@ namespace ImgViewer.Models
                     if (tiffInfo == null)
                         throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
 
-
-                    var finalPath = saveTask.OutputFilePath;
-                    var tempPath = string.Concat(finalPath, ".tmp");
-                    currentOutputFile = finalPath;
-                    fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
-                    //if (File.Exists(finalPath))
-                    //    File.Delete(finalPath);
-                    File.Move(tempPath, finalPath, overwrite: true);
-                    tiffInfo = null;
+                    try
+                    {
+                        var finalPath = saveTask.OutputFilePath;
+                        var tempPath = string.Concat(finalPath, ".tmp");
+                        currentOutputFile = finalPath;
+                        fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
+                        //if (File.Exists(finalPath))
+                        //    File.Delete(finalPath);
+                        File.Move(tempPath, finalPath, overwrite: true);
+                    }
+                    finally
+                    {
+                        tiffInfo.Dispose();
+                    }
                 }
             }
             catch (OperationCanceledException)

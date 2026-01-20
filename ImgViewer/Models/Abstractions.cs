@@ -1,5 +1,6 @@
 ﻿using ImgViewer.Interfaces;
 using System.ComponentModel;
+using System.Buffers;
 
 namespace ImgViewer.Models
 {
@@ -17,9 +18,11 @@ namespace ImgViewer.Models
         Enhance
     }
 
-    public sealed class TiffInfo
+    public sealed class TiffInfo : IDisposable
     {
-        public byte[] Pixels { get; set; }
+        public byte[] Pixels { get; set; } = Array.Empty<byte>();
+
+        public bool IsPooled { get; set; }
         public int StrideBytes { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
@@ -28,6 +31,21 @@ namespace ImgViewer.Models
         public TiffCompression Compression { get; set; }
         public bool IsMultiPage { get; set; }
         // add more properties as needed
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            if (IsPooled && Pixels.Length > 0)
+            {
+               ArrayPool<byte>.Shared.Return(Pixels, clearArray: false);
+            }
+
+            Pixels = Array.Empty<byte>();
+            IsPooled = false;
+        }
     }
 
     public enum SourceFileLayout

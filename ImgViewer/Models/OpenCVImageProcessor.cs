@@ -391,8 +391,9 @@ namespace ImgViewer.Models
                 case TiffCompression.CCITTG4:
                     // for CCITTG3/G4 we need binary image
                     {
-                        var (binPixels, width, height, strideBytes, bitsPerPixel) = GetBinPixelsFromMat(compression, photometricMinIsWhite: false, useOtsu: false);
+                        var (binPixels, isPooled, width, height, strideBytes, bitsPerPixel) = GetBinPixelsFromMat(compression, photometricMinIsWhite: false, useOtsu: false);
                         tiffInfo.Pixels = binPixels;
+                        tiffInfo.IsPooled = isPooled;
                         tiffInfo.StrideBytes = strideBytes;
                         tiffInfo.Width = width;
                         tiffInfo.Height = height;
@@ -408,8 +409,9 @@ namespace ImgViewer.Models
                 case TiffCompression.PackBits:
                 case TiffCompression.None:
                     {
-                        var (pixels, width, height, bitsPerPixel) = GetPixelsFromMat();
+                        var (pixels, isPooled, width, height, bitsPerPixel) = GetPixelsFromMat();
                         tiffInfo.Pixels = pixels;
+                        tiffInfo.IsPooled = isPooled;
                         tiffInfo.Width = width;
                         tiffInfo.Height = height;
                         tiffInfo.Dpi = dpi;
@@ -426,7 +428,7 @@ namespace ImgViewer.Models
             return tiffInfo;
         }
 
-        private (byte[] pixels, int width, int height, int bitsPerPixel) GetPixelsFromMat()
+        private (byte[] pixels, bool isPooled, int width, int height, int bitsPerPixel) GetPixelsFromMat()
         {
 
             using var src = WorkingImage; // cloned
@@ -462,20 +464,22 @@ namespace ImgViewer.Models
             {
                 // можно скопировать сразу весь буфер
                 Marshal.Copy(work.Ptr(0), pixels, 0, bufferSize);
-                return (pixels, width, height, bitsPerPixel);
+                return (pixels, isPooled: false, width, height, bitsPerPixel);
             }
             for (int y = 0; y < height; y++)
             {
                 Marshal.Copy(work.Ptr(y), pixels, y * width * channels, width * channels);
             }
-            return (pixels, width, height, bitsPerPixel);
+            return (pixels, isPooled: false, width, height, bitsPerPixel);
         }
 
-        private (byte[] binPixels, int width, int height, int strideBytes, int bitsPerPixel) GetBinPixelsFromMat(TiffCompression compression,
+        private (byte[] binPixels, bool isPooled, int width, int height, int strideBytes, int bitsPerPixel) GetBinPixelsFromMat(TiffCompression compression,
                                                                              bool photometricMinIsWhite = false,
                                                                              bool useOtsu = true,
                                                                              double manualThreshold = 128)
         {
+
+
             using var src = WorkingImage; // cloned
             if (src == null || src.Empty())
                 throw new InvalidOperationException("src Mat is null or empty");
@@ -514,23 +518,35 @@ namespace ImgViewer.Models
                 {
                     // для G3/G4 нужно 1-битное изображение
                     strideBytes = (width + 7) >> 3;
-                    var packed = new byte[strideBytes * height];
+                    //var packed = new byte[strideBytes * height];
+                    var packed = ArrayPool<byte>.Shared.Rent(strideBytes * height);
+                    
+                    //unsafe
+                    //{
+                    //    for (int y = 0; y < height; y++)
+                    //    {
+                    //        byte* srcRow = (byte*)bin.Ptr(y).ToPointer();
+                    //        int dstOff = y * strideBytes;
+
+                    //        for (int x = 0; x < width; x++)
+                    //        {
+                    //            // ставим бит = 1 если пиксель != 0 (обычно 255)
+                    //            if (srcRow[x] != 0)
+                    //                packed[dstOff + (x >> 3)] |= (byte)(0x80 >> (x & 7));
+                    //        }
+                    //    }
+                    //}
                     unsafe
                     {
                         for (int y = 0; y < height; y++)
                         {
-                            byte* srcRow = (byte*)bin.Ptr(y).ToPointer();
-                            int dstOff = y * strideBytes;
-
-                            for (int x = 0; x < width; x++)
-                            {
-                                // ставим бит = 1 если пиксель != 0 (обычно 255)
-                                if (srcRow[x] != 0)
-                                    packed[dstOff + (x >> 3)] |= (byte)(0x80 >> (x & 7));
-                            }
+                            var srcRow = new ReadOnlySpan<byte>(bin.Ptr(y).ToPointer(), width);
+                            var dstRow = new Span<byte>(packed, y * strideBytes, strideBytes);
+                            PackRowTo1BitInto(srcRow, strideBytes, width, dstRow);
                         }
                     }
-                    return (packed, width, height, strideBytes, 1);
+                    
+                    return (packed, isPooled: true, width, height, strideBytes, 1);
                 }
 
 
@@ -546,7 +562,7 @@ namespace ImgViewer.Models
                 {
                     Marshal.Copy(bin.Ptr(y), binPixels, y * width, width);
                 }
-                return (binPixels, width, height, strideBytes, 8);
+                return (binPixels, isPooled: false, width, height, strideBytes, 8);
             }
             finally
             {
@@ -556,6 +572,56 @@ namespace ImgViewer.Models
                     gray.Dispose();
             }
 
+        }
+
+        private static void PackRowTo1BitInto(ReadOnlySpan<byte> srcRow, int stride, int width, Span<byte> dstPacked)
+        {
+            //int stride = (width + 7) >> 3;
+            if (srcRow.Length < width)
+                throw new ArgumentException("srcRow length < width");
+            if (dstPacked.Length < stride)
+                throw new ArgumentException("dstPacked length < stride");
+
+            int x = 0;
+            int bi = 0;
+
+            // Пакуем по 8 пикселей в байт (MSB2LSB)
+            while (x + 8 <= width)
+            {
+                byte b = 0;
+                //if (srcRow[x + 0] != 0) b |= 0x80;
+                //if (srcRow[x + 1] != 0) b |= 0x40;
+                //if (srcRow[x + 2] != 0) b |= 0x20;
+                //if (srcRow[x + 3] != 0) b |= 0x10;
+                //if (srcRow[x + 4] != 0) b |= 0x08;
+                //if (srcRow[x + 5] != 0) b |= 0x04;
+                //if (srcRow[x + 6] != 0) b |= 0x02;
+                //if (srcRow[x + 7] != 0) b |= 0x01;
+
+                b |= (byte)((srcRow[x + 0] & 0x80) >> 0);
+                b |= (byte)((srcRow[x + 1] & 0x80) >> 1);
+                b |= (byte)((srcRow[x + 2] & 0x80) >> 2);
+                b |= (byte)((srcRow[x + 3] & 0x80) >> 3);
+                b |= (byte)((srcRow[x + 4] & 0x80) >> 4);
+                b |= (byte)((srcRow[x + 5] & 0x80) >> 5);
+                b |= (byte)((srcRow[x + 6] & 0x80) >> 6);
+                b |= (byte)((srcRow[x + 7] & 0x80) >> 7);
+
+                dstPacked[bi++] = b;
+                x += 8;
+            }
+
+            // Хвост (если width не кратна 8)
+            if (x < width)
+            {
+                byte b = 0;
+                byte mask = 0x80;
+                for (; x < width; x++, mask >>= 1)
+                {
+                    if ((srcRow[x] & 0x80) != 0) b |= mask;
+                }
+                dstPacked[bi] = b;
+            }
         }
 
         private (Mat gray, bool ownGray) ToGray8uOrAlias(Mat src)

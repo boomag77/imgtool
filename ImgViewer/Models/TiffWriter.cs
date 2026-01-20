@@ -1,8 +1,10 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using ImageMagick;
+using System.Buffers;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.Arm;
@@ -318,6 +320,7 @@ namespace ImgViewer.Models
             return (byte)threshold;
         }
 
+
         // Heuristic: decide if inversion needed (we want background white)
         private static bool ShouldInvertBinary(byte[] bin, int width, int height)
         {
@@ -410,10 +413,12 @@ namespace ImgViewer.Models
             int dpi,
             Compression compressionMethod,
             bool photometricMinIsWhite = true,
-            string? metadataJson = null)
+            string? metadataJson = null
+            )
         {
-            if (packedBinPixels.Length != strideBytes * height)
-                throw new ArgumentException("binPixels length mismatch");
+            int len = strideBytes * height;
+            if (packedBinPixels.Length < len)
+                throw new ArgumentException("packedBinPixels length < strideBytes * height");
             if (bitsPerPixel != 1)
                 throw new ArgumentException("Only 1 bit per pixel supported for CCITT saving.");
 
@@ -446,7 +451,6 @@ namespace ImgViewer.Models
             //int packedStride = strideBytes;
             //var srcRow = new byte[width];
             //var packedRow = new byte[packedStride];
-
             for (int y = 0; y < height; y++)
             {
                 //Buffer.BlockCopy(binPixels, y * width, srcRow, 0, width);
@@ -457,7 +461,9 @@ namespace ImgViewer.Models
                 if (!ok) throw new IOException($"WriteScanline failed at row {y}");
             }
 
+
             return tif.WriteDirectory();
+
         }
     }
 }

@@ -484,6 +484,10 @@ namespace ImgViewer.Models
 
                 ReportError($"Error getting Tiff info: {ex.Message}", ex, "Tiff Info Error");
             }
+            finally
+            {
+                tiffInfo.Dispose();
+            }
         }
 
 
