@@ -1,5 +1,6 @@
 ﻿using OpenCvSharp;
 using System.Diagnostics;
+using System.Windows.Navigation;
 using Point = OpenCvSharp.Point;
 using Size = OpenCvSharp.Size;
 
@@ -7,8 +8,25 @@ namespace ImgViewer.Models;
 
 public class Despeckler
 {
-    public static Mat DespeckleApplyToSource(
-                                        CancellationToken token,
+    public enum DespeckleMethod
+    {
+        Classic,
+        Effective
+    }
+
+    public static bool TryDespeckle(DespeckleMethod method, CancellationToken token, Mat src, out Mat? result, DespeckleSettings? settings = null,
+                             bool debug = false, bool inputIsBinary = false, bool applyMaskToSource = true)
+    {
+        result = method switch
+        {
+            DespeckleMethod.Classic => DespeckleClassic(token, src, settings, debug, inputIsBinary, applyMaskToSource),
+            DespeckleMethod.Effective => DespeckleEffective(token, src, settings, debug, inputIsBinary, applyMaskToSource),
+            _ => null
+        };
+        return result != null;
+    }
+
+    public static Mat DespeckleClassic(CancellationToken token,
                                         Mat src,
                                         DespeckleSettings? settings = null,
                                         bool debug = false,

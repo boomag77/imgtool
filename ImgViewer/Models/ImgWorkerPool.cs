@@ -575,24 +575,6 @@ namespace ImgViewer.Models
             }
 
         }
-        //private static SourceFileLayout GetLayoutFromFileName(string path)
-        //{
-        //    ReadOnlySpan<char> name = Path.GetFileNameWithoutExtension(path).AsSpan();
-        //    if (name.IsEmpty)
-        //        return SourceFileLayout.Right;
-
-        //    for (int i = name.Length - 1; i >= 0; i--)
-        //    {
-        //        char c = name[i];
-        //        if (!char.IsDigit(c))
-        //            continue;
-
-        //        int digit = c - '0';
-        //        return (digit % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
-        //    }
-
-        //    return SourceFileLayout.Right;
-        //}
 
         private static SourceFileLayout GetLayoutFromFileName(char lastChar)
 
@@ -605,39 +587,6 @@ namespace ImgViewer.Models
             return (digit % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
         }
 
-        //private void StartSavingWorkerIfNeeded()
-        //{
-        //    lock (_savingLock)
-        //    {
-        //        if (_currentSavingWorkers >= _maxSavingWorkers)
-        //            return;
-
-        //        _currentSavingWorkers++;
-
-
-
-        //        var workerTask = Task.Run(async () =>
-        //        {
-        //            try
-        //            {
-        //                await ImageSavingWorkerAsync().ConfigureAwait(false);
-        //            }
-        //            finally
-        //            {
-        //                Interlocked.Decrement(ref _currentSavingWorkers);
-        //            }
-        //        }, _token);
-
-        //        _savingTasks.Add(workerTask);
-
-        //        workerTask.ContinueWith(t =>
-        //        {
-        //            RegisterFileError("<ImageSavingWorker>", "Saving worker faulted.", t.Exception!);
-        //        }, CancellationToken.None,
-        //            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-        //            TaskScheduler.Default);
-        //    }
-        //}
 
         private async Task ImageSavingWorkerAsync()
         {
@@ -824,21 +773,7 @@ namespace ImgViewer.Models
                     //proc.SaveCurrentImage(outputFilePath);
                     try
                     {
-                        //using (var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4))
-                        //{
-
-                        //    if (outStream.CanSeek) outStream.Position = 0;
-                        //    outStream.CopyTo(saveTask.ImageStream);
-                        //    _saveQueue.Add(saveTask, token);
-                        //    if (_saveQueue.Count >= 2)
-                        //    {
-                        //        StartSavingWorkerIfNeeded();
-                        //    }
-
-                        //}
-                        //var outStream = imgProc.GetStreamForSaving(ImageFormat.Tiff, TiffCompression.CCITTG4);
                         var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
-                        //if (outStream.CanSeek) outStream.Position = 0;
                         var saveTask = new SaveTaskInfo
                         {
                             //ImageStream = outStream,
@@ -846,11 +781,6 @@ namespace ImgViewer.Models
                             TiffInfo = tiffInfo,
                             //DisposeStream = true
                         };
-                        //_saveQueue.Add(saveTask, _token);
-                        //if (_saveQueue.Count >= 2)
-                        //{
-                        //    StartSavingWorkerIfNeeded();
-                        //}
                         await _saveCh.Writer.WriteAsync(saveTask, token);
 
                     }

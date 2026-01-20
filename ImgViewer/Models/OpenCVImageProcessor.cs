@@ -1501,13 +1501,6 @@ namespace ImgViewer.Models
                             int cropLevel = 62;
 
                             // EAST
-                            //int eastInputWidth = 1280;
-                            //int eastInputHeight = 1280;
-                            //float eastScoreThreshold = 0.45f;
-                            //float eastNmsThreshold = 0.45f;
-                            //int tesseractMinConfidence = 50;
-                            //int paddingPx = 20;
-                            //int downscaleMaxWidth = 1600;
                             bool eastDebug = true;
 
                             var tds = TextDetectionSettings.CreateDefault();
@@ -1577,7 +1570,7 @@ namespace ImgViewer.Models
                                     }
                                 }
                             }
-                            //applyAutoCropRectangleCurrent();
+
                             break;
                         case ProcessorCommand.LinesRemove:
                             int lineWidthPx = 1;
@@ -1653,7 +1646,6 @@ namespace ImgViewer.Models
                             }
                             mask.Dispose();
                             return resultLR;
-
                         case ProcessorCommand.DotsRemove:
                             return src.Clone();
                         case ProcessorCommand.ChannelsCorrection:
@@ -2243,6 +2235,7 @@ namespace ImgViewer.Models
             }
             catch (Exception ex)
             {
+                ErrorOccured?.Invoke($"DetectDocumentAndCrop failed: {ex.Message}");
                 Debug.WriteLine($"DetectDocumentAndCrop failed: {ex}");
                 debugMask = new Mat();
                 debugOverlay = new Mat();
@@ -2322,7 +2315,7 @@ namespace ImgViewer.Models
         {
             try
             {
-                Mat result = Despeckler.DespeckleApplyToSource(_token, src, settings, settings.ShowDespeckleDebug, true, true);
+                Mat result = Despeckler.DespeckleClassic(_token, src, settings, settings.ShowDespeckleDebug, true, true);
                 return result;
             }
             catch (OperationCanceledException)

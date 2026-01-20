@@ -366,6 +366,7 @@ namespace ImgViewer.Models
                         int srcOffset = row * tileRowBytes;
                         int dstOffset = (y + row) * outRowBytes + x * bytesPerPixel;
                         Buffer.BlockCopy(tileBuffer, srcOffset, output, dstOffset, copyWidth * bytesPerPixel);
+
                     }
                 }
             }
