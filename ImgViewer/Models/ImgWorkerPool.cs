@@ -610,24 +610,17 @@ namespace ImgViewer.Models
                     //        File.Delete(finalPath);
                     //    File.Move(tempPath, finalPath);
                     //}
-                    var tiffInfo = saveTask.TiffInfo;
+                    using var tiffInfo = saveTask.TiffInfo;
                     if (tiffInfo == null)
                         throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
 
-                    try
-                    {
-                        var finalPath = saveTask.OutputFilePath;
-                        var tempPath = string.Concat(finalPath, ".tmp");
-                        currentOutputFile = finalPath;
-                        fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
-                        //if (File.Exists(finalPath))
-                        //    File.Delete(finalPath);
-                        File.Move(tempPath, finalPath, overwrite: true);
-                    }
-                    finally
-                    {
-                        tiffInfo.Dispose();
-                    }
+                    var finalPath = saveTask.OutputFilePath;
+                    var tempPath = string.Concat(finalPath, ".tmp");
+                    currentOutputFile = finalPath;
+                    fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
+                    //if (File.Exists(finalPath))
+                    //    File.Delete(finalPath);
+                    File.Move(tempPath, finalPath, overwrite: true);
                 }
             }
             catch (OperationCanceledException)

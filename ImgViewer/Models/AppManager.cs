@@ -468,11 +468,11 @@ namespace ImgViewer.Models
 
         public async Task SaveProcessedImageToTiff(string outputPath, TiffCompression compression, int dpi = 300)
         {
-            var tiffInfo = new TiffInfo();
+            //var tiffInfo = new TiffInfo();
             try
             {
                 compression = _appSettings.TiffCompression;
-                tiffInfo = await Task.Run(() => _imageProcessor.GetTiffInfo(compression, dpi));
+                using var tiffInfo = await Task.Run(() => _imageProcessor.GetTiffInfo(compression, dpi));
                 _fileProcessor.SaveTiff(
                     tiffInfo,
                     outputPath,
@@ -483,10 +483,6 @@ namespace ImgViewer.Models
             {
 
                 ReportError($"Error getting Tiff info: {ex.Message}", ex, "Tiff Info Error");
-            }
-            finally
-            {
-                tiffInfo.Dispose();
             }
         }
 
