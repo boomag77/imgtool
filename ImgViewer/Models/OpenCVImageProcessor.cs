@@ -480,15 +480,20 @@ namespace ImgViewer.Models
             if (src == null || src.Empty())
                 throw new InvalidOperationException("src Mat is null or empty");
 
-            using var gray = ToGray8u(src);
+            var (gray, ownGray) = ToGray8uOrAlias(src);
 
-            using var bin = new Mat();
+            Mat bin;
+            bool ownBin;
             if (IsBinaryMat(gray))
             {
-                gray.CopyTo(bin);
+                //gray.CopyTo(bin);
+                bin = gray;
+                ownBin = false;
             }
             else
             {
+                bin = new Mat();
+                ownBin = true;
                 var thrType = photometricMinIsWhite
                     ? ThresholdTypes.BinaryInv   // white bg -> 0, black ink -> 255
                     : ThresholdTypes.Binary;     // black ink -> 0, white bg -> 255
@@ -499,57 +504,67 @@ namespace ImgViewer.Models
                 Cv2.Threshold(gray, bin, useOtsu ? 0 : manualThreshold, 255, thrType);
             }
 
-
-
-            int width = bin.Cols;
-            int height = bin.Rows;
-            int strideBytes = width;
-
-            if (compression == TiffCompression.CCITTG3 || compression == TiffCompression.CCITTG4)
+            try
             {
-                // для G3/G4 нужно 1-битное изображение
-                strideBytes = (width + 7) >> 3;
-                var packed = new byte[strideBytes * height];
-                unsafe
-                {
-                    for (int y = 0; y < height; y++)
-                    {
-                        byte* srcRow = (byte*)bin.Ptr(y).ToPointer();
-                        int dstOff = y * strideBytes;
+                int width = bin.Cols;
+                int height = bin.Rows;
+                int strideBytes = width;
 
-                        for (int x = 0; x < width; x++)
+                if (compression == TiffCompression.CCITTG3 || compression == TiffCompression.CCITTG4)
+                {
+                    // для G3/G4 нужно 1-битное изображение
+                    strideBytes = (width + 7) >> 3;
+                    var packed = new byte[strideBytes * height];
+                    unsafe
+                    {
+                        for (int y = 0; y < height; y++)
                         {
-                            // ставим бит = 1 если пиксель != 0 (обычно 255)
-                            if (srcRow[x] != 0)
-                                packed[dstOff + (x >> 3)] |= (byte)(0x80 >> (x & 7));
+                            byte* srcRow = (byte*)bin.Ptr(y).ToPointer();
+                            int dstOff = y * strideBytes;
+
+                            for (int x = 0; x < width; x++)
+                            {
+                                // ставим бит = 1 если пиксель != 0 (обычно 255)
+                                if (srcRow[x] != 0)
+                                    packed[dstOff + (x >> 3)] |= (byte)(0x80 >> (x & 7));
+                            }
                         }
                     }
+                    return (packed, width, height, strideBytes, 1);
                 }
-                return (packed, width, height, strideBytes, 1);
+
+
+
+                int bufferSize = width * height;
+
+                var binPixels = new byte[bufferSize];
+
+                //var binPixels = new byte[width * height];
+
+                // важно: копируем ровно width байт на строку, игнорируя bin.Step()
+                for (int y = 0; y < height; y++)
+                {
+                    Marshal.Copy(bin.Ptr(y), binPixels, y * width, width);
+                }
+                return (binPixels, width, height, strideBytes, 8);
             }
-
-
-
-            int bufferSize = width * height;
-
-            var binPixels = new byte[bufferSize];
-
-            //var binPixels = new byte[width * height];
-
-            // важно: копируем ровно width байт на строку, игнорируя bin.Step()
-            for (int y = 0; y < height; y++)
+            finally
             {
-                Marshal.Copy(bin.Ptr(y), binPixels, y * width, width);
+                if (ownBin)
+                    bin.Dispose();
+                if (ownGray)
+                    gray.Dispose();
             }
 
-            return (binPixels, width, height, strideBytes, 8);
         }
 
-        private Mat ToGray8u(Mat src)
+        private (Mat gray, bool ownGray) ToGray8uOrAlias(Mat src)
         {
+            if (src == null || src.Empty())
+                return (new Mat(), true);
             // вернём новый Mat (caller Dispose через using выше)
             if (src.Type() == MatType.CV_8UC1)
-                return src.Clone();
+                return (src, false);
 
             var gray = new Mat();
 
@@ -563,7 +578,7 @@ namespace ImgViewer.Models
             if (gray.Type() != MatType.CV_8UC1)
                 gray.ConvertTo(gray, MatType.CV_8UC1);
 
-            return gray;
+            return (gray, true);
         }
 
 
@@ -571,6 +586,13 @@ namespace ImgViewer.Models
         {
             if (gray == null || gray.Empty()) return false;
             if (gray.Type() != MatType.CV_8UC1) return false;
+
+            Cv2.MinMaxLoc(gray, out double minVal, out double maxVal);
+            if (minVal == maxVal)
+                return minVal == 0.0 || minVal == 255.0; // all 0 or all 255
+            if (minVal != 0.0 || maxVal != 255.0)
+                return false;
+            
 
             using var nonBinary = new Mat();
             Cv2.InRange(gray, new Scalar(1), new Scalar(254), nonBinary);
