@@ -1,6 +1,5 @@
 ﻿using OpenCvSharp;
 using System.Diagnostics;
-using System.Windows.Navigation;
 using Point = OpenCvSharp.Point;
 using Size = OpenCvSharp.Size;
 
