@@ -413,7 +413,7 @@ namespace ImgViewer.Models
                 }
                 else
                 {
-                    var ok = TiffWriter.SaveTiff(
+                    var ok = TiffWriter.SaveNonCcittTiff(
                                     tiffInfo.Pixels,
                                     tiffInfo.Width,
                                     tiffInfo.Height,

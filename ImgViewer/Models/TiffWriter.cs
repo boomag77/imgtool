@@ -115,7 +115,7 @@ namespace ImgViewer.Models
         //        if (createdCopy) ms.Dispose();
         //    }
         //}
-        public static bool SaveTiff(byte[] pixels,
+        public static bool SaveNonCcittTiff(byte[] pixels,
                                     int width, int height, int bpp,
                                     TiffCompression compression, int dpi,
                                     string path, bool overwrite = true,

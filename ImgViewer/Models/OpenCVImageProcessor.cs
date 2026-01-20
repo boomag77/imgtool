@@ -459,18 +459,19 @@ namespace ImgViewer.Models
             int bitsPerPixel = channels * 8;
             int rowBytes = checked(width * channels);
             int bufferSize = checked(rowBytes * height);
-            var pixels = new byte[bufferSize];
+            //var pixels = new byte[bufferSize];
+            var pixels = ArrayPool<byte>.Shared.Rent(bufferSize);
             if (work.Step() == width * channels && work.IsContinuous())
             {
                 // можно скопировать сразу весь буфер
                 Marshal.Copy(work.Ptr(0), pixels, 0, bufferSize);
-                return (pixels, isPooled: false, width, height, bitsPerPixel);
+                return (pixels, isPooled: true, width, height, bitsPerPixel);
             }
             for (int y = 0; y < height; y++)
             {
                 Marshal.Copy(work.Ptr(y), pixels, y * width * channels, width * channels);
             }
-            return (pixels, isPooled: false, width, height, bitsPerPixel);
+            return (pixels, isPooled: true, width, height, bitsPerPixel);
         }
 
         private (byte[] binPixels, bool isPooled, int width, int height, int strideBytes, int bitsPerPixel) GetBinPixelsFromMat(TiffCompression compression,
@@ -553,7 +554,8 @@ namespace ImgViewer.Models
 
                 int bufferSize = width * height;
 
-                var binPixels = new byte[bufferSize];
+                //var binPixels = new byte[bufferSize];
+                var binPixels = ArrayPool<byte>.Shared.Rent(bufferSize);
 
                 //var binPixels = new byte[width * height];
 
@@ -562,7 +564,7 @@ namespace ImgViewer.Models
                 {
                     Marshal.Copy(bin.Ptr(y), binPixels, y * width, width);
                 }
-                return (binPixels, isPooled: false, width, height, strideBytes, 8);
+                return (binPixels, isPooled: true, width, height, strideBytes, 8);
             }
             finally
             {
