@@ -73,7 +73,7 @@ namespace ImgViewer.Views
         private DocumentationWindow? _documentationWindow;
         private BatchProgressWindow? _batchProgressWindow;
 
-        private double _eraseOffset;   // ???????? ?? ??????/??????? ????
+        private double _eraseOffset;   
         private bool _eraseModeActive;
         private bool _operationErased;
 
@@ -1292,8 +1292,8 @@ namespace ImgViewer.Views
             private readonly MainWindow _owner;
             private int _cachedFileIndex = -1;
             private string _cachedDirectory = string.Empty;
-            private Dictionary<int, string> _folderIndex;
-            private Dictionary<string, int> _folderIndexByPath;
+            private FrozenDictionary<int, string> _folderIndex = FrozenDictionary<int, string>.Empty;
+            private FrozenDictionary<string, int> _folderIndexByPath = FrozenDictionary<string, int>.Empty;
 
             private readonly object _lock = new object();
 
@@ -1319,10 +1319,12 @@ namespace ImgViewer.Views
 
             public int LastIndex
             {
+                
+
                 get
                 {
-                    lock (_lock)
-                        return _folderIndex.Count - 1;
+                    var index = _folderIndex;
+                    return index.Count - 1;
                 }
             }
 
@@ -1341,48 +1343,41 @@ namespace ImgViewer.Views
             public CurrentFolderIndex(MainWindow owner)
             {
                 _owner = owner;
-                _folderIndex = new Dictionary<int, string>();
-                _folderIndexByPath = new Dictionary<string, int>();
+                //_folderIndex = new FrozenDictionary<int, string>();
+                //_folderIndexByPath = new FrozenDictionary<string, int>();
             }
 
             public bool TryGetFilePathForIndex(int index, out string filePath)
             {
-                lock (_lock)
+                if (!_folderIndex.TryGetValue(index, out string? value))
                 {
-                    if (!_folderIndex.TryGetValue(index, out string? value))
-                    {
-                        filePath = string.Empty;
-                        return false;
-                    }
-                    filePath = value;
-                    _cachedFileIndex = index;
-                    return true;
+                    filePath = string.Empty;
+                    return false;
                 }
-
+                filePath = value;
+                Interlocked.Exchange(ref _cachedFileIndex, index);
+                return true;
             }
 
             public bool TryGetFileIndexForPath(string filePath, out int idx)
             {
-                lock (_lock)
+                if (!_folderIndexByPath.TryGetValue(filePath, out int fileIndex))
                 {
-                    if (!_folderIndexByPath.TryGetValue(filePath, out int fileIndex))
-                    {
-                        idx = -1;
-                        return false;
-                    }
-
-                    idx = fileIndex;
-                    return true;
+                    idx = -1;
+                    return false;
                 }
-
+                idx = fileIndex;
+                return true;
             }
 
             private void Clear()
             {
                 lock (_lock)
                 {
-                    _folderIndex.Clear();
-                    _folderIndexByPath.Clear();
+                    //_folderIndex.Clear();
+                    //_folderIndexByPath.Clear();
+                    _folderIndex = FrozenDictionary<int, string>.Empty;
+                    _folderIndexByPath = FrozenDictionary<string, int>.Empty;
                     _cachedFileIndex = -1;
                     _cachedDirectory = string.Empty;
                 }
@@ -1394,10 +1389,7 @@ namespace ImgViewer.Views
             public async Task CreateAsync(string folderPath, string filePath, CancellationToken token)
             {
                 Debug.WriteLine($"Creating Folder index");
-                lock (_lock)
-                {
-                    Clear();
-                }
+                Clear();
 
 
 
@@ -1417,10 +1409,11 @@ namespace ImgViewer.Views
                         i++;
                     }
                     if (token.IsCancellationRequested) return;
+                    
                     lock (_lock)
                     {
-                        _folderIndex = tmpFolderIndex;
-                        _folderIndexByPath = tmpFolderIndexByPath;
+                        _folderIndex = tmpFolderIndex.ToFrozenDictionary();
+                        _folderIndexByPath = tmpFolderIndexByPath.ToFrozenDictionary();
                         _cachedDirectory = folderPath;
                         _cachedFileIndex = _folderIndexByPath.TryGetValue(filePath, out var idx) ? idx : -1;
                     }
@@ -1436,7 +1429,6 @@ namespace ImgViewer.Views
             //string[] _imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
             try
             {
-                // ???????? ?????
                 var folder = _currentFolderIndex.CachedDirectory;
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
@@ -1464,7 +1456,6 @@ namespace ImgViewer.Views
                 _liveDebounceCts = null;
                 await _manager.SetImageOnPreview(target);
                 _viewModel.CurrentImagePath = target;
-                //_manager.LastOpenedFolder = folder;
 
                 await RunLiveOperationsForNewImageAsync();
             }
