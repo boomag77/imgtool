@@ -1408,7 +1408,7 @@ namespace ImgViewer.Views
                         tmpFolderIndexByPath[file] = i;
                         i++;
                     }
-                    if (token.IsCancellationRequested) return;
+                    token.ThrowIfCancellationRequested();
                     
                     lock (_lock)
                     {
