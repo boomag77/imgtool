@@ -19,13 +19,9 @@ namespace ImgViewer.Models
         private byte[]? _binaryBuffer;
 
         private Mat _currentImage;
-        //private Scalar _pageColor;
-        //private Scalar _borderColor;
-        //private Mat _blurred;
         private readonly IAppManager _appManager;
 
         private CancellationToken _token;
-        //private readonly CancellationTokenSource _onnxCts;
 
         private readonly object _imageLock = new();
         private readonly object _commandLock = new();
@@ -521,7 +517,7 @@ namespace ImgViewer.Models
                     strideBytes = (width + 7) >> 3;
                     //var packed = new byte[strideBytes * height];
                     var packed = ArrayPool<byte>.Shared.Rent(strideBytes * height);
-                    
+
                     //unsafe
                     //{
                     //    for (int y = 0; y < height; y++)
@@ -546,7 +542,7 @@ namespace ImgViewer.Models
                             PackRowTo1BitInto(srcRow, strideBytes, width, dstRow);
                         }
                     }
-                    
+
                     return (packed, isPooled: true, width, height, strideBytes, 1);
                 }
 
@@ -660,7 +656,7 @@ namespace ImgViewer.Models
                 return minVal == 0.0 || minVal == 255.0; // all 0 or all 255
             if (minVal != 0.0 || maxVal != 255.0)
                 return false;
-            
+
 
             using var nonBinary = new Mat();
             Cv2.InRange(gray, new Scalar(1), new Scalar(254), nonBinary);

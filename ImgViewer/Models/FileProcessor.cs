@@ -1,7 +1,6 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using ImageMagick;
 using ImgViewer.Interfaces;
-using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Security;
@@ -93,7 +92,7 @@ namespace ImgViewer.Models
                     bytes = EncodeToBmpBytes(bmpSource);
                     bmpSource = null; // освобождаем память, если не нужно
                 }
-                    
+
 
                 return isBatch ? (null, bytes) : (bmpSource, null);
             }
@@ -181,7 +180,7 @@ namespace ImgViewer.Models
                 //{
                 //    bytes = EncodeToBmpBytes(src);
                 //}
-                    
+
 
                 return true;
             }
@@ -335,11 +334,11 @@ namespace ImgViewer.Models
 
             if (TryLoadWithWic(isBatch, path, decodePixelWidth, out var wicBmp, out var wicBytes, out var wicFail))
             {
-                
+
 #if DEBUG
                 //Debug.WriteLine($"Loaded {path} via WIC.");
 #endif
-                
+
                 return isBatch ? (null, wicBytes) : (wicBmp!, null);
             }
 
@@ -361,7 +360,7 @@ namespace ImgViewer.Models
                 ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
 
                 //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
-                
+
                 return (null, null);
             }
 
@@ -406,7 +405,7 @@ namespace ImgViewer.Models
                                     false,
                                     metadataJson
                     );
-                    if (!ok)    
+                    if (!ok)
                     {
                         throw new Exception("Failed to save CCITT TIFF, TiffWriter returned error.");
                     }

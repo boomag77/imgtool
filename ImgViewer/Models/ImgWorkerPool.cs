@@ -19,8 +19,6 @@ namespace ImgViewer.Models
         {
             public TiffInfo? TiffInfo { get; set; }
             public string OutputFilePath { get; set; } = string.Empty;
-
-
         }
 
         private readonly Task<int> _countImagesTask;
@@ -28,9 +26,6 @@ namespace ImgViewer.Models
         private bool _disposed;
 
         private readonly ConcurrentBag<string> _fileErrors = new();
-
-        //private readonly BlockingCollection<SourceImageFile> _filesQueue;
-        //private readonly BlockingCollection<SaveTaskInfo> _saveQueue;
 
         private readonly Channel<SourceImageFile> _filesCh;
         private readonly Channel<SaveTaskInfo> _saveCh;
@@ -40,12 +35,10 @@ namespace ImgViewer.Models
         private readonly CancellationTokenSource _cts;
         private readonly CancellationToken _token;
         private CancellationTokenRegistration _tokenRegistration;
-        //private readonly SourceImageFolder _sourceFolder;
         private string _outputFolder = string.Empty;
         private int _workersCount;
 
         private readonly int _maxSavingWorkers;
-        //private int _currentSavingWorkers = 0;
 
         private readonly object _savingLock = new();
         private readonly List<Task> _savingTasks = new();
@@ -61,7 +54,6 @@ namespace ImgViewer.Models
         private readonly string? _plJson;
         private List<string> _opsLog = new List<string>();
 
-        //public event Action<string>? ErrorOccured;
         public event Action<int, int>? ProgressChanged;
 
         private string _batchErrorsPath = string.Empty;
@@ -106,7 +98,6 @@ namespace ImgViewer.Models
             _getExistingFilesChoice = getExistingFilesChoice;
             _setExistingFilesChoice = setExistingFilesChoice;
             _onBatchCanceled = onBatchCanceled;
-            //_sourceFolder = sourceFolder;
             _sourceFolderPath = sourceFolderPath;
             string sourceFolderName = Path.GetFileName(_sourceFolderPath);
             string parentPath = Path.GetDirectoryName(_sourceFolderPath);
@@ -134,8 +125,6 @@ namespace ImgViewer.Models
                 {
                     _outputFolder = Path.Combine(parentPath, sourceFolderName + "_" + pipeline.Name);
                 }
-                //_outputFolder = Path.Combine(parentPath, sourceFolderName + "_processed");
-                //_outputFolder = Path.Combine(parentPath, sourceFolderName + "_" + pipeline.Name);
             }
 
             Directory.CreateDirectory(_outputFolder);
@@ -190,8 +179,6 @@ namespace ImgViewer.Models
                 }
             }
 
-
-            //_pipelineTemplate = pipelineTemplate ?? Array.Empty<(ProcessorCommand, Dictionary<string, object>)>();
             var opsSnapshot = pipeline.Operations
                 .Where(op => op.InPipeline)
                 .Select(op => (op.Command, Params: op.CreateParameterDictionary()))
@@ -202,37 +189,30 @@ namespace ImgViewer.Models
             int cpuCount = Environment.ProcessorCount;
             _workersCount = maxWorkersCount == 0 ? Math.Max(1, cpuCount - 1) : maxWorkersCount;
 
-            //_filesQueue = new BlockingCollection<SourceImageFile>(
-            //    maxFilesQueue == 0 ? _workersCount : maxFilesQueue
-            //);
             int filesCapacity = maxFilesQueue == 0 ? _workersCount : maxFilesQueue;
 
             _filesCh = Channel.CreateBounded<SourceImageFile>(new BoundedChannelOptions(filesCapacity)
             {
                 FullMode = BoundedChannelFullMode.Wait, // backpressure
-                SingleWriter = true,                    // EnqueueFiles один пишет
-                SingleReader = false                    // воркеров много
+                SingleWriter = true,                    // EnqueueFiles one writer
+                SingleReader = false                    // many workers read
             });
             int saveQueueCapacity = Math.Max(1, _workersCount / 2);
             _saveCh = Channel.CreateBounded<SaveTaskInfo>(new BoundedChannelOptions(saveQueueCapacity)
             {
                 FullMode = BoundedChannelFullMode.Wait,
-                SingleWriter = false, // processing workers много пишут
-                SingleReader = false  // saving workers много читают
+                SingleWriter = false, // processing workers many writers
+                SingleReader = false  // saving workers many readers
             });
-            //_saveQueue = new BlockingCollection<SaveTaskInfo>(saveQueueCapacity);
 
             _maxSavingWorkers = 2;
 
             _tokenRegistration = _token.Register(() =>
             {
-                //try { _filesQueue.CompleteAdding(); } catch { }
-                //try { _saveQueue.CompleteAdding(); } catch { }
                 try { _filesCh.Writer.TryComplete(); } catch { }
                 try { _saveCh.Writer.TryComplete(); } catch { }
             });
             _processedCount = 0;
-            //_totalCount = sourceFolder.Files.Length;
             foreach (var op in opsSnapshot)
             {
                 _opsLog.Add($"- {op.Command}");
@@ -320,11 +300,6 @@ namespace ImgViewer.Models
                 Debug.WriteLine($"Cannot write batch error log: {uaEx.Message}");
                 _fileErrors.Add($"[REGISTERING ERRORS] Cannot write batch error log: {uaEx.Message}");
             }
-
-            //if (!string.IsNullOrEmpty(_batchErrorsPath))
-            //{
-            //    File.AppendAllText(_batchErrorsPath, msg + Environment.NewLine);
-            //}
         }
 
         private static HashSet<string> LoadExistingOutputNamesAndCleanupTmp(string outputFolder)
@@ -338,7 +313,7 @@ namespace ImgViewer.Models
             {
                 var fileName = Path.GetFileName(file);
 
-                // 1) Чистим незавершённые временные файлы
+                // 1) Clear .tmp files
                 if (fileName.EndsWith(".tif.tmp", StringComparison.OrdinalIgnoreCase) ||
                     fileName.EndsWith(".tiff.tmp", StringComparison.OrdinalIgnoreCase))
                 {
@@ -346,7 +321,7 @@ namespace ImgViewer.Models
                     continue;
                 }
 
-                // 2) Запоминаем уже готовые TIFF'ы
+                // 2) Save existing base names of .tif/.tiff files
                 var ext = Path.GetExtension(file);
                 if (ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
                     ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
@@ -439,8 +414,6 @@ namespace ImgViewer.Models
 
             foreach (var move in pendingMoves)
             {
-                //if (File.Exists(move.Final))
-                //    File.Delete(move.Final);
                 File.Move(move.Temp, move.Final, overwrite: true);
             }
         }
@@ -457,8 +430,6 @@ namespace ImgViewer.Models
             Cv2.ImEncode(encodeExt, mat, out var buffer);
             var tempPath = finalPath + ".tmp";
             File.WriteAllBytes(tempPath, buffer);
-            //if (File.Exists(finalPath))
-            //    File.Delete(finalPath);
             File.Move(tempPath, finalPath, overwrite: true);
         }
 
@@ -481,10 +452,6 @@ namespace ImgViewer.Models
             };
         }
 
-        //private readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        //{
-        //    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"
-        //};
 
         private readonly FrozenSet<string> ImageExts =
             new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" }
@@ -551,7 +518,6 @@ namespace ImgViewer.Models
                         Path = file,
                         Layout = GetLayoutFromFileName(file.AsSpan()[^1])
                     };
-                    //_filesQueue.Add(sourceFile, _token);
                     await _filesCh.Writer.WriteAsync(sourceFile, _token);
 
 
@@ -570,7 +536,6 @@ namespace ImgViewer.Models
             }
             finally
             {
-                //try { _filesQueue.CompleteAdding(); } catch { }
                 try { _filesCh.Writer.TryComplete(); } catch { }
             }
 
@@ -592,24 +557,12 @@ namespace ImgViewer.Models
         {
             var token = _token;
             using var fileProc = new FileProcessor(CancellationToken.None);
-            string currentOutputFile = null;
-            //var tiffInfo = new TiffInfo();
+            string currentOutputFile = string.Empty;
             try
             {
                 await foreach (var saveTask in _saveCh.Reader.ReadAllAsync(token))
                 {
                     token.ThrowIfCancellationRequested();
-                    //using (var stream = saveTask.ImageStream)
-                    //{
-                    //    if (stream.CanSeek) stream.Position = 0;
-                    //    var finalPath = saveTask.OutputFilePath;
-                    //    var tempPath = finalPath + ".tmp";
-
-                    //    await Task.Run(() => fileProc.SaveTiff(stream, tempPath, TiffCompression.CCITTG4, 300, true, _plJson), token);
-                    //    if (File.Exists(finalPath))
-                    //        File.Delete(finalPath);
-                    //    File.Move(tempPath, finalPath);
-                    //}
                     using var tiffInfo = saveTask.TiffInfo;
                     if (tiffInfo == null)
                         throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo nor ImageStream.");
@@ -618,8 +571,6 @@ namespace ImgViewer.Models
                     var tempPath = string.Concat(finalPath, ".tmp");
                     currentOutputFile = finalPath;
                     fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
-                    //if (File.Exists(finalPath))
-                    //    File.Delete(finalPath);
                     File.Move(tempPath, finalPath, overwrite: true);
                 }
             }
@@ -679,8 +630,6 @@ namespace ImgViewer.Models
                     ReadOnlyMemory<byte> imageBytes = loaded.Item2;
                     imgProc.CurrentImage = imageBytes;
 
-                    //imgProc.CurrentImage = loaded.Item2;
-                    //imgProc.CurrentImage = fileProc.Load<ImageSource>(filePath).Item1;
 
 
                     foreach (var op in _plOperations)
@@ -742,7 +691,6 @@ namespace ImgViewer.Models
                         {
                             RegisterFileError(file.Path, $"Error applying op {op.Command}", exOp);
                             break;
-                            //ErrorOccured?.Invoke($"Error applying op {op.command} to {filePath}: {exOp.Message}");
                         }
                     }
 
@@ -768,16 +716,13 @@ namespace ImgViewer.Models
 
                     var fileName = Path.ChangeExtension(Path.GetFileName(file.Path), ".tif");
                     var outputFilePath = Path.Combine(_outputFolder, fileName);
-                    //proc.SaveCurrentImage(outputFilePath);
                     try
                     {
                         var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
                         var saveTask = new SaveTaskInfo
                         {
-                            //ImageStream = outStream,
                             OutputFilePath = outputFilePath,
                             TiffInfo = tiffInfo,
-                            //DisposeStream = true
                         };
                         await _saveCh.Writer.WriteAsync(saveTask, token);
 
@@ -847,7 +792,6 @@ namespace ImgViewer.Models
                 // in parallel enqueing que
                 var enqueueTask = Task.Run(() => EnqueueFiles(), _token);
                 processingTasks.Add(enqueueTask);
-                //StartSavingWorkerIfNeeded();
                 for (int i = 0; i < _maxSavingWorkers; i++)
                 {
                     _savingTasks.Add(Task.Run(() => ImageSavingWorkerAsync(), _token));
@@ -928,17 +872,12 @@ namespace ImgViewer.Models
             }
             finally
             {
-                //_saveQueue.CompleteAdding();
-                //await Task.WhenAll(_savingTasks);
                 _saveCh.Writer.TryComplete();
                 await Task.WhenAll(_savingTasks);
 
                 try { _tokenRegistration.Dispose(); } catch { }
 
             }
-
-
-
         }
     }
 }

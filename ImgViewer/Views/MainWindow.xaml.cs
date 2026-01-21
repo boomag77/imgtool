@@ -30,10 +30,6 @@ namespace ImgViewer.Views
 {
     public partial class MainWindow : Window, IMainView
     {
-        //private readonly IImageProcessor _processor;
-        //private readonly IFileProcessor _explorer;
-
-        //private readonly HashSet<PipelineOperation> _handlingOps = new();
 
         private DraggedItemAdorner? _draggedItemAdorner;
         private MagnifierAdorner? _magnifierAdorner;
@@ -80,7 +76,7 @@ namespace ImgViewer.Views
         private bool _livePipelineRunning;
         private bool _livePipelineRestartPending;
         private readonly object _liveLock = new();
-        private readonly HashSet<PipelineOperation> _liveRunning = new();
+        //private readonly HashSet<PipelineOperation> _liveRunning = new();
 
         private CurrentFolderIndex _currentFolderIndex;
         private CancellationTokenSource _folderIndexCts;
@@ -109,14 +105,13 @@ namespace ImgViewer.Views
         }
 
         private SelectionMode _selectionMode = SelectionMode.None;
-        private Point _selectionDragStart;   // ?????, ??? ??????? drag
-        private Rect _selectionStartRect;    // ????????????? ?? ?????? ?????? drag
+        private Point _selectionDragStart;   
+        private Rect _selectionStartRect;    
 
-        // radius hit-zones ?????? ?????/??????
         private const double SelectionHandleHit = 8.0;
         private const double SelectionMinSize = 5.0;
 
-        // debounce ??? Live-?????????
+        // debounce 
         private CancellationTokenSource? _liveDebounceCts;
         private TimeSpan _liveDebounceDelay;
 
@@ -137,7 +132,6 @@ namespace ImgViewer.Views
         private IViewModel _viewModel;
 
 
-        //private CancellationTokenSource _cts;
 
         public bool SavePipelineToMd
         {
@@ -145,7 +139,6 @@ namespace ImgViewer.Views
             set => _manager.IsSavePipelineToMd = value;
         }
 
-        //private string _lastOpenedFolder = string.Empty;
 
         public MainWindow()
         {
@@ -165,15 +158,11 @@ namespace ImgViewer.Views
             }
 #endif
 
-            //OnnxModelInspector.PrintModelInfo("Models/ML/model.onnx");
-
 
             _originalImageColumnWidth = RootGrid.ColumnDefinitions[0].Width;
 
-            //_cts = new CancellationTokenSource();
             var cts = new CancellationTokenSource();
             _manager = new AppManager(this, cts);
-            //_pipeline = new Pipeline(_manager);
             _manager.BatchProgressDismissRequested += CloseBatchProgressWindow;
 
             _eraseOffset = _manager.EraseOperationOffset;
@@ -184,18 +173,6 @@ namespace ImgViewer.Views
             _currentFolderIndex = new CurrentFolderIndex(this);
             _folderIndexCts = new CancellationTokenSource();
 
-
-            //_explorer = new FileProcessor(_cts.Token);
-            //_explorer.ErrorOccured += (msg) =>
-            //{
-            //    Dispatcher.InvokeAsync(() =>
-            //    {
-            //        System.Windows.MessageBox.Show(this, msg, "Explorer Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            //    });
-            //};
-
-
-
             SubscribeParameterChangedHandlers();
             HookLiveHandlers();
 
@@ -203,7 +180,6 @@ namespace ImgViewer.Views
 
         private void OrigExpander_Collapsed(object sender, RoutedEventArgs e)
         {
-            // ?????? ????? ??????? ? ??????????
             _viewModel.OriginalImageIsExpanded = false;
             RootGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Auto);
             RootGrid.ColumnDefinitions[2].Width = new GridLength(8, GridUnitType.Star);
@@ -211,7 +187,6 @@ namespace ImgViewer.Views
 
         private void OrigExpander_Expanded(object sender, RoutedEventArgs e)
         {
-            // ?????????? ???????? ?????? (4*)
             _viewModel.OriginalImageIsExpanded = true;
             RootGrid.ColumnDefinitions[0].Width = _originalImageColumnWidth;
             RootGrid.ColumnDefinitions[2].Width = new GridLength(4, GridUnitType.Star);
@@ -228,23 +203,12 @@ namespace ImgViewer.Views
             {
                 try
                 {
-                    // ???? ????? ????? ???????????
                     await Task.Delay(_liveDebounceDelay, cts.Token);
                     cts.Token.ThrowIfCancellationRequested();
 
-                    // ???? ? ???? ?????? ??? ???? ??????  ????, ???? ??????????
-                    //while (_livePipelineRunning)
-                    //{
-                    //    await Task.Delay(50, cts.Token);
-                    //    cts.Token.ThrowIfCancellationRequested();
-                    //}
-
                     await RunLivePipelineFromOriginalAsync();
                 }
-                catch (TaskCanceledException)
-                {
-                    // ??? ?????????  ???????? debounce
-                }
+                catch (TaskCanceledException) {}
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Debounced live pipeline run failed: {ex}");
@@ -260,7 +224,6 @@ namespace ImgViewer.Views
             var pos = Mouse.GetPosition(PipelineListBox);
             double width = PipelineListBox.ActualWidth;
 
-            // "???? ????????"  ????? ???? ??????, ??? EraseOffset ?? ?????/?????? ???? ??????
             return pos.X < -_eraseOffset || pos.X > width + _eraseOffset;
         }
 
@@ -279,7 +242,6 @@ namespace ImgViewer.Views
                     _livePipelineRestartPending = true;
                     return;
                 }
-                // ?? ????????? ???????????, ?????? ?????????? ?????? ?????
                 _livePipelineRunning = true;
             }
 
@@ -291,7 +253,6 @@ namespace ImgViewer.Views
                      .ToList()
                 );
 
-                //_manager.CancelImageProcessing();
                 await _manager.ResetWorkingImagePreview();
 
                 foreach (var pipelineOp in opsSnapshot)
@@ -323,7 +284,6 @@ namespace ImgViewer.Views
             foreach (var op in Pipeline.Operations)
                 op.LiveChanged += OnOperationLiveChanged;
 
-            // attach to future additions/removals if collection changes
             if (Pipeline.Operations is INotifyCollectionChanged coll)
             {
                 coll.CollectionChanged += (s, e) =>
@@ -345,13 +305,8 @@ namespace ImgViewer.Views
         private void OnOperationLiveChanged(PipelineOperation op)
         {
 
-            // ??? ????? ????????? Live (ON/OFF) ???????????? ???? pipeline
             _manager.CancelImageProcessing();
             ScheduleLivePipelineRun();
-            //if (op.Live)
-            //{
-            //    ScheduleLivePipelineRun();
-            //}
         }
 
         private void SubscribeParameterChangedHandlers()
@@ -361,7 +316,6 @@ namespace ImgViewer.Views
                 op.ParameterChanged += OnOperationParameterChanged;
             }
 
-            // If PipeLineOperations can change at runtime, hook new items as well:
             if (Pipeline.Operations is INotifyCollectionChanged coll)
             {
                 coll.CollectionChanged += (s, e) =>
@@ -384,12 +338,8 @@ namespace ImgViewer.Views
             }
         }
 
-        // --- Replace this existing method with the code below ---
         private void OnOperationParameterChanged(PipelineOperation op, PipeLineParameter? param)
         {
-
-
-            // ???? ???????? ?? ???????? ? pipeline, ?????????? ????????? ??????????
             if (!op.InPipeline || !op.Live)
                 return;
             _manager.CancelImageProcessing();
@@ -399,7 +349,6 @@ namespace ImgViewer.Views
         private void StopProcessing_Click(object sender, RoutedEventArgs e)
         {
             _manager.CancelBatchProcessing();
-            //Debug.WriteLine("Stopping");
         }
 
         private void SplitCountButton_Click(object sender, RoutedEventArgs e)
@@ -481,7 +430,6 @@ namespace ImgViewer.Views
                         {
                             Rect viewboxRect = _selectedRect;
 
-                            // 1) Viewbox ? Image (DIPs ? ??????? ????????? PreviewImgBox)
                             GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
                             Rect imageRectDip = transform.TransformBounds(viewboxRect);
 
@@ -491,7 +439,6 @@ namespace ImgViewer.Views
                             int imgW = bmp.PixelWidth;
                             int imgH = bmp.PixelHeight;
 
-                            // ???? ?????????  "??????? ?? ?????"
                             int manualLeft = x;
                             int manualTop = y;
                             int manualRight = imgW - (x + w);
@@ -536,7 +483,6 @@ namespace ImgViewer.Views
             if (PreviewImgBox.Source is not BitmapSource bmp)
                 return (false, 0, 0, 0, 0);
 
-            // 1) Viewbox -> Image (DIPs ? ??????? ????????? PreviewImgBox)
             Rect viewboxRect = _selectedRect;
 
             GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
@@ -545,7 +491,6 @@ namespace ImgViewer.Views
             if (PreviewImgBox.ActualWidth <= 0 || PreviewImgBox.ActualHeight <= 0)
                 return (false, 0, 0, 0, 0);
 
-            // 2) DIPs (Image) -> ??????? BitmapSource
             double scaleX = bmp.PixelWidth / PreviewImgBox.ActualWidth;
             double scaleY = bmp.PixelHeight / PreviewImgBox.ActualHeight;
 
@@ -588,8 +533,6 @@ namespace ImgViewer.Views
         {
             if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
             {
-                //var commmand = operation.Command;
-                //var p = operation.CreateParameterDictionary();
                 await _manager.ResetWorkingImagePreview();
                 operation.Execute();
                 e.Handled = true;
@@ -676,11 +619,9 @@ namespace ImgViewer.Views
                 return;
             }
 
-            // ????? ??????? ??????? ???????????? ListBox
             var rawPos = e.GetPosition(PipelineListBox);
             double width = PipelineListBox.ActualWidth;
 
-            // ???????? ????? ????????, ??? ? ??????
             bool erase =
                 rawPos.X < _eraseOffset ||
                 rawPos.X > width - _eraseOffset;
@@ -688,25 +629,20 @@ namespace ImgViewer.Views
             _eraseModeActive = erase;
             _draggedItemAdorner?.SetEraseMode(erase);
 
-            // ??????? X ??? ??????????? ????????:
-            // ?? ???? ??? ???? ?????? EraseOffset ?? ?????
             double clampedX = Math.Max(_eraseOffset, Math.Min(rawPos.X, width - _eraseOffset));
             var clampedPos = new Point(clampedX, rawPos.Y);
 
-            // ??????? drag-ghost ?? ??????? ???????
             _draggedItemAdorner?.Update(clampedPos);
 
             if (erase)
             {
-                // ? ?????? ???????? ?? ?????????? ????? ???????
                 RemoveInsertionAdorner();
                 e.Effects = DragDropEffects.None;
                 e.Handled = true;
                 return;
             }
 
-            //PipelineListBox.UpdateLayout();
-            _currentInsertionIndex = GetInsertionIndex(PipelineListBox, rawPos); // ??? ??????? ?????????? ????? ???????
+            _currentInsertionIndex = GetInsertionIndex(PipelineListBox, rawPos); 
             EnsureInsertionAdorner();
             _insertionAdorner?.Update(PipelineListBox, _currentInsertionIndex);
 
@@ -720,8 +656,6 @@ namespace ImgViewer.Views
             if (!PipelineListBox.IsMouseOver)
             {
                 RemoveInsertionAdorner();
-                //_eraseModeActive = false;
-                //_draggedItemAdorner?.SetEraseMode(false);
             }
         }
 
@@ -738,20 +672,11 @@ namespace ImgViewer.Views
 
             if (_eraseModeActive)
             {
-
-
-
-                // ----- ????? ???????? -----
                 _dropHandled = true;
                 _operationErased = true;
                 e.Effects = DragDropEffects.Move;
                 e.Handled = true;
 
-                // ???? ?? ??? ????????? ????? Pipeline:
-                //_pipeline.Remove(_draggedOperation);
-
-                // ? ??????? ?????????? _pipeLineOperations.Remove ??? ???
-                // ?????? ? BeginPipelineDrag(), ??????? ?????? ?? ????????? ???????
 
                 _eraseModeActive = false;
                 _draggedItemAdorner?.SetEraseMode(false);
@@ -775,10 +700,8 @@ namespace ImgViewer.Views
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
 
-            // ----- NEW: ????? ????????? ??????? ??????? ? ????????????? live-???????? -----
             try
             {
-                // RunLiveOperationsForNewImageAsync ??? ?????? ResetPreview ? ??????, ??????? ?????? ???????? ???.
                 await RunLiveOperationsForNewImageAsync();
             }
             catch (Exception ex)
@@ -795,16 +718,6 @@ namespace ImgViewer.Views
             {
                 e.UseDefaultCursors = false;
 
-                //var rawPos = Mouse.GetPosition(PipelineListBox);
-                //double width = PipelineListBox.ActualWidth;
-
-                //double clampedX = Math.Max(EraseOffset, Math.Min(rawPos.X, width - EraseOffset));
-                //var clampedPos = new Point(clampedX, rawPos.Y);
-
-                //_draggedItemAdorner.Update(clampedPos);
-
-                //_draggedItemAdorner.Update(Mouse.GetPosition(RootGrid));
-                //_draggedItemAdorner.Update(e.GetPosition(PipelineListBox)); // ?????? Mouse.GetPosition
                 //Mouse.SetCursor(Cursors.Arrow);
                 e.Handled = true;
             }
@@ -858,7 +771,6 @@ namespace ImgViewer.Views
 
             if (cancelled && IsEraseDropPosition())
             {
-                // ??? ???? ???? ?????? ?? ???? ? ???????????? ???? "????????" ????????
                 var res = System.Windows.MessageBox.Show(
                     $"WARNING! Are you sure you want to remove {_draggedOperation?.DisplayName} from current pipeline?",
                     "Confirm",
@@ -939,10 +851,8 @@ namespace ImgViewer.Views
             if (element == null)
                 return null;
 
-            // ????????? layout, ????? ActualWidth/ActualHeight ???? ?????????
             element.UpdateLayout();
 
-            // ??????? ??????????? ???????? (? ??? ??????????? ??????? ?????????)
             var bounds = VisualTreeHelper.GetDescendantBounds(element);
             if (bounds.IsEmpty)
                 return null;
@@ -955,7 +865,6 @@ namespace ImgViewer.Views
             const double dpi = 96.0;
             var rtb = new RenderTargetBitmap(width, height, dpi, dpi, PixelFormats.Pbgra32);
 
-            // ?????? ??????? ????? VisualBrush, ????? "??????????" ?? ?????????? ?????????
             var dv = new DrawingVisual();
             using (var ctx = dv.RenderOpen())
             {
@@ -975,45 +884,6 @@ namespace ImgViewer.Views
         }
 
 
-        //private async void ExecuteManagerCommand(ProcessorCommand command, Dictionary<string, object> parameters)
-        //{
-        //    if (_manager == null)
-        //        return;
-
-        //    // ???????????: ???? ??????, ????? ????? ?????? ??????? ?????????? Despeckle:
-        //    _manager.CancelImageProcessing();
-
-        //    try
-        //    {
-        //        await _manager.ApplyCommandToProcessingImage(command, parameters);
-        //    }
-        //    catch (OperationCanceledException)
-        //    {
-        //        // ???? ??????????
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Debug.WriteLine($"ExecuteManagerCommand error: {ex}");
-        //    }
-        //}
-
-        //private Dictionary<string, object> GetParametersFromSender(object sender)
-        //{
-        //    if (sender is FrameworkElement element && element.DataContext is PipelineOperation operation)
-        //    {
-        //        return operation.CreateParameterDictionary();
-        //    }
-
-        //    return new Dictionary<string, object>();
-        //}
-
-        //public void UpdatePreview(Stream stream)
-        //{
-        //    var bitmap = streamToBitmapSource(stream);
-        //    Dispatcher.InvokeAsync(() => PreviewImgBox.Source = bitmap);
-        //}
-
-
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
@@ -1023,23 +893,6 @@ namespace ImgViewer.Views
             base.OnClosing(e);
         }
 
-        //private BitmapSource streamToBitmapSource(Stream stream)
-        //{
-        //    if (stream == null || stream == Stream.Null)
-        //        return null!;
-
-        //    if (stream.CanSeek)
-        //        stream.Position = 0;
-
-        //    var bitmap = new BitmapImage();
-        //    bitmap.BeginInit();
-        //    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        //    bitmap.StreamSource = stream;
-        //    bitmap.EndInit();
-        //    bitmap.Freeze();
-
-        //    return bitmap;
-        //}
 
 
         private async void OpenFile_Click(object sender, RoutedEventArgs e)
@@ -1052,8 +905,6 @@ namespace ImgViewer.Views
             {
                 try
                 {
-                    //await SetImgBoxSourceAsync(dlg.FileName);
-                    //await _mvm.LoadImagAsync(dlg.FileName);
                     var fileName = dlg.FileName;
                     var directoryName = Path.GetDirectoryName(fileName);
 
@@ -1077,10 +928,7 @@ namespace ImgViewer.Views
 
                     await RunLiveOperationsForNewImageAsync();
                 }
-                catch (OperationCanceledException)
-                {
-                    // Load was cancelled, do nothing
-                }
+                catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
                     System.Windows.MessageBox.Show
@@ -1204,13 +1052,10 @@ namespace ImgViewer.Views
             if (!Pipeline.CanAddOperation(type))
                 return;
 
-            // ??????? ????? ???????? ??????? ????
-            var op = Pipeline.CreatePipelineOperation(type);  // ??. ??? 4
+            var op = Pipeline.CreatePipelineOperation(type);  
 
-            // ????????? ? ?????? pipeline (?????? 0)
             Pipeline.Insert(0, op);
 
-            // ???????????: ????? ??????????? live-pipeline
             ScheduleLivePipelineRun();
         }
 
@@ -1239,7 +1084,6 @@ namespace ImgViewer.Views
             {
                 var fileName = dlg.FileName;
 
-                // ???? ???????????? ?? ?????? ??????????  ??????? .igpreset
                 if (!Path.HasExtension(fileName))
                     fileName += ".igpreset";
 
@@ -1247,7 +1091,7 @@ namespace ImgViewer.Views
                 Debug.WriteLine(json);
 
                 _manager.SavePipelineToJSON(fileName, json);
-                _manager.LastOpenedFolder = Path.GetDirectoryName(fileName);
+                _manager.LastOpenedFolder = Path.GetDirectoryName(fileName) ?? dlg.InitialDirectory;
             }
 
 
@@ -1257,7 +1101,7 @@ namespace ImgViewer.Views
 
         private void ResetPipelineToDefaults_Click(object sender, RoutedEventArgs e)
         {
-            //TODO
+            
             var res = System.Windows.MessageBox.Show($"WARNING! All parameters will be set to the default values! Are you sure?",
                                                          "Confirm",
                                                          MessageBoxButton.OKCancel,
@@ -1278,11 +1122,6 @@ namespace ImgViewer.Views
             await OpenSiblingFileAsync(false);
         }
 
-        //private readonly HashSet<string> ImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        //{
-        //    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"
-        //};
-
         private readonly FrozenSet<string> ImageExts =
             new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" }
             .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
@@ -1297,10 +1136,6 @@ namespace ImgViewer.Views
 
             private readonly object _lock = new object();
 
-            //private readonly FrozenSet<string> ImageExts =
-            //    new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" }
-            //    .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
-
             public int CachedFileIndex
             {
                 get
@@ -1310,7 +1145,7 @@ namespace ImgViewer.Views
                 }
                 set
                 {
-                    Debug.WriteLine("Setting new cached index");
+                    //Debug.WriteLine("Setting new cached index");
                     lock (_lock)
                         _cachedFileIndex = value;
                 }
@@ -1343,8 +1178,6 @@ namespace ImgViewer.Views
             public CurrentFolderIndex(MainWindow owner)
             {
                 _owner = owner;
-                //_folderIndex = new FrozenDictionary<int, string>();
-                //_folderIndexByPath = new FrozenDictionary<string, int>();
             }
 
             public bool TryGetFilePathForIndex(int index, out string filePath)
@@ -1374,8 +1207,6 @@ namespace ImgViewer.Views
             {
                 lock (_lock)
                 {
-                    //_folderIndex.Clear();
-                    //_folderIndexByPath.Clear();
                     _folderIndex = FrozenDictionary<int, string>.Empty;
                     _folderIndexByPath = FrozenDictionary<string, int>.Empty;
                     _cachedFileIndex = -1;
@@ -1426,7 +1257,6 @@ namespace ImgViewer.Views
 
         private async Task OpenSiblingFileAsync(bool next)
         {
-            //string[] _imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
             try
             {
                 var folder = _currentFolderIndex.CachedDirectory;
@@ -1435,12 +1265,6 @@ namespace ImgViewer.Views
                     System.Windows.MessageBox.Show("Folder unknown or doesn't exist. Open a file first.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
-                //var files = Directory.GetFiles(folder)
-                //                     .Where(f => ImageExts.Contains(System.IO.Path.GetExtension(f)))
-                //                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                //                     .ToArray();
-
-                //int i = Array.IndexOf(files, _viewModel.CurrentImagePath);
                 int i = _currentFolderIndex.CachedFileIndex;
                 if (i == -1)
                     return;
@@ -1459,10 +1283,7 @@ namespace ImgViewer.Views
 
                 await RunLiveOperationsForNewImageAsync();
             }
-            catch (OperationCanceledException)
-            {
-                // cancelled  ??????????
-            }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show(
@@ -1472,18 +1293,6 @@ namespace ImgViewer.Views
                     MessageBoxImage.Error);
             }
         }
-
-
-
-        //private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
-        //{
-        //    var pl = Pipeline.Operations
-        //            .Where(op => op.InPipeline)
-        //            .Select(op => (op.Command, op.CreateParameterDictionary()))
-        //            .ToArray();
-
-        //    return pl;
-        //}
 
         private async void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -1507,7 +1316,6 @@ namespace ImgViewer.Views
             if (rootFolder == string.Empty) return;
             _manager.LastOpenedFolder = rootFolder;
 
-            // ???????????: ???????? ????????????? ? ????????????
             var res = System.Windows.MessageBox.Show($"Apply current pipeline to all sub-folders in:\n{rootFolder} ?",
                                                      "Confirm",
                                                      MessageBoxButton.OKCancel,
@@ -1533,11 +1341,6 @@ namespace ImgViewer.Views
         {
             try
             {
-                // ??????? ????? ?????  ?? ???? ???????? ?????
-                //string? folder = _viewModel?.LastOpenedFolder;
-
-
-                //var pipeline = GetPipelineParameters();
 
                 if (Pipeline.Operations.Count == 0)
                 {
@@ -1548,19 +1351,19 @@ namespace ImgViewer.Views
                 string folder = string.Empty;
                 if (string.IsNullOrWhiteSpace(folder) && !string.IsNullOrWhiteSpace(_viewModel?.CurrentImagePath))
                 {
-                    folder = System.IO.Path.GetDirectoryName(_viewModel.CurrentImagePath);
+                    folder = Path.GetDirectoryName(_viewModel.CurrentImagePath);
                 }
 
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
-                    System.Windows.MessageBox.Show("Folder unknown or doesn't exist. Open a file first.",
+                    MessageBox.Show("Folder unknown or doesn't exist. Open a file first.",
                                                    "Info",
                                                    MessageBoxButton.OK,
                                                    MessageBoxImage.Information);
                     return;
                 }
 
-                var res = System.Windows.MessageBox.Show($"Apply current pipeline to all images in:\n\n{folder} ?",
+                var res = MessageBox.Show($"Apply current pipeline to all images in:\n\n{folder} ?",
                                                          "Confirm",
                                                          MessageBoxButton.OKCancel,
                                                          MessageBoxImage.Question);
@@ -1569,8 +1372,6 @@ namespace ImgViewer.Views
 
                 await _manager.ProcessFolder(folder);
 
-
-                //_manager.ProcessFolder(folder);
             }
             catch (Exception ex)
             {
@@ -1586,13 +1387,6 @@ namespace ImgViewer.Views
             _manager.ResetWorkingImagePreview();
         }
 
-        //private async Task ResetPreview()
-        //{
-        //    _manager.CancelImageProcessing();
-        //    if (_viewModel.OriginalImage == null) return;
-        //    await _manager.SetImageForProcessing(_viewModel.OriginalImage);
-        //}
-
         private void SaveAs_Click(object sender, RoutedEventArgs e)
         {
             if (_viewModel.OriginalImage == null) return;
@@ -1607,33 +1401,8 @@ namespace ImgViewer.Views
                 var path = dlg.FileName;
                 var directoryName = Path.GetDirectoryName(path);
                 TiffCompression compression = _manager.CurrentTiffCompression;
-                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                var ext = Path.GetExtension(path).ToLowerInvariant();
 
-                //if (ext == ".tif" || ext == ".tiff")
-                //{
-                //    var tiffOptionsWindow = new TiffSavingOptionsWindow();
-                //    tiffOptionsWindow.Owner = this;
-
-                //    if (tiffOptionsWindow.ShowDialog() == true)
-                //    {
-                //        compression = tiffOptionsWindow.SelectedCompression;
-                //    }
-                //    else
-                //    {
-                //        // User cancelled the TIFF options dialog
-                //        return;
-                //    }
-                //}
-                //_manager.SaveProcessedImage(path,
-                //    ext switch
-                //    {
-                //        ".tif" or ".tiff" => ImageFormat.Tiff,
-                //        ".png" => ImageFormat.Png,
-                //        ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-                //        ".bmp" => ImageFormat.Bmp,
-                //        _ => ImageFormat.Png
-                //    },
-                //    compression);
 
                 switch (ext)
                 {
@@ -1653,7 +1422,7 @@ namespace ImgViewer.Views
                         });
                         break;
                     default:
-                        System.Windows.MessageBox.Show("Unsupported file extension. Supported: .tif, .tiff, .png, .jpg, .jpeg, .bmp",
+                        MessageBox.Show("Unsupported file extension. Supported: .tif, .tiff, .png, .jpg, .jpeg, .bmp",
                                                        "Error",
                                                        MessageBoxButton.OK,
                                                        MessageBoxImage.Error);
@@ -1721,7 +1490,6 @@ namespace ImgViewer.Views
 
             protected override void OnRender(DrawingContext drawingContext)
             {
-                // ????????? ??????????? ?????? ?? ???????? ? DIPs
                 double scaleX = _bitmap.DpiX / 96.0;
                 double scaleY = _bitmap.DpiY / 96.0;
 
@@ -1877,8 +1645,6 @@ namespace ImgViewer.Views
             if (_magnifierZoom < MagnifierMinZoom)
                 _magnifierZoom = MagnifierMinZoom;
 
-            // ??????? ??????? ?????????? ??????
-            //ClampMagnifierSize();
 
             Debug.WriteLine($"Working magn size: {_magnifierSize}");
             _magnifierAdorner = new MagnifierAdorner(
@@ -1889,10 +1655,8 @@ namespace ImgViewer.Views
             );
             _magnifierEnabled = true;
 
-            // ? ?????????????? ?????? ?? ?????? ?????, ???? ??? ??? ????????
             ApplyMagnifierSizeToAdorners();
 
-            // ???????? ?? ?????? ??????
             var center = new Point(PreviewViewbox.ActualWidth / 2.0,
                                    PreviewViewbox.ActualHeight / 2.0);
             _magnifierAdorner.UpdatePosition(center);
@@ -1914,9 +1678,6 @@ namespace ImgViewer.Views
             if (layer == null)
                 return;
 
-            // ??????? ?????????? ?????? ?? ????? ????????????
-            //ClampMagnifierSize();
-
             Debug.WriteLine($"original magn size: {_magnifierSize}");
             _originalMagnifierAdorner = new MagnifierAdorner(
                 OrigViewbox,
@@ -1926,7 +1687,6 @@ namespace ImgViewer.Views
             );
             _originalMagnifierEnabled = true;
 
-            // ????????????? ?? ??????????????? ???????????
             var sizeOrig = OrigViewbox.RenderSize;
             Point center;
             if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
@@ -1947,7 +1707,6 @@ namespace ImgViewer.Views
 
             _originalMagnifierAdorner.UpdatePosition(center);
 
-            // ?????????????: ????? ??? ???? ???? ?? ?????? ? ????????? ?? ????
             ApplyMagnifierSizeToAdorners();
         }
 
@@ -1963,7 +1722,6 @@ namespace ImgViewer.Views
         {
             double max = MagnifierMaxSize;
 
-            // ???????????? ?? ??????
             if (PreviewViewbox != null)
             {
                 var s = PreviewViewbox.RenderSize;
@@ -1974,7 +1732,6 @@ namespace ImgViewer.Views
                 }
             }
 
-            // ???????????? ?? ?????????
             if (OrigViewbox != null)
             {
                 var s = OrigViewbox.RenderSize;
@@ -1985,7 +1742,6 @@ namespace ImgViewer.Views
                 }
             }
 
-            // ??? Max(MagnifierMinSize, max)  ?????? ????????
             return max;
         }
 
@@ -2013,8 +1769,8 @@ namespace ImgViewer.Views
             {
                 if (_magnifierEnabled || _originalMagnifierEnabled)
                 {
-                    DisableMagnifier();           // ???? ?????, ??????? ????????? Preview
-                    DisableOriginalMagnifier();   // ????? ?????, ??. ????
+                    DisableMagnifier();           
+                    DisableOriginalMagnifier();   
                     ResetSelection();
                     e.Handled = true;
                     return;
@@ -2044,40 +1800,6 @@ namespace ImgViewer.Views
             }
         }
 
-        //private void PreviewImgBox_MouseMove(object sender, MouseEventArgs e)
-        //{
-        //    if (!_magnifierEnabled || _magnifierAdorner == null)
-        //        return;
-
-        //    var pos = e.GetPosition(PreviewViewbox);
-        //    _magnifierAdorner.UpdatePosition(pos);
-
-        //    // --- ??????? ??????????????? ?????????? ?????? ???? ---
-        //    var size = PreviewViewbox.RenderSize;
-        //    if (size.Width > 0 && size.Height > 0)
-        //    {
-        //        _magnifierNormalizedPos = new Point(
-        //            pos.X / size.Width,
-        //            pos.Y / size.Height
-        //        );
-
-        //        // ???? ???????? ???? ?? ?????????  ??????? ?? ? ?? ?? ????????????? ?????
-        //        if (_originalMagnifierEnabled && _originalMagnifierAdorner != null && OrigViewbox != null)
-        //        {
-        //            var sizeOrig = OrigViewbox.RenderSize;
-        //            if (sizeOrig.Width > 0 && sizeOrig.Height > 0)
-        //            {
-        //                var origPos = new Point(
-        //                    _magnifierNormalizedPos.X * sizeOrig.Width,
-        //                    _magnifierNormalizedPos.Y * sizeOrig.Height
-        //                );
-
-        //                _originalMagnifierAdorner.UpdatePosition(origPos);
-        //            }
-        //        }
-        //    }
-        //}
-
         private void PreviewImgBox_MouseMove(object sender, MouseEventArgs e)
         {
             if (PreviewViewbox == null)
@@ -2085,7 +1807,6 @@ namespace ImgViewer.Views
 
             var pos = e.GetPosition(PreviewViewbox);
 
-            // --- 1) ?????????? selection (???? ???? drag) ---
             if (_selectionMode != SelectionMode.None &&
                 e.LeftButton == MouseButtonState.Pressed)
             {
@@ -2193,7 +1914,6 @@ namespace ImgViewer.Views
                 }
             }
 
-            // --- 2) ???? (?? ??????? ???? ?????? ?????????????) ---
             if (_magnifierEnabled && _magnifierAdorner != null)
             {
                 _magnifierAdorner.UpdatePosition(pos);
@@ -2229,14 +1949,11 @@ namespace ImgViewer.Views
             if (!_magnifierEnabled || _magnifierAdorner == null || PreviewViewbox == null)
                 return;
 
-            //var pos = e.GetPosition(PreviewImgBox);
 
             if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
             {
-                // ?????? ??????
                 double deltaSize = e.Delta > 0 ? MagnifierSizeStep : -MagnifierSizeStep;
 
-                // ??????? ???????
                 _magnifierSize += deltaSize;
                 ClampMagnifierSize();
                 ApplyMagnifierSizeToAdorners();
@@ -2249,7 +1966,6 @@ namespace ImgViewer.Views
             }
             else
             {
-                // ?????? zoom
                 double deltaZoom = e.Delta > 0 ? MagnifierZoomStep : -MagnifierZoomStep;
                 _magnifierZoom = Math.Max(MagnifierMinZoom,
                                   Math.Min(MagnifierMaxZoom, _magnifierZoom + deltaZoom));
@@ -2321,7 +2037,6 @@ namespace ImgViewer.Views
 
                 double half = lensSize / 2.0;
 
-                // ????? ???, ????? ???? ??????? ??? ?????? ????????
                 double cx = _position.X;
                 double cy = _position.Y;
 
@@ -2331,7 +2046,6 @@ namespace ImgViewer.Views
                 var center = new Point(cx, cy);
                 var lensRect = new Rect(center.X - half, center.Y - half, lensSize, lensSize);
 
-                // ?????? ???? ? ????????? ??? zoom
                 double viewW = lensSize / _zoom;
                 double viewH = lensSize / _zoom;
 
@@ -2341,7 +2055,6 @@ namespace ImgViewer.Views
                     viewH = size.Height;
 
                 // PARALLAX:
-                //  ????????? ???? (0..1) ? ????????? viewbox (0..maxOffset)
                 double travelX = Math.Max(1.0, size.Width - lensSize);
                 double travelY = Math.Max(1.0, size.Height - lensSize);
 
@@ -2366,12 +2079,10 @@ namespace ImgViewer.Views
                     Stretch = Stretch.Fill
                 };
 
-                // ?????????? ????
                 drawingContext.PushClip(new RectangleGeometry(lensRect));
                 drawingContext.DrawRectangle(brush, null, lensRect);
                 drawingContext.Pop();
 
-                // ?????
                 var borderBrush = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
                 borderBrush.Freeze();
                 var borderPen = new Pen(borderBrush, 1.5);
@@ -2405,13 +2116,13 @@ namespace ImgViewer.Views
                 _layer = layer;
                 IsHitTestVisible = false;
 
-                var borderColor = Color.FromArgb(220, 0, 120, 215); // ?????
+                var borderColor = Color.FromArgb(220, 0, 120, 215); 
                 var borderBrush = new SolidColorBrush(borderColor);
                 borderBrush.Freeze();
                 _borderPen = new Pen(borderBrush, 1.0);
                 _borderPen.Freeze();
 
-                _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215)); // ??????????????
+                _fillBrush = new SolidColorBrush(Color.FromArgb(40, 0, 120, 215)); 
                 _fillBrush.Freeze();
 
                 _handleBrush = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
@@ -2433,7 +2144,6 @@ namespace ImgViewer.Views
                 if (_rect.IsEmpty || _rect.Width <= 0 || _rect.Height <= 0)
                     return;
 
-                // ?????????? + ?????
                 drawingContext.DrawRectangle(_fillBrush, _borderPen, _rect);
 
                 double hs = HandleSize / 2.0;
@@ -2468,7 +2178,6 @@ namespace ImgViewer.Views
 
             EnsureSelectionAdorner();
 
-            // ???? ??? ???? selection  ????????, ?????? ?? ? ????
             if (HasSelection)
             {
                 var mode = HitTestSelection(pos);
@@ -2483,12 +2192,10 @@ namespace ImgViewer.Views
                 }
             }
 
-            // ????? ???????? ????? selection
             _selectionMode = SelectionMode.Creating;
             _selectionDragStart = pos;
             _selectionStartRect = Rect.Empty;
 
-            // ????????? ????????????? ???????? ???????
             UpdateSelectedRect(new Rect(pos, new Size(0, 0)));
             PreviewViewbox.CaptureMouse();
             e.Handled = true;
@@ -2511,7 +2218,6 @@ namespace ImgViewer.Views
 
         private void ResetSelection()
         {
-            // ?????????? ?????????
             _selectedRect = Rect.Empty;
 
             _leftSelected = 0;
@@ -2521,16 +2227,11 @@ namespace ImgViewer.Views
 
             _selectionMode = SelectionMode.None;
 
-            // ????????? ????, ???? ??????
             PreviewViewbox?.ReleaseMouseCapture();
 
-            // ??????? ???????, ???? ?????? ????????? ??? ?????
             if (_selectionAdorner != null)
             {
-                _selectionAdorner.UpdateRect(Rect.Empty); // ????? ?? ?????? ?? ???????
-                                                          // ???, ???? ? ???? ???? ????? Remove():
-                                                          // _selectionAdorner.Remove();
-                                                          // _selectionAdorner = null;
+                _selectionAdorner.UpdateRect(Rect.Empty); 
             }
 
 #if DEBUG
@@ -2560,7 +2261,6 @@ namespace ImgViewer.Views
             if (size.Width <= 0 || size.Height <= 0)
                 return;
 
-            // ??????? ?????? PreviewViewbox
             double left = Math.Max(0, Math.Min(rect.Left, size.Width));
             double top = Math.Max(0, Math.Min(rect.Top, size.Height));
             double right = Math.Max(0, Math.Min(rect.Right, size.Width));
@@ -2573,7 +2273,6 @@ namespace ImgViewer.Views
 
             if (clamped.Width < SelectionMinSize || clamped.Height < SelectionMinSize)
             {
-                // ???? ??????? ?????? ?????????, ?? ?? ?????????????
                 clamped = new Rect(clamped.X, clamped.Y,
                                    Math.Max(clamped.Width, SelectionMinSize),
                                    Math.Max(clamped.Height, SelectionMinSize));
@@ -2593,7 +2292,6 @@ namespace ImgViewer.Views
 #endif
         }
 
-        // ??????? ??????, ????? ??????  ???? ?? ??? ?????
         private bool HasSelection =>
             !_selectedRect.IsEmpty &&
             _selectedRect.Width > 0 &&
@@ -2606,7 +2304,6 @@ namespace ImgViewer.Views
 
             var r = _selectedRect;
 
-            // ????
             if (Distance(pos, r.TopLeft) <= SelectionHandleHit)
                 return SelectionMode.ResizeTopLeft;
             if (Distance(pos, r.TopRight) <= SelectionHandleHit)
@@ -2616,7 +2313,6 @@ namespace ImgViewer.Views
             if (Distance(pos, r.BottomRight) <= SelectionHandleHit)
                 return SelectionMode.ResizeBottomRight;
 
-            // ?????
             if (Math.Abs(pos.X - r.Left) <= SelectionHandleHit &&
                 pos.Y >= r.Top && pos.Y <= r.Bottom)
                 return SelectionMode.ResizeLeft;
@@ -2633,7 +2329,6 @@ namespace ImgViewer.Views
                 pos.X >= r.Left && pos.X <= r.Right)
                 return SelectionMode.ResizeBottom;
 
-            // ??????  move
             if (r.Contains(pos))
                 return SelectionMode.Moving;
 

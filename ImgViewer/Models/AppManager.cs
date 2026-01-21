@@ -36,7 +36,6 @@ namespace ImgViewer.Models
         private CancellationTokenSource? _rootFolderCts;
         private CancellationTokenSource _imgProcCts;
 
-        //private DocBoundaryModel _docBoundaryModel;
 
         private volatile bool _inRootFolderBatch = false;
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _rootBatchIssues
@@ -53,7 +52,6 @@ namespace ImgViewer.Models
             mainView.ViewModel = _mainViewModel;
             _fileProcessor = new FileProcessor(_cts.Token);
 
-            //_fileProcessor.ErrorOccured += (msg) => ReportError(msg, null, "File Processor Error");
             _fileProcessor.ErrorOccured += OnFileProcessorError;
 
             _imgProcCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
@@ -160,7 +158,6 @@ namespace ImgViewer.Models
             }
         }
 
-        //public DocBoundaryModel DocBoundaryModel => _docBoundaryModel;
 
         public bool IsSavePipelineToMd
         {
@@ -368,7 +365,7 @@ namespace ImgViewer.Models
 
             UpdateStatus("Setting original image on preview...");
 
-            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 _mainViewModel.OriginalImage = bmp;
             }, System.Windows.Threading.DispatcherPriority.Background);
@@ -389,12 +386,8 @@ namespace ImgViewer.Models
                 var tasks = new List<Task>();
                 tasks.Add(Task.Run(() => SetBmpImageAsOriginal(bmpImage)));
                 tasks.Add(Task.Run(() => SetImageForProcessing(bmpImage)));
-                //tasks.Add(Task.Run(() => SetBmpImageOnPreview(bmpImage)));
                 await Task.WhenAll(tasks);
-                //await SetBmpImageAsOriginal(bmpImage);
-                //await SetBmpImageOnPreview(bmpImage);
                 ClearSplitPreviewImages();
-                //await SetImageForProcessing(bmpImage);
             }
             catch (OperationCanceledException)
             {
@@ -449,26 +442,16 @@ namespace ImgViewer.Models
             {
                 string msg = $"Error applying command: {command}.";
                 ReportError(msg, ex, "Error");
-                //Debug.WriteLine(msg);
-                //System.Windows.MessageBox.Show(
-                //        $"Error while applying {command}: {ex.Message}",
-                //        "Error",
-                //        MessageBoxButton.OK,
-                //        MessageBoxImage.Error);
             }
             finally
             {
                 UpdateStatus("Standby");
             }
-
-
-
         }
 
 
         public async Task SaveProcessedImageToTiff(string outputPath, TiffCompression compression, int dpi = 300)
         {
-            //var tiffInfo = new TiffInfo();
             try
             {
                 compression = _appSettings.TiffCompression;
@@ -590,13 +573,11 @@ namespace ImgViewer.Models
             _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             var batchToken = _rootFolderCts.Token;
 
-            //var debug = false;
 
 
             var startTime = DateTime.Now;
 
             UpdateStatus($"Processing folders in " + rootFolderPath);
-            //_mainViewModel.Status = $"Processing folders in " + rootFolder;
 
             var processedCount = 0;
             var visitedCount = 0;
@@ -617,7 +598,6 @@ namespace ImgViewer.Models
                 
                         if (!TryHasAnyImageFast(folderPath, batchToken, out var issue))
                         {
-                            // ???? issue == null  ? ?????? ??? ???????????
                             _rootBatchIssues.Enqueue(issue ?? $"SKIP_NO_IMAGES: '{folderPath}'");
                             continue;
                         }
@@ -690,10 +670,6 @@ namespace ImgViewer.Models
                 var plJson = pipeline.BuildPipelineForSave();
                 try
                 {
-                    //File.WriteAllLines(
-                    //    Path.Combine(rootFolderPath, "_processing_log.txt"),
-                    //    new string[] { logMsg, timeMsg, "Operations performed:", plOps, "\n", plJson }
-                    //);
                     var logPath = Path.Combine(rootFolderPath, "_processing_log.txt");
                     var logLines = new List<string>
                     {
@@ -782,16 +758,12 @@ namespace ImgViewer.Models
             UpdateProgress(0);
 
 
-            //var sourceFolder = _fileProcessor.GetImageFilesPaths(srcFolder, batchToken);
-            //if (sourceFolder == null || sourceFolder.Files == null || sourceFolder.Files.Length == 0) return;
-
 
             _poolCts?.Cancel();
             _poolCts?.Dispose();
             _poolCts = CancellationTokenSource.CreateLinkedTokenSource(batchToken);
 
 
-            //_poolCts = new CancellationTokenSource();
 
             var startTime = DateTime.Now;
 
@@ -908,8 +880,6 @@ namespace ImgViewer.Models
             }
         }
 
-
-
         public void Dispose()
         {
             _poolCts?.Dispose();
@@ -919,8 +889,6 @@ namespace ImgViewer.Models
             (_fileProcessor as IDisposable)?.Dispose();
             GC.SuppressFinalize(this);
         }
-
-
 
     }
 }

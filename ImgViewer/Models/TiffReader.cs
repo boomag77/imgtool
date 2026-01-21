@@ -374,7 +374,6 @@ namespace ImgViewer.Models
             return output;
         }
 
-
         private static byte[] ExtractDecodedPixels(Tiff image, int width, int height)
         {
             if (height > short.MaxValue)
@@ -424,7 +423,6 @@ namespace ImgViewer.Models
 
             return ms.ToArray();
         }
-
 
         private static byte[] ExtractJpegRaw(Tiff image)
         {
@@ -487,7 +485,6 @@ namespace ImgViewer.Models
 
             return raw;
         }
-
         private static byte[] ExtractCcittRaw(Tiff image, int width, int height)
         {
 
@@ -562,15 +559,6 @@ namespace ImgViewer.Models
                     output.SetField(TiffTag.FILLORDER, tiffImageInfo.FillOrder);
                     output.SetField(TiffTag.ROWSPERSTRIP, tiffImageInfo.Height);
 
-                    //if (tiffImageInfo.IsRawCompressed)
-                    //{
-                    //    output.WriteRawStrip(0, tiffImageInfo.Data, 0, tiffImageInfo.Data.Length);
-
-                    //}
-                    //else
-                    //{
-                    //    output.WriteEncodedStrip(0, tiffImageInfo.Data, 0, tiffImageInfo.Data.Length);
-                    //}
                     if (tiffImageInfo.IsRawCompressed && tiffImageInfo.RawStrips != null && tiffImageInfo.RawStrips.Length > 0)
                     {
                         // Восстанавливаем исходную структуру strip'ов:
@@ -728,20 +716,6 @@ namespace ImgViewer.Models
             copy.Freeze();
             return copy;
 
-            //using var ms = new MemoryStream(jpegData);
-            //using var img = System.Drawing.Image.FromStream(ms);
-
-            //using var bmpStream = new MemoryStream();
-            //img.Save(bmpStream, System.Drawing.Imaging.ImageFormat.Bmp);
-            //bmpStream.Position = 0;
-
-            //var bmp = new BitmapImage();
-            //bmp.BeginInit();
-            //bmp.CacheOption = BitmapCacheOption.OnLoad;
-            //bmp.StreamSource = bmpStream;
-            //bmp.EndInit();
-            //bmp.Freeze();
-            //return bmp;
         }
 
 

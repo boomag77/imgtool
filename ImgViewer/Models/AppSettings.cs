@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -20,12 +19,6 @@ namespace ImgViewer.Models
         private CancellationTokenSource? _saveCts;
         private readonly object _saveLock = new object();
 
-        //private static string SettingsFilePath =>
-        //System.IO.Path.Combine(
-        //   Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        //   "MyCompany",         // <-- поменяй на своё
-        //   "MyApp",             // <-- поменяй на своё
-        //   "settings.json");
 
         public event Action<string> ErrorOccured;
 
@@ -74,7 +67,6 @@ namespace ImgViewer.Models
             catch (Exception ex)
             {
                 ErrorOccured?.Invoke($"Failed to load app settings: {ex.Message}");
-                //Debug.WriteLine($"AppSettings: failed to load settings: {ex.Message}");
             }
         }
 
@@ -84,7 +76,6 @@ namespace ImgViewer.Models
             set
             {
                 _tiffCompression = value;
-                //Debug.WriteLine($"App Settings: Compression set to: {_tiffCompression}");
                 ScheduleSave();
             }
         }
@@ -225,7 +216,7 @@ namespace ImgViewer.Models
                     _lastOpenedFolder = dto.LastOpenedFolder ?? string.Empty;
                     _savePipelineToMd = dto.SavePipeLineToMd;
                     _debounceDelay = dto.ParametersChangedDebounceDelay;
-                    _eraseOperationModeOffset = dto.EraseOperationOffset;   
+                    _eraseOperationModeOffset = dto.EraseOperationOffset;
 
                 }
             }
