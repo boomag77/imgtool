@@ -5,7 +5,6 @@ using System.Collections.Frozen;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -13,7 +12,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using System.Xml.Serialization;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using DataObject = System.Windows.DataObject;
@@ -52,7 +50,7 @@ namespace ImgViewer.Views
         private bool _isDragging;
         private bool _dropHandled;
         private Point _dragStartPoint;
-        
+
         private InsertionIndicatorAdorner? _insertionAdorner;
 
         private GridLength _originalImageColumnWidth = new GridLength(4, GridUnitType.Star);
@@ -154,7 +152,7 @@ namespace ImgViewer.Views
             InitializeComponent();
 
 
-        #if DEBUG
+#if DEBUG
             try
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -165,7 +163,7 @@ namespace ImgViewer.Views
             {
                 Debug.WriteLine($"ONNX inspector failed: {ex}");
             }
-        #endif
+#endif
 
             //OnnxModelInspector.PrintModelInfo("Models/ML/model.onnx");
 
@@ -378,10 +376,10 @@ namespace ImgViewer.Views
                         foreach (PipelineOperation removed in e.OldItems)
                         {
                             removed.ParameterChanged -= OnOperationParameterChanged;
-                            
-                        }  
+
+                        }
                     }
-                    
+
                 };
             }
         }
@@ -389,8 +387,8 @@ namespace ImgViewer.Views
         // --- Replace this existing method with the code below ---
         private void OnOperationParameterChanged(PipelineOperation op, PipeLineParameter? param)
         {
-            
-           
+
+
             // ???? ???????? ?? ???????? ? pipeline, ?????????? ????????? ??????????
             if (!op.InPipeline || !op.Live)
                 return;
@@ -475,54 +473,54 @@ namespace ImgViewer.Views
 
             foreach (var op in Pipeline.Operations)
             {
-                    if (op.Type == PipelineOperationType.BordersRemove)
-                    {   
-                        foreach (var p in op.Parameters)
+                if (op.Type == PipelineOperationType.BordersRemove)
+                {
+                    foreach (var p in op.Parameters)
+                    {
+                        if (p.IsCombo && p.SelectedOption.Equals("Manual", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (p.IsCombo && p.SelectedOption.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+                            Rect viewboxRect = _selectedRect;
+
+                            // 1) Viewbox ? Image (DIPs ? ??????? ????????? PreviewImgBox)
+                            GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
+                            Rect imageRectDip = transform.TransformBounds(viewboxRect);
+
+                            if (PreviewImgBox.Source is not BitmapSource bmp)
+                                return;
+
+                            int imgW = bmp.PixelWidth;
+                            int imgH = bmp.PixelHeight;
+
+                            // ???? ?????????  "??????? ?? ?????"
+                            int manualLeft = x;
+                            int manualTop = y;
+                            int manualRight = imgW - (x + w);
+                            int manualBottom = imgH - (y + h);
+
+
+                            // Set parameters
+                            foreach (var param in op.Parameters)
                             {
-                                Rect viewboxRect = _selectedRect;
-
-                                // 1) Viewbox ? Image (DIPs ? ??????? ????????? PreviewImgBox)
-                                GeneralTransform transform = PreviewViewbox.TransformToVisual(PreviewImgBox);
-                                Rect imageRectDip = transform.TransformBounds(viewboxRect);
-
-                                if (PreviewImgBox.Source is not BitmapSource bmp)
-                                    return;
-
-                                int imgW = bmp.PixelWidth;
-                                int imgH = bmp.PixelHeight;
-
-                                // ???? ?????????  "??????? ?? ?????"
-                                int manualLeft = x;
-                                int manualTop = y;
-                                int manualRight = imgW - (x + w);
-                                int manualBottom = imgH - (y + h);
-
-
-                                // Set parameters
-                                foreach (var param in op.Parameters)
+                                switch (param.Key)
                                 {
-                                    switch (param.Key)
-                                    {
-                                        case "manualLeft":
-                                            param.Value = manualLeft;
-                                            break;
-                                        case "manualTop":
-                                            param.Value = manualTop;
-                                            break;
-                                        case "manualRight":
-                                            param.Value = manualRight;
-                                            break;
-                                        case "manualBottom":
-                                            param.Value = manualBottom;
-                                            break;
-                                    }
+                                    case "manualLeft":
+                                        param.Value = manualLeft;
+                                        break;
+                                    case "manualTop":
+                                        param.Value = manualTop;
+                                        break;
+                                    case "manualRight":
+                                        param.Value = manualRight;
+                                        break;
+                                    case "manualBottom":
+                                        param.Value = manualBottom;
+                                        break;
                                 }
                             }
                         }
-                    
                     }
+
+                }
             }
             ResetSelection();
         }
@@ -868,7 +866,7 @@ namespace ImgViewer.Views
                     MessageBoxImage.Warning);
 
                 eraseOnCancel = (res == MessageBoxResult.OK);
-                
+
             }
 
             if (_draggedOperation != null && !_operationErased && !eraseOnCancel)
@@ -1049,6 +1047,7 @@ namespace ImgViewer.Views
             var dlg = new Microsoft.Win32.OpenFileDialog();
             dlg.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tif;*.tiff|All Files|*.*";
             dlg.Multiselect = false;
+            dlg.InitialDirectory = _manager.LastOpenedFolder;
             if (dlg.ShowDialog() == true)
             {
                 try
@@ -1182,7 +1181,7 @@ namespace ImgViewer.Views
                 var fileNamePath = dlg.FileName;
                 await _manager.LoadPipelineFromFile(fileNamePath);
             }
-                
+
         }
 
         private void AddPipelineOperation_Click(object sender, RoutedEventArgs e)
@@ -1293,8 +1292,8 @@ namespace ImgViewer.Views
             private readonly MainWindow _owner;
             private int _cachedFileIndex = -1;
             private string _cachedDirectory = string.Empty;
-            private  Dictionary<int, string> _folderIndex;
-            private  Dictionary<string, int> _folderIndexByPath;
+            private Dictionary<int, string> _folderIndex;
+            private Dictionary<string, int> _folderIndexByPath;
 
             private readonly object _lock = new object();
 
@@ -1326,18 +1325,18 @@ namespace ImgViewer.Views
                         return _folderIndex.Count - 1;
                 }
             }
-        
-               
+
+
 
             public string CachedDirectory
             {
                 get
                 {
-                    lock(_lock)
-                       return _cachedDirectory;
+                    lock (_lock)
+                        return _cachedDirectory;
                 }
             }
-               
+
 
             public CurrentFolderIndex(MainWindow owner)
             {
@@ -1348,7 +1347,7 @@ namespace ImgViewer.Views
 
             public bool TryGetFilePathForIndex(int index, out string filePath)
             {
-                lock(_lock)
+                lock (_lock)
                 {
                     if (!_folderIndex.TryGetValue(index, out string? value))
                     {
@@ -1359,12 +1358,12 @@ namespace ImgViewer.Views
                     _cachedFileIndex = index;
                     return true;
                 }
-                
+
             }
 
             public bool TryGetFileIndexForPath(string filePath, out int idx)
             {
-                lock(_lock)
+                lock (_lock)
                 {
                     if (!_folderIndexByPath.TryGetValue(filePath, out int fileIndex))
                     {
@@ -1375,19 +1374,19 @@ namespace ImgViewer.Views
                     idx = fileIndex;
                     return true;
                 }
-                
+
             }
 
             private void Clear()
             {
-                lock(_lock)
+                lock (_lock)
                 {
                     _folderIndex.Clear();
                     _folderIndexByPath.Clear();
                     _cachedFileIndex = -1;
                     _cachedDirectory = string.Empty;
                 }
-                
+
 
             }
 
@@ -1395,12 +1394,12 @@ namespace ImgViewer.Views
             public async Task CreateAsync(string folderPath, string filePath, CancellationToken token)
             {
                 Debug.WriteLine($"Creating Folder index");
-                lock(_lock)
+                lock (_lock)
                 {
                     Clear();
                 }
-                
-                
+
+
 
                 await Task.Run(() =>
                 {
@@ -1418,16 +1417,16 @@ namespace ImgViewer.Views
                         i++;
                     }
                     if (token.IsCancellationRequested) return;
-                    lock(_lock)
+                    lock (_lock)
                     {
                         _folderIndex = tmpFolderIndex;
                         _folderIndexByPath = tmpFolderIndexByPath;
                         _cachedDirectory = folderPath;
                         _cachedFileIndex = _folderIndexByPath.TryGetValue(filePath, out var idx) ? idx : -1;
                     }
-                    
+
                 }, token);
-                
+
             }
 
         }
@@ -1461,7 +1460,7 @@ namespace ImgViewer.Views
 
                 _manager.CancelImageProcessing();
                 _liveDebounceCts?.Cancel();
-                
+
                 _liveDebounceCts = null;
                 await _manager.SetImageOnPreview(target);
                 _viewModel.CurrentImagePath = target;
@@ -1483,7 +1482,7 @@ namespace ImgViewer.Views
             }
         }
 
-        
+
 
         //private (ProcessorCommand Value, Dictionary<string, object>)[]? GetPipelineParameters()
         //{
@@ -1610,14 +1609,15 @@ namespace ImgViewer.Views
             dlg.InitialDirectory = _manager.LastSavedFolder;
             dlg.Filter = "TIFF Image|*.tif;*.tiff|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg|Bitmap Image|*.bmp|All Files|*.*";
             //dlg.Filter = "TIFF Image|*.tif;*.tiff";
-            
+
 
             if (dlg.ShowDialog() == true)
             {
                 var path = dlg.FileName;
+                var directoryName = Path.GetDirectoryName(path);
                 TiffCompression compression = _manager.CurrentTiffCompression;
                 var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-                
+
                 //if (ext == ".tif" || ext == ".tiff")
                 //{
                 //    var tiffOptionsWindow = new TiffSavingOptionsWindow();
@@ -1643,7 +1643,7 @@ namespace ImgViewer.Views
                 //        _ => ImageFormat.Png
                 //    },
                 //    compression);
-                
+
                 switch (ext)
                 {
                     case ".tif":
@@ -1655,11 +1655,11 @@ namespace ImgViewer.Views
                     case ".jpeg":
                     case ".bmp":
                         _manager.SaveProcessedImage(path, ext switch
-                            {
-                                ".png" => ImageFormat.Png,
-                                ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-                                ".bmp" => ImageFormat.Bmp
-                            });
+                        {
+                            ".png" => ImageFormat.Png,
+                            ".jpg" or ".jpeg" => ImageFormat.Jpeg,
+                            ".bmp" => ImageFormat.Bmp
+                        });
                         break;
                     default:
                         System.Windows.MessageBox.Show("Unsupported file extension. Supported: .tif, .tiff, .png, .jpg, .jpeg, .bmp",
@@ -1668,6 +1668,7 @@ namespace ImgViewer.Views
                                                        MessageBoxImage.Error);
                         return;
                 }
+                _manager.LastSavedFolder = directoryName ?? dlg.InitialDirectory;
             }
 
         }
@@ -1741,7 +1742,7 @@ namespace ImgViewer.Views
                 var rect = new Rect(
                     new Point(_position.X - size.Width / 2, _position.Y - size.Height / 2),
                     size);
-                
+
 
                 if (_eraseMode)
                 {
@@ -1753,7 +1754,7 @@ namespace ImgViewer.Views
                     var redBrush = new SolidColorBrush(Color.FromArgb(160, 255, 0, 0));
                     double radius = 4;
                     drawingContext.DrawRoundedRectangle(redBrush, null, rect, radius, radius);
-                    
+
                 }
                 else
                 {
