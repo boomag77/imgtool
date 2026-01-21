@@ -2794,6 +2794,8 @@ namespace ImgViewer.Models
                 return clones.Count > 0 ? clones.ToArray() : null;
             }
         }
+
+
         public void ClearSplitResults()
         {
             lock (_splitLock)

@@ -1,6 +1,8 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Views;
 using OpenCvSharp;
+
+//using OpenCvSharp;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
@@ -381,6 +383,22 @@ namespace ImgViewer.Models
             }
         }
 
+        private void SaveMatToFile(Mat mat, string encodeExt, string finalPath)
+        {
+            if (mat == null)
+                throw new ArgumentNullException(nameof(mat));
+            if (mat.IsDisposed)
+                throw new ObjectDisposedException(nameof(mat));
+            if (mat.Empty())
+                throw new InvalidOperationException("Split image is empty.");
+
+            Cv2.ImEncode(encodeExt, mat, out var buffer);
+            var tempPath = finalPath + ".tmp";
+            
+            File.WriteAllBytes(tempPath, buffer);
+            File.Move(tempPath, finalPath, overwrite: true);
+        }
+
         private void RenumberSplitOutputs()
         {
             if (!_isSplitPipeline)
@@ -418,20 +436,7 @@ namespace ImgViewer.Models
             }
         }
 
-        private void SaveMatToFile(Mat mat, string encodeExt, string finalPath)
-        {
-            if (mat == null)
-                throw new ArgumentNullException(nameof(mat));
-            if (mat.IsDisposed)
-                throw new ObjectDisposedException(nameof(mat));
-            if (mat.Empty())
-                throw new InvalidOperationException("Split image is empty.");
-
-            Cv2.ImEncode(encodeExt, mat, out var buffer);
-            var tempPath = finalPath + ".tmp";
-            File.WriteAllBytes(tempPath, buffer);
-            File.Move(tempPath, finalPath, overwrite: true);
-        }
+        
 
 
 
@@ -634,8 +639,6 @@ namespace ImgViewer.Models
 
                     foreach (var op in _plOperations)
                     {
-                        //if (!op.InPipeline)
-                        //    continue; // пользователь снял галочку — пропускаем
 
                         token.ThrowIfCancellationRequested();
 
@@ -683,10 +686,7 @@ namespace ImgViewer.Models
                                 );
 
                         }
-                        catch (OperationCanceledException)
-                        {
-                            throw;
-                        }
+                        catch (OperationCanceledException) { throw; }
                         catch (Exception exOp)
                         {
                             RegisterFileError(file.Path, $"Error applying op {op.Command}", exOp);

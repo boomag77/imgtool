@@ -27,6 +27,7 @@ namespace ImgViewer.Models
         public void Dispose()
         {
             // Dispose of unmanaged resources here if needed
+            _magickGate.Dispose();
         }
 
         private void ConfigureMagickOnce()
@@ -301,9 +302,6 @@ namespace ImgViewer.Models
         }
 
 
-
-
-
         public (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null)
         {
 
@@ -443,32 +441,6 @@ namespace ImgViewer.Models
             }
         }
 
-        //public void SaveTiff(Stream stream, string path, TiffCompression compression, int dpi, bool overwrite = true, string? metadataJson = null)
-        //{
-        //    if (!IsValidPath(path))
-        //    {
-        //        //return;
-        //        throw new ArgumentException("Invalid file path.", nameof(path));
-        //    }
-        //    try
-        //    {
-        //        TiffWriter.SaveTiff(stream, path, compression, dpi, overwrite, metadataJson);
-        //    }
-        //    catch (OperationCanceledException)
-        //    {
-        //        // forward cancellation
-        //        throw;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        // forward exception
-
-        //        throw;
-
-        //    }
-        //}
-
-
         private static void InvertBinary(byte[] bin)
         {
             for (int i = 0; i < bin.Length; i++)
@@ -494,60 +466,6 @@ namespace ImgViewer.Models
             }
 
         }
-
-        //public byte[] LoadImageBytes(string path)
-        //{
-        //    return File.ReadAllBytes(path);
-        //}
-
-        //public SourceImageFolder[] GetSubFoldersWithImagesPaths(string rootFolderPath, CancellationToken token)
-        //{
-        //    if (token.IsCancellationRequested) return Array.Empty<SourceImageFolder>();
-        //    if (!Directory.Exists(rootFolderPath))
-        //    {
-        //        ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
-        //        return Array.Empty<SourceImageFolder>();
-        //    }
-
-        //    IEnumerable<string> subFolderPaths;
-        //    // ignore Inaccessible folders
-
-        //    var subFolders = new List<SourceImageFolder>();
-        //    try
-        //    {
-        //        subFolderPaths = Directory.EnumerateDirectories(rootFolderPath);
-        //        foreach (string subFolder in subFolderPaths)
-        //        {
-        //            if (token.IsCancellationRequested) return Array.Empty<SourceImageFolder>();
-        //            try
-        //            {
-        //                var sub = GetImageFilesPaths(subFolder, token);
-        //                if (sub == null || sub.Files.Length == 0) continue;
-        //                subFolders.Add(sub);
-        //            }
-        //            catch (OperationCanceledException)
-        //            {
-        //                throw;
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                var msg = $"Cannot process sub-folder '{subFolder}'.{Environment.NewLine}{ex.Message}";
-        //                ErrorOccured?.Invoke(msg);
-        //            }
-        //        }
-
-        //    }
-        //    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
-        //    {
-        //        var msg = $"Cannot enumerate sub-folders in '{rootFolderPath}'.{Environment.NewLine}{ex.Message}";
-        //        ErrorOccured?.Invoke(msg);
-        //        return Array.Empty<SourceImageFolder>();
-        //    }
-
-
-
-        //    return subFolders.ToArray();
-        //}
 
         public IEnumerable<string> EnumerateSubFolderPaths(string rootFolderPath, bool fullTree, CancellationToken token)
         {
@@ -661,137 +579,16 @@ namespace ImgViewer.Models
             return false;
         }
 
+        public void SaveBytesToFile(ReadOnlySpan<byte> bytes, string path)
+        {
+            try
+            {
+                File.WriteAllBytes(path, bytes);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to save bytes to file '{path}': {ex.Message}", ex);
+            }
 
-
-
-        //public SourceImageFolder? GetImageFilesPaths(string folderPath, CancellationToken token)
-        //{
-        //    if (token.IsCancellationRequested) return null;
-        //    if (!Directory.Exists(folderPath))
-        //    {
-        //        ErrorOccured?.Invoke($"Directory does not exist: {folderPath}");
-        //        return null;
-        //    }
-        //    var parentPath = Directory.GetParent(folderPath)?.FullName;
-        //    if (parentPath == null)
-        //    {
-        //        ErrorOccured?.Invoke($"Cannot determine parent directory for: {folderPath}");
-        //        return null;
-        //    }
-        //    string[] files;
-        //    try
-        //    {
-        //        files = Directory.EnumerateFiles(folderPath)
-        //                         .Where(file =>
-        //                                    file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-        //                                    file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-        //                                    file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-        //                                    file.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) ||
-        //                                    file.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
-        //                         .ToArray();
-        //    }
-        //    catch (OperationCanceledException)
-        //    {
-        //        throw;
-        //    }
-        //    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
-        //    {
-        //        var msg = $"Cannot enumerate files in '{folderPath}'.\n{ex.Message}";
-        //        ErrorOccured?.Invoke(msg);
-        //        return null;
-        //    }
-
-        //    var sourceFolder = new SourceImageFolder
-        //    {
-        //        Path = folderPath,
-        //        ParentPath = parentPath,
-        //        Files = files.Select(f => new SourceImageFile
-        //                                {
-        //                                    Path = f,
-        //                                    // layout left if filename is ending with number and number is odd, otherwise right
-        //                                    Layout = GetLayoutFromFileName(f.AsSpan()[^1])
-
-
-        //                                }).ToArray()
-        //    };
-        //    return sourceFolder;
-        //}
-
-        //public static SourceFileLayout GetLayoutFromFileName(char lastChar)
-        //{
-        //    if (!char.IsDigit(lastChar))
-        //    {
-        //        return SourceFileLayout.Right;
-        //    }
-        //    int digit = (int)(lastChar - '0');
-        //    return (digit % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
-        //}
-
-
-
-
-        //public SourceImageFolder[] GetSubFoldersWithImagesPaths_FullTree(string rootFolderPath, CancellationToken token)
-        //{
-        //    if (string.IsNullOrWhiteSpace(rootFolderPath) || !Directory.Exists(rootFolderPath))
-        //    {
-        //        ErrorOccured?.Invoke($"Directory does not exist: {rootFolderPath}");
-        //        return Array.Empty<SourceImageFolder>();
-        //    }
-
-        //    var result = new List<SourceImageFolder>();
-        //    var stack = new Stack<string>();
-        //    try
-        //    {
-        //        foreach (var d in Directory.EnumerateDirectories(rootFolderPath))
-        //        {
-        //            if (token.IsCancellationRequested)
-        //                return Array.Empty<SourceImageFolder>();
-        //            stack.Push(d);
-        //        }
-
-        //    }
-        //    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
-        //    {
-        //        ErrorOccured?.Invoke($"Cannot enumerate root: {ex.Message}");
-        //        return Array.Empty<SourceImageFolder>();
-        //    }
-
-        //    while (stack.Count > 0)
-        //    {
-        //        if (token.IsCancellationRequested)
-        //            return Array.Empty<SourceImageFolder>();
-        //        var dir = stack.Pop();
-
-        //        // skip names that contain "processed" (case-insensitive)
-        //        var name = Path.GetFileName(dir) ?? dir;
-        //        if (name.IndexOf("processed", StringComparison.OrdinalIgnoreCase) >= 0)
-        //            continue;
-
-        //        // get files (your method), handle nulls
-        //        var sf = GetImageFilesPaths(dir, token);
-        //        if (sf != null && sf.Files?.Length > 0) result.Add(sf);
-
-        //        // push children, ignoring inaccessible ones
-        //        try
-        //        {
-        //            foreach (var child in Directory.EnumerateDirectories(dir))
-        //            {
-        //                if (token.IsCancellationRequested)
-        //                    return Array.Empty<SourceImageFolder>();
-        //                stack.Push(child);
-        //            }
-
-        //        }
-        //        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PathTooLongException)
-        //        {
-        //            ErrorOccured?.Invoke($"Cannot enumerate sub-folders in '{dir}': {ex.Message}");
-        //            //Debug.WriteLine($"Can't enumerate children of {dir}: {ex.Message}");
-        //        }
-        //    }
-
-        //    return result.ToArray();
-        //}
-
-
-    }
+        }
 }

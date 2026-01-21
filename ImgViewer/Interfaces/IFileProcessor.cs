@@ -11,6 +11,8 @@ namespace ImgViewer.Interfaces
         public void SaveTiff(TiffInfo tiffInfo, string path, bool overwrite = true, string? metadataJson = null);
         void SaveStreamToFile(MemoryStream stream, string path);
 
+        void SaveBytesToFile(ReadOnlySpan<byte> bytes, string path);
+
         public IEnumerable<string> EnumerateSubFolderPaths(string rootFolderPath, bool fullTree, CancellationToken token);
 
         event Action<string> ErrorOccured;
