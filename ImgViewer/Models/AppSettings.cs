@@ -60,6 +60,8 @@ namespace ImgViewer.Models
         public AppSettings()
         {
             _tiffCompression = TiffCompression.CCITTG4;
+            _lastOpenedFolder = string.Empty;
+            _lastSavedFolder = string.Empty;
             try
             {
                 LoadFromFile();
@@ -169,6 +171,7 @@ namespace ImgViewer.Models
                 {
                     TiffCompression = this.TiffCompression,
                     LastOpenedFolder = this.LastOpenedFolder,
+                    LastSavedFolder = this.LastSavedFolder,
                     SavePipeLineToMd = this._savePipelineToMd,
                     ParametersChangedDebounceDelay = this._debounceDelay,
                     EraseOperationOffset = this._eraseOperationModeOffset
@@ -213,7 +216,8 @@ namespace ImgViewer.Models
                 if (dto != null)
                 {
                     _tiffCompression = dto.TiffCompression;
-                    _lastOpenedFolder = dto.LastOpenedFolder ?? string.Empty;
+                    _lastOpenedFolder = NormalizeFolder(dto.LastOpenedFolder);
+                    _lastSavedFolder = NormalizeFolder(dto.LastSavedFolder);
                     _savePipelineToMd = dto.SavePipeLineToMd;
                     _debounceDelay = dto.ParametersChangedDebounceDelay;
                     _eraseOperationModeOffset = dto.EraseOperationOffset;
@@ -248,12 +252,28 @@ namespace ImgViewer.Models
         {
             public TiffCompression TiffCompression { get; set; }
             public string? LastOpenedFolder { get; set; }
+            public string? LastSavedFolder { get; set; }
 
             public bool SavePipeLineToMd { get; set; }
 
             public TimeSpan ParametersChangedDebounceDelay { get; set; }
 
             public double EraseOperationOffset { get; set; }
+        }
+
+        private static string NormalizeFolder(string? folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder))
+                return string.Empty;
+
+            try
+            {
+                return Directory.Exists(folder) ? folder : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
     }
 }

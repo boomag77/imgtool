@@ -2,8 +2,12 @@
 using ImageMagick;
 using ImgViewer.Interfaces;
 using System.Diagnostics;
+using System.Drawing;
+using DrawingImageFormat = System.Drawing.Imaging.ImageFormat;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -49,11 +53,18 @@ namespace ImgViewer.Models
                 _token.ThrowIfCancellationRequested();
 
                 using var fs = OpenReadShared(path);
-                using var image = new MagickImage(fs);
+                var readSettings = new MagickReadSettings();
+                readSettings.SetDefine("jpeg:ignore-exif-errors", "true");
+                using var image = new MagickImage(fs, readSettings);
 
-
-
-                image.AutoOrient();
+                try
+                {
+                    image.AutoOrient();
+                }
+                catch
+                {
+                    // Ignore EXIF issues and continue with the raw orientation
+                }
 
 
 
@@ -196,6 +207,111 @@ namespace ImgViewer.Models
             }
         }
 
+        private bool TryLoadWithWicUri(string path, uint? decodePixelWidth, out BitmapSource? bmp, out string? fail)
+        {
+            bmp = null;
+            fail = null;
+
+            try
+            {
+                _token.ThrowIfCancellationRequested();
+
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.CreateOptions = BitmapCreateOptions.PreservePixelFormat | BitmapCreateOptions.IgnoreColorProfile;
+                if (decodePixelWidth.HasValue && decodePixelWidth.Value > 0)
+                {
+                    bi.DecodePixelWidth = (int)decodePixelWidth.Value;
+                }
+                bi.UriSource = new Uri(path, UriKind.Absolute);
+                bi.EndInit();
+
+                BitmapSource src = bi;
+                int orientation = ReadExifOrientation(bi.Metadata as BitmapMetadata);
+                src = ApplyExifOrientation(src, orientation);
+
+                if (src.Format != PixelFormats.Bgr24 && src.Format != PixelFormats.Bgra32)
+                {
+                    src = EnsureBgr24(src);
+                }
+
+                if (!src.IsFrozen) src.Freeze();
+                bmp = src;
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                fail = ex.GetType().Name + ": " + ex.Message;
+                return false;
+            }
+        }
+
+        private bool TryLoadWithGdi(bool isBatch, string path, uint? decodePixelWidth, out BitmapSource? bmp, out byte[] bytes, out string? fail)
+        {
+            bmp = null;
+            bytes = Array.Empty<byte>();
+            fail = null;
+
+            try
+            {
+                _token.ThrowIfCancellationRequested();
+
+                using var fs = OpenReadShared(path);
+                using var img = System.Drawing.Image.FromStream(fs, useEmbeddedColorManagement: false, validateImageData: false);
+
+                int targetWidth = 0;
+                if (decodePixelWidth.HasValue && decodePixelWidth.Value > 0)
+                {
+                    targetWidth = (int)decodePixelWidth.Value;
+                }
+
+                using var bmpGdi = (targetWidth > 0 && img.Width > targetWidth)
+                    ? new Bitmap(img, new System.Drawing.Size(targetWidth, (int)Math.Round(img.Height * (targetWidth / (double)img.Width))))
+                    : new Bitmap(img);
+
+                if (isBatch)
+                {
+                    using var ms = new MemoryStream();
+                    bmpGdi.Save(ms, DrawingImageFormat.Bmp);
+                    bytes = ms.ToArray();
+                    return true;
+                }
+
+                IntPtr hBitmap = bmpGdi.GetHbitmap();
+                try
+                {
+                    var src = Imaging.CreateBitmapSourceFromHBitmap(
+                        hBitmap,
+                        IntPtr.Zero,
+                        System.Windows.Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
+                    if (!src.IsFrozen) src.Freeze();
+                    bmp = src;
+                    return true;
+                }
+                finally
+                {
+                    DeleteObject(hBitmap);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                fail = ex.GetType().Name + ": " + ex.Message;
+                return false;
+            }
+        }
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
         private static int ReadExifOrientation(BitmapMetadata? meta)
         {
             if (meta == null) return 1;
@@ -340,6 +456,17 @@ namespace ImgViewer.Models
                 return isBatch ? (null, wicBytes) : (wicBmp!, null);
             }
 
+            string? wicUriFail = null;
+            if (!isBatch && TryLoadWithWicUri(path, decodePixelWidth, out var wicUriBmp, out wicUriFail))
+            {
+                return (wicUriBmp!, null);
+            }
+
+            string? gdiFail = null;
+            if (TryLoadWithGdi(isBatch, path, decodePixelWidth, out var gdiBmp, out var gdiBytes, out gdiFail))
+            {
+                return isBatch ? (null, gdiBytes) : (gdiBmp!, null);
+            }
 
             try
             {
@@ -355,7 +482,8 @@ namespace ImgViewer.Models
             }
             catch (Exception ex2)
             {
-                ErrorOccured?.Invoke($"Completely failed to load {path}: {ex2.Message}");
+                var details = $"WIC: {wicFail}; WIC-URI: {wicUriFail}; GDI: {gdiFail}; Magick: {ex2.Message}";
+                ErrorOccured?.Invoke($"Completely failed to load {path}: {details}");
 
                 //throw new Exception($"Completely failed to load {path}: {ex2.Message}", ex2);
 

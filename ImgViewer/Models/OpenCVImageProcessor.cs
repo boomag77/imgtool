@@ -94,6 +94,11 @@ namespace ImgViewer.Models
             {
                 try
                 {
+                    if (value == null)
+                    {
+                        ErrorOccured?.Invoke("CurrentImage set to null.");
+                        return;
+                    }
                     ClearSplitResults();
                     // if value is raw pixels
                     Mat? mat = null;
