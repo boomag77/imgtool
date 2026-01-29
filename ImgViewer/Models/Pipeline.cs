@@ -260,8 +260,14 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Method", "invertMethod", new [] {  "Invert by mask", "Invert whole page" }, 0),
+                            new PipeLineParameter("Method", "invertMethod", new [] { "Invert hybrid", "Invert by mask", "Invert by rect mask", "Invert whole page" }, 0),
                             new PipeLineParameter("Objects count", "invertObjectCount", new [] { "Auto", "Single" }, 0),
+                            new PipeLineParameter("Rect padding mode", "invertRectPaddingMode", new [] { "Auto", "Manual" }, 0),
+                            new PipeLineParameter("Rect auto trim sensitivity", "invertRectAutoTrimSensitivity", 0.65, 0.01, 0.99, 0.01),
+                            new PipeLineParameter("Rect pad left (px)", "invertRectPadLeft", 0, -300, 300, 1),
+                            new PipeLineParameter("Rect pad right (px)", "invertRectPadRight", 0, -300, 300, 1),
+                            new PipeLineParameter("Rect pad top (px)", "invertRectPadTop", 0, -300, 300, 1),
+                            new PipeLineParameter("Rect pad bottom (px)", "invertRectPadBottom", 0, -300, 300, 1),
                             new PipeLineParameter("Frame inpaint radius (px)", "invertInpaintRadiusPx", 0, 0, 50, 1)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.Invert, operation.CreateParameterDictionary()));

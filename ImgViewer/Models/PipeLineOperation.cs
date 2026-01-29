@@ -437,6 +437,15 @@ namespace ImgViewer.Models
                         ApplyInvertVisibility(invertMethodParam.SelectedOption);
                 };
             }
+            var invertPaddingModeParam = _parameters.FirstOrDefault(p => p.Key == "invertRectPaddingMode");
+            if (invertPaddingModeParam != null)
+            {
+                invertPaddingModeParam.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex))
+                        ApplyInvertVisibility(invertMethodParam?.SelectedOption);
+                };
+            }
 
         }
 
@@ -869,7 +878,14 @@ namespace ImgViewer.Models
         private void ApplyInvertVisibility(string? selectedOption)
         {
             var selected = (selectedOption ?? "Invert whole page").Trim();
-            bool byMask = selected.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase);
+            bool byMaskOnly = selected.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase);
+            bool byHybrid = selected.Equals("Invert hybrid", StringComparison.OrdinalIgnoreCase);
+            bool byRect = selected.Equals("Invert by rect mask", StringComparison.OrdinalIgnoreCase) || byHybrid;
+            bool byMask = byMaskOnly || byRect;
+            var padModeParam = _parameters.FirstOrDefault(p => p.Key == "invertRectPaddingMode");
+            string padMode = padModeParam?.SelectedOption ?? string.Empty;
+            bool rectManual = padMode.Equals("Manual", StringComparison.OrdinalIgnoreCase);
+            bool rectAuto = padMode.Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
             foreach (var p in _parameters)
             {
@@ -880,6 +896,18 @@ namespace ImgViewer.Models
                         break;
                     case "invertObjectCount":
                         p.IsVisible = byMask;
+                        break;
+                    case "invertRectPaddingMode":
+                        p.IsVisible = byRect;
+                        break;
+                    case "invertRectAutoTrimSensitivity":
+                        p.IsVisible = byRect && rectAuto;
+                        break;
+                    case "invertRectPadLeft":
+                    case "invertRectPadRight":
+                    case "invertRectPadTop":
+                    case "invertRectPadBottom":
+                        p.IsVisible = byRect && rectManual;
                         break;
                     case "invertInpaintRadiusPx":
                         p.IsVisible = byMask;

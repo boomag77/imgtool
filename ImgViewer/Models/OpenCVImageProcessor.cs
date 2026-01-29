@@ -1188,10 +1188,20 @@ namespace ImgViewer.Models
                                 string methodName = parameters != null && parameters.TryGetValue("invertMethod", out var methodObj)
                                     ? methodObj?.ToString() ?? string.Empty
                                     : string.Empty;
-                                var method = methodName.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase)
-                                    ? InvertMethod.ByMask
-                                    : InvertMethod.WholePage;
+                                var method = methodName.Equals("Invert hybrid", StringComparison.OrdinalIgnoreCase)
+                                    ? InvertMethod.Hybrid
+                                    : methodName.Equals("Invert by rect mask", StringComparison.OrdinalIgnoreCase)
+                                        ? InvertMethod.ByRectMask
+                                        : methodName.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase)
+                                            ? InvertMethod.ByMask
+                                            : InvertMethod.WholePage;
                                 InvertObjectCount objectCount = InvertObjectCount.Single;
+                                RectPaddingMode rectPaddingMode = RectPaddingMode.Auto;
+                                int rectPadLeft = 0;
+                                int rectPadRight = 0;
+                                int rectPadTop = 0;
+                                int rectPadBottom = 0;
+                                double rectAutoTrimSensitivity = 0.03;
                                 int inpaintRadiusPx = 0;
                                 if (parameters != null && parameters.TryGetValue("invertObjectCount", out var countObj))
                                 {
@@ -1199,11 +1209,37 @@ namespace ImgViewer.Models
                                     if (countName.Equals("Auto", StringComparison.OrdinalIgnoreCase))
                                         objectCount = InvertObjectCount.Auto;
                                 }
+                                if (parameters != null && parameters.TryGetValue("invertRectPaddingMode", out var padModeObj))
+                                {
+                                    var padModeName = padModeObj?.ToString() ?? string.Empty;
+                                    if (padModeName.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+                                        rectPaddingMode = RectPaddingMode.Manual;
+                                }
+                                if (parameters != null && parameters.TryGetValue("invertRectPadLeft", out var padLeftObj))
+                                    rectPadLeft = SafeInt(padLeftObj, rectPadLeft);
+                                if (parameters != null && parameters.TryGetValue("invertRectPadRight", out var padRightObj))
+                                    rectPadRight = SafeInt(padRightObj, rectPadRight);
+                                if (parameters != null && parameters.TryGetValue("invertRectPadTop", out var padTopObj))
+                                    rectPadTop = SafeInt(padTopObj, rectPadTop);
+                                if (parameters != null && parameters.TryGetValue("invertRectPadBottom", out var padBottomObj))
+                                    rectPadBottom = SafeInt(padBottomObj, rectPadBottom);
+                                if (parameters != null && parameters.TryGetValue("invertRectAutoTrimSensitivity", out var sensObj))
+                                    rectAutoTrimSensitivity = Math.Max(0.001, SafeDouble(sensObj, rectAutoTrimSensitivity));
                                 if (parameters != null && parameters.TryGetValue("invertInpaintRadiusPx", out var inpaintObj))
                                 {
                                     inpaintRadiusPx = Math.Max(0, SafeInt(inpaintObj, inpaintRadiusPx));
                                 }
-                                return Inverter.Apply(src, method, objectCount, inpaintRadiusPx, _token);
+                                return Inverter.Apply(src,
+                                                      method,
+                                                      objectCount,
+                                                      rectPaddingMode,
+                                                      rectPadLeft,
+                                                      rectPadRight,
+                                                      rectPadTop,
+                                                      rectPadBottom,
+                                                      rectAutoTrimSensitivity,
+                                                      inpaintRadiusPx,
+                                                      _token);
                             }
                         case ProcessorCommand.Enhance:
                             if (TryApplyEnhanceCommand(src, _token, parameters ?? new Dictionary<string, object>(), out Mat? result))

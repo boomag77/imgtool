@@ -102,15 +102,31 @@
       },
       {
         "heading": "Method choices",
-        "body": "- `Invert whole page`: simple full inversion. Fast and reliable, but all margins and notes invert too.\n- `Invert by mask`: detects the dark photostat region and inverts only that area. Recommended for mounted photostats with handwritten notes around them."
+        "body": "- `Invert whole page`: simple full inversion. Fast and reliable, but all margins and notes invert too.\n- `Invert by mask`: detects the dark photostat region and inverts only that area. Recommended for mounted photostats with handwritten notes around them.\n- `Invert by rect mask`: same detection, but uses a rectangular mask around each photostat. Useful when the irregular mask captures nearby notes.\n- `Invert hybrid`: intersects the irregular mask with the trimmed rectangle, keeping the photostat while rejecting nearby notes."
       },
       {
         "heading": "Invert by mask details",
         "body": "The detector converts the page to grayscale, thresholds darker regions (Otsu), then closes/open the mask to get a clean block. It keeps the largest dark component by default and fills holes so the entire photostat is inverted."
       },
       {
+        "heading": "Invert hybrid details",
+        "body": "Hybrid combines the filled component mask with the rectangle mask. It is stricter than either method alone, so use it when notes are close to the photostat and being captured."
+      },
+      {
         "heading": "Objects count",
         "body": "- `Single`: keep only the largest detected photostat. Best for one photo per page.\n- `Auto`: keep all large dark components (>= ~2% of the page). Use this when multiple photostats appear on a single sheet."
+      },
+      {
+        "heading": "Rect padding mode",
+        "body": "Only for `Invert by rect mask` and `Invert hybrid`.\n- `Auto`: trims the rectangle edges based on mask density to avoid nearby notes.\n- `Manual`: uses the four per-side padding fields below."
+      },
+      {
+        "heading": "Rect auto trim sensitivity",
+        "body": "Controls how tight the Auto rectangle is when using `Invert by rect mask` or `Invert hybrid`.\n- Higher values produce a tighter rectangle (less chance to capture nearby notes).\n- Lower values keep more border.\nSuggested range: 0.01-0.08. Default 0.03."
+      },
+      {
+        "heading": "Rect pad left/right/top/bottom (px)",
+        "body": "Manual per-side padding for `Invert by rect mask` or `Invert hybrid`.\n- Positive values expand outward; negative values shrink inward.\n- Use small negative values (-2 to -6) when notes near one edge are being inverted."
       },
       {
         "heading": "Frame inpaint radius (px)",
@@ -304,3 +320,5 @@
     ]
   }
 ]
+
+
