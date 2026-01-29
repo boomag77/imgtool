@@ -92,6 +92,33 @@
     ]
   },
   {
+    "id": "invert",
+    "title": "Invert",
+    "summary": "Flip scanned photostats while preserving handwritten notes on the surrounding sheet.",
+    "paragraphs": [
+      {
+        "heading": "When to use",
+        "body": "Use Invert when a dark photostat is mounted on a lighter sheet and you want to flip only the photostat before binarizing. This keeps margin notes on the white sheet from flipping into white-on-black."
+      },
+      {
+        "heading": "Method choices",
+        "body": "- `Invert whole page`: simple full inversion. Fast and reliable, but all margins and notes invert too.\n- `Invert by mask`: detects the dark photostat region and inverts only that area. Recommended for mounted photostats with handwritten notes around them."
+      },
+      {
+        "heading": "Invert by mask details",
+        "body": "The detector converts the page to grayscale, thresholds darker regions (Otsu), then closes/open the mask to get a clean block. It keeps the largest dark component by default and fills holes so the entire photostat is inverted."
+      },
+      {
+        "heading": "Objects count",
+        "body": "- `Single`: keep only the largest detected photostat. Best for one photo per page.\n- `Auto`: keep all large dark components (>= ~2% of the page). Use this when multiple photostats appear on a single sheet."
+      },
+      {
+        "heading": "Tips & troubleshooting",
+        "body": "- Run Invert before Binarize so binarization sees the corrected tonal layout.\n- If notes inside the photostat flip incorrectly, you likely want `Invert whole page` instead.\n- If the photostat is not inverted, switch `Objects count` to Auto or reduce Borders Remove before Invert so the detector still sees the outer sheet.\n- If too much of the page inverts, use `Single` and trim borders first to remove dark frames."
+      }
+    ]
+  },
+  {
     "id": "punchholes",
     "title": "Punch Holes Remove",
     "summary": "Detect and inpaint binder holes using both circular and rectangular heuristics.",
