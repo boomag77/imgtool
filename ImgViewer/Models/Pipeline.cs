@@ -260,7 +260,8 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Method", "invertMethod", new [] { "Invert whole page", "Invert by mask" }, 0)
+                            new PipeLineParameter("Method", "invertMethod", new [] {  "Invert by mask", "Invert whole page" }, 0),
+                            new PipeLineParameter("Objects count", "invertObjectCount", new [] { "Auto", "Single" }, 0)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.Invert, operation.CreateParameterDictionary()));
                 }

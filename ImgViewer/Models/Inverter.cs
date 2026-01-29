@@ -8,16 +8,22 @@ namespace ImgViewer.Models
         ByMask
     }
 
+    internal enum InvertObjectCount
+    {
+        Single,
+        Auto
+    }
+
     internal static class Inverter
     {
-        public static Mat Apply(Mat src, InvertMethod method, CancellationToken token)
+        public static Mat Apply(Mat src, InvertMethod method, InvertObjectCount objectCount, CancellationToken token)
         {
             if (src == null || src.Empty())
                 return new Mat();
 
             return method switch
             {
-                InvertMethod.ByMask => InvertByMask(src, token),
+                InvertMethod.ByMask => InvertByMask(src, objectCount, token),
                 _ => InvertWhole(src)
             };
         }
@@ -29,7 +35,7 @@ namespace ImgViewer.Models
             return dst;
         }
 
-        private static Mat InvertByMask(Mat src, CancellationToken token)
+        private static Mat InvertByMask(Mat src, InvertObjectCount objectCount, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
 
@@ -63,25 +69,53 @@ namespace ImgViewer.Models
             int imgArea = Math.Max(1, src.Width * src.Height);
             int minArea = Math.Max(5000, (int)Math.Round(imgArea * 0.02));
 
-            int bestIdx = -1;
-            int bestArea = 0;
-            for (int i = 1; i < count; i++)
+            Mat componentMask;
+            if (objectCount == InvertObjectCount.Auto)
             {
-                int area = stats.Get<int>(i, (int)ConnectedComponentsTypes.Area);
-                if (area > bestArea)
+                bool any = false;
+                componentMask = new Mat(labels.Rows, labels.Cols, MatType.CV_8U, Scalar.All(0));
+
+                using var tmpMask = new Mat();
+                for (int i = 1; i < count; i++)
                 {
-                    bestArea = area;
-                    bestIdx = i;
+                    int area = stats.Get<int>(i, (int)ConnectedComponentsTypes.Area);
+                    if (area < minArea)
+                        continue;
+
+                    Cv2.Compare(labels, i, tmpMask, CmpType.EQ);
+                    Cv2.BitwiseOr(componentMask, tmpMask, componentMask);
+                    any = true;
+                }
+
+                if (!any)
+                {
+                    componentMask.Dispose();
+                    return src.Clone();
                 }
             }
+            else
+            {
+                int bestIdx = -1;
+                int bestArea = 0;
+                for (int i = 1; i < count; i++)
+                {
+                    int area = stats.Get<int>(i, (int)ConnectedComponentsTypes.Area);
+                    if (area > bestArea)
+                    {
+                        bestArea = area;
+                        bestIdx = i;
+                    }
+                }
 
-            if (bestIdx < 0 || bestArea < minArea)
-                return src.Clone();
+                if (bestIdx < 0 || bestArea < minArea)
+                    return src.Clone();
 
-            using var componentMask = new Mat();
-            Cv2.Compare(labels, bestIdx, componentMask, CmpType.EQ);
+                componentMask = new Mat();
+                Cv2.Compare(labels, bestIdx, componentMask, CmpType.EQ);
+            }
 
             using var filledMask = FillHoles(componentMask);
+            componentMask.Dispose();
 
             int dilateSize = Math.Max(1, closeSize / 6);
             if (dilateSize % 2 == 0) dilateSize++;

@@ -1191,7 +1191,14 @@ namespace ImgViewer.Models
                                 var method = methodName.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase)
                                     ? InvertMethod.ByMask
                                     : InvertMethod.WholePage;
-                                return Inverter.Apply(src, method, _token);
+                                InvertObjectCount objectCount = InvertObjectCount.Single;
+                                if (parameters != null && parameters.TryGetValue("invertObjectCount", out var countObj))
+                                {
+                                    var countName = countObj?.ToString() ?? string.Empty;
+                                    if (countName.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+                                        objectCount = InvertObjectCount.Auto;
+                                }
+                                return Inverter.Apply(src, method, objectCount, _token);
                             }
                         case ProcessorCommand.Enhance:
                             if (TryApplyEnhanceCommand(src, _token, parameters ?? new Dictionary<string, object>(), out Mat? result))

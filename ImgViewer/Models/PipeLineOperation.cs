@@ -427,6 +427,17 @@ namespace ImgViewer.Models
                 };
             }
 
+            var invertMethodParam = _parameters.FirstOrDefault(p => p.Key == "invertMethod");
+            if (invertMethodParam != null)
+            {
+                ApplyInvertVisibility(invertMethodParam.SelectedOption);
+                invertMethodParam.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PipeLineParameter.SelectedIndex))
+                        ApplyInvertVisibility(invertMethodParam.SelectedOption);
+                };
+            }
+
         }
 
         private void ApplyMorphVisibility(bool enabled)
@@ -850,6 +861,25 @@ namespace ImgViewer.Models
                         p.IsVisible = isAuto;
                         break;
                     default:
+                        break;
+                }
+            }
+        }
+
+        private void ApplyInvertVisibility(string? selectedOption)
+        {
+            var selected = (selectedOption ?? "Invert whole page").Trim();
+            bool byMask = selected.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var p in _parameters)
+            {
+                switch (p.Key)
+                {
+                    case "invertMethod":
+                        p.IsVisible = true;
+                        break;
+                    case "invertObjectCount":
+                        p.IsVisible = byMask;
                         break;
                 }
             }
