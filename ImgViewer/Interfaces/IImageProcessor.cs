@@ -50,6 +50,7 @@ namespace ImgViewer.Interfaces
         Deskew,
         Binarize,
         BordersRemove,
+        Invert,
         Despeckle,
         SmartCrop,
         LinesRemove,

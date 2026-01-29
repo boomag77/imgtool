@@ -10,6 +10,7 @@ namespace ImgViewer.Models
         Deskew,
         BordersRemove,
         Binarize,
+        Invert,
         PunchHolesRemove,
         Despeckle,
         LinesRemove,

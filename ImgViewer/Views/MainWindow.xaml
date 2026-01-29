@@ -844,6 +844,9 @@
                                                 <MenuItem Header="Binarize"
                                       Tag="{x:Static models:PipelineOperationType.Binarize}"
                                       Click="AddOperationMenuItem_Click" />
+                                                <MenuItem Header="Invert"
+                                      Tag="{x:Static models:PipelineOperationType.Invert}"
+                                      Click="AddOperationMenuItem_Click" />
                                                 <MenuItem Header="Enhance"
                                       Tag="{x:Static models:PipelineOperationType.Enhance}"
                                       Click="AddOperationMenuItem_Click" />

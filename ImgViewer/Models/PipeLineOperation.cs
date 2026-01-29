@@ -203,6 +203,7 @@ namespace ImgViewer.Models
             PipelineOperationType.Deskew => "deskew",
             PipelineOperationType.BordersRemove => "borders",
             PipelineOperationType.Binarize => "binarize",
+            PipelineOperationType.Invert => "invert",
             PipelineOperationType.PunchHolesRemove => "punchholes",
             PipelineOperationType.Despeckle => "despeckle",
             PipelineOperationType.LinesRemove => "lines",

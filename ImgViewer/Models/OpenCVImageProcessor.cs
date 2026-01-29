@@ -1183,6 +1183,16 @@ namespace ImgViewer.Models
                         case ProcessorCommand.Binarize:
                             var binParams = ToStruct<BinarizeParameters>(parameters);
                             return Binarizer.Binarize(src, binParams.Method, binParams);
+                        case ProcessorCommand.Invert:
+                            {
+                                string methodName = parameters != null && parameters.TryGetValue("invertMethod", out var methodObj)
+                                    ? methodObj?.ToString() ?? string.Empty
+                                    : string.Empty;
+                                var method = methodName.Equals("Invert by mask", StringComparison.OrdinalIgnoreCase)
+                                    ? InvertMethod.ByMask
+                                    : InvertMethod.WholePage;
+                                return Inverter.Apply(src, method, _token);
+                            }
                         case ProcessorCommand.Enhance:
                             if (TryApplyEnhanceCommand(src, _token, parameters ?? new Dictionary<string, object>(), out Mat? result))
                                 return result!;

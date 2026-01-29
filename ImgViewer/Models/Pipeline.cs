@@ -251,6 +251,20 @@ public class Pipeline
                         operation => ExecuteManagerCommand(ProcessorCommand.Binarize, operation.CreateParameterDictionary()));
                 }
                 break;
+            case PipelineOperationType.Invert:
+                {
+                    operation = new PipelineOperation(
+                        PipelineOperationType.Invert,
+                        ProcessorCommand.Invert,
+                        displayName,
+                        buttonText,
+                        new[]
+                        {
+                            new PipeLineParameter("Method", "invertMethod", new [] { "Invert whole page", "Invert by mask" }, 0)
+                        },
+                        operation => ExecuteManagerCommand(ProcessorCommand.Invert, operation.CreateParameterDictionary()));
+                }
+                break;
             case PipelineOperationType.PunchHolesRemove:
                 {
                     operation = new PipelineOperation(
