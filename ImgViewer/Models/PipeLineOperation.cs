@@ -881,6 +881,9 @@ namespace ImgViewer.Models
                     case "invertObjectCount":
                         p.IsVisible = byMask;
                         break;
+                    case "invertInpaintRadiusPx":
+                        p.IsVisible = byMask;
+                        break;
                 }
             }
         }

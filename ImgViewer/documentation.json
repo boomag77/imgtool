@@ -113,6 +113,10 @@
         "body": "- `Single`: keep only the largest detected photostat. Best for one photo per page.\n- `Auto`: keep all large dark components (>= ~2% of the page). Use this when multiple photostats appear on a single sheet."
       },
       {
+        "heading": "Frame inpaint radius (px)",
+        "body": "Optional cleanup pass that fills a thin border between the inverted photostat and the surrounding sheet using Telea inpainting.\n- Set to 0 to disable.\n- Use small values (2-6) to soften thin black frames or halo edges.\n- Larger values will blur details near the border."
+      },
+      {
         "heading": "Tips & troubleshooting",
         "body": "- Run Invert before Binarize so binarization sees the corrected tonal layout.\n- If notes inside the photostat flip incorrectly, you likely want `Invert whole page` instead.\n- If the photostat is not inverted, switch `Objects count` to Auto or reduce Borders Remove before Invert so the detector still sees the outer sheet.\n- If too much of the page inverts, use `Single` and trim borders first to remove dark frames."
       }

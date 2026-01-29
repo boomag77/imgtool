@@ -1192,13 +1192,18 @@ namespace ImgViewer.Models
                                     ? InvertMethod.ByMask
                                     : InvertMethod.WholePage;
                                 InvertObjectCount objectCount = InvertObjectCount.Single;
+                                int inpaintRadiusPx = 0;
                                 if (parameters != null && parameters.TryGetValue("invertObjectCount", out var countObj))
                                 {
                                     var countName = countObj?.ToString() ?? string.Empty;
                                     if (countName.Equals("Auto", StringComparison.OrdinalIgnoreCase))
                                         objectCount = InvertObjectCount.Auto;
                                 }
-                                return Inverter.Apply(src, method, objectCount, _token);
+                                if (parameters != null && parameters.TryGetValue("invertInpaintRadiusPx", out var inpaintObj))
+                                {
+                                    inpaintRadiusPx = Math.Max(0, SafeInt(inpaintObj, inpaintRadiusPx));
+                                }
+                                return Inverter.Apply(src, method, objectCount, inpaintRadiusPx, _token);
                             }
                         case ProcessorCommand.Enhance:
                             if (TryApplyEnhanceCommand(src, _token, parameters ?? new Dictionary<string, object>(), out Mat? result))

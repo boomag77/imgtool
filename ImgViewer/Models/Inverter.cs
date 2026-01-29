@@ -16,14 +16,14 @@ namespace ImgViewer.Models
 
     internal static class Inverter
     {
-        public static Mat Apply(Mat src, InvertMethod method, InvertObjectCount objectCount, CancellationToken token)
+        public static Mat Apply(Mat src, InvertMethod method, InvertObjectCount objectCount, int inpaintRadiusPx, CancellationToken token)
         {
             if (src == null || src.Empty())
                 return new Mat();
 
             return method switch
             {
-                InvertMethod.ByMask => InvertByMask(src, objectCount, token),
+                InvertMethod.ByMask => InvertByMask(src, objectCount, inpaintRadiusPx, token),
                 _ => InvertWhole(src)
             };
         }
@@ -35,7 +35,7 @@ namespace ImgViewer.Models
             return dst;
         }
 
-        private static Mat InvertByMask(Mat src, InvertObjectCount objectCount, CancellationToken token)
+        private static Mat InvertByMask(Mat src, InvertObjectCount objectCount, int inpaintRadiusPx, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
 
@@ -125,6 +125,19 @@ namespace ImgViewer.Models
             using var inverted = new Mat();
             Cv2.BitwiseNot(src, inverted);
             inverted.CopyTo(result, filledMask);
+            if (inpaintRadiusPx > 0)
+            {
+                int band = Math.Max(1, inpaintRadiusPx);
+                int k = band * 2 + 1;
+                using var edgeKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(k, k));
+                using var dil = new Mat();
+                using var ero = new Mat();
+                Cv2.Dilate(filledMask, dil, edgeKernel);
+                Cv2.Erode(filledMask, ero, edgeKernel);
+                using var edgeMask = new Mat();
+                Cv2.Subtract(dil, ero, edgeMask);
+                Cv2.Inpaint(result, edgeMask, result, band, InpaintMethod.Telea);
+            }
             return result;
         }
 

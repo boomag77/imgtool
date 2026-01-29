@@ -261,7 +261,8 @@ public class Pipeline
                         new[]
                         {
                             new PipeLineParameter("Method", "invertMethod", new [] {  "Invert by mask", "Invert whole page" }, 0),
-                            new PipeLineParameter("Objects count", "invertObjectCount", new [] { "Auto", "Single" }, 0)
+                            new PipeLineParameter("Objects count", "invertObjectCount", new [] { "Auto", "Single" }, 0),
+                            new PipeLineParameter("Frame inpaint radius (px)", "invertInpaintRadiusPx", 0, 0, 50, 1)
                         },
                         operation => ExecuteManagerCommand(ProcessorCommand.Invert, operation.CreateParameterDictionary()));
                 }
