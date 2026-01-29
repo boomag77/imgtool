@@ -69,11 +69,13 @@ namespace ImgViewer.Models
             int imgArea = Math.Max(1, src.Width * src.Height);
             int minArea = Math.Max(5000, (int)Math.Round(imgArea * 0.02));
 
-            Mat componentMask;
+            using Mat componentMask = (objectCount == InvertObjectCount.Auto)
+                ? new Mat(labels.Rows, labels.Cols, MatType.CV_8U, Scalar.All(0))
+                : new Mat();
+
             if (objectCount == InvertObjectCount.Auto)
             {
                 bool any = false;
-                componentMask = new Mat(labels.Rows, labels.Cols, MatType.CV_8U, Scalar.All(0));
 
                 using var tmpMask = new Mat();
                 for (int i = 1; i < count; i++)
@@ -89,7 +91,6 @@ namespace ImgViewer.Models
 
                 if (!any)
                 {
-                    componentMask.Dispose();
                     return src.Clone();
                 }
             }
@@ -110,12 +111,10 @@ namespace ImgViewer.Models
                 if (bestIdx < 0 || bestArea < minArea)
                     return src.Clone();
 
-                componentMask = new Mat();
                 Cv2.Compare(labels, bestIdx, componentMask, CmpType.EQ);
             }
 
             using var filledMask = FillHoles(componentMask);
-            componentMask.Dispose();
 
             int dilateSize = Math.Max(1, closeSize / 6);
             if (dilateSize % 2 == 0) dilateSize++;
@@ -150,12 +149,12 @@ namespace ImgViewer.Models
 
         private static Mat FillHoles(Mat mask)
         {
-            var padded = new Mat();
+            using var padded = new Mat();
             Cv2.CopyMakeBorder(mask, padded, 1, 1, 1, 1, BorderTypes.Constant, Scalar.All(0));
             Cv2.FloodFill(padded, new Point(0, 0), Scalar.All(255));
 
             using var floodFill = new Mat(padded, new Rect(1, 1, mask.Width, mask.Height));
-            var floodInv = new Mat();
+            using var floodInv = new Mat();
             Cv2.BitwiseNot(floodFill, floodInv);
 
             var filled = new Mat();
