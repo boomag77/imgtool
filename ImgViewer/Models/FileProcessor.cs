@@ -143,20 +143,19 @@ namespace ImgViewer.Models
             try
             {
                 _token.ThrowIfCancellationRequested();
+                string ext = Path.GetExtension(path).ToLowerInvariant();
+                bool batchDecodeTiff = isBatch && (ext == ".tif" || ext == ".tiff");
                 using var fs = OpenReadShared(path);
 
                 if (isBatch)
                 {
-                    // return only byte[] in batch mode
-                    bmp = null;
-                    //using var ms = new MemoryStream();
-                    //fs.CopyTo(ms);
-
-                    //bytes = ms.ToArray();
-                    bytes = File.ReadAllBytes(path); // simpler way to read all bytes
-
-                    return true; // raw file bytes
-
+                    if (!batchDecodeTiff)
+                    {
+                        // return only byte[] in batch mode
+                        bmp = null;
+                        bytes = File.ReadAllBytes(path); // raw file bytes for non-TIFF
+                        return true; // raw file bytes
+                    }
                 }
 
                 // Важно: OnLoad, чтобы не держать файл
@@ -185,15 +184,14 @@ namespace ImgViewer.Models
                 }
 
                 if (!src.IsFrozen) src.Freeze();
+                if (isBatch)
+                {
+                    bmp = null;
+                    bytes = EncodeToBmpBytes(src);
+                    return true;
+                }
+
                 bmp = src;
-
-                // Если тебе реально нужен byte[] (как сейчас): оставим BMP-энкодинг для совместимости
-                //if (isBatch)
-                //{
-                //    bytes = EncodeToBmpBytes(src);
-                //}
-
-
                 return true;
             }
             catch (OperationCanceledException)

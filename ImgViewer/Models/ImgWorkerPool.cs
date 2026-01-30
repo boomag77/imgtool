@@ -782,6 +782,13 @@ namespace ImgViewer.Models
                 {
                     _workersCount = Math.Max(1, _workersCount - 1);
                 }
+                if (_plOperations.Any(op => op.Command == ProcessorCommand.Binarize && 
+                                           op.Params.ContainsKey("method") && 
+                                           op.Params["method"] is string method && 
+                                           method == "Sauvola"))
+                {
+                    _workersCount = Math.Max(1, _workersCount/2);
+                }
                 for (int i = 0; i < _workersCount; i++)
                 {
                     _token.ThrowIfCancellationRequested();
