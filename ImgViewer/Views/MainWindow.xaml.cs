@@ -5,6 +5,7 @@ using System.Collections.Frozen;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -1228,7 +1229,7 @@ namespace ImgViewer.Views
                 {
                     var files = Directory.EnumerateFiles(folderPath)
                                      .Where(f => _owner.ImageExts.Contains(System.IO.Path.GetExtension(f)))
-                                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase);
+                                     .OrderBy(f => Path.GetFileName(f), ExplorerComparer.Instance);
                     var tmpFolderIndex = new Dictionary<int, string>();
                     var tmpFolderIndexByPath = new Dictionary<string, int>();
                     int i = 0;
@@ -2340,6 +2341,22 @@ namespace ImgViewer.Views
             double dx = a.X - b.X;
             double dy = a.Y - b.Y;
             return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+        private static extern int StrCmpLogicalW(string x, string y);
+
+        private sealed class ExplorerComparer : IComparer<string>
+        {
+            public static readonly ExplorerComparer Instance = new();
+
+            public int Compare(string? x, string? y)
+            {
+                if (ReferenceEquals(x, y)) return 0;
+                if (x is null) return -1;
+                if (y is null) return 1;
+                return StrCmpLogicalW(x, y);
+            }
         }
 
 

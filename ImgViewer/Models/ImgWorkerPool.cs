@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using System.Windows.Media;
 
@@ -412,7 +413,7 @@ namespace ImgViewer.Models
                                      var name = Path.GetFileName(path);
                                      return !string.IsNullOrWhiteSpace(name) && !name.StartsWith("_", StringComparison.OrdinalIgnoreCase);
                                  })
-                                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                                 .OrderBy(path => Path.GetFileName(path), ExplorerComparer.Instance)
                                  .ToList();
 
             if (files.Count == 0)
@@ -473,7 +474,8 @@ namespace ImgViewer.Models
 
         IEnumerable<string> EnumerateImages(string folder)
         {
-            foreach (var file in Directory.EnumerateFiles(folder))
+            foreach (var file in Directory.EnumerateFiles(folder)
+                                    .OrderBy(f => Path.GetFileName(f), ExplorerComparer.Instance))
             {
                 var ext = Path.GetExtension(file);
                 if (ImageExts.Contains(ext))
@@ -822,21 +824,21 @@ namespace ImgViewer.Models
                     : "No errors.";
                 var plJsonMsg = _plJson;
                 SaveProcessingLog(logMsg, timeMsg, plOps, errors, cancelled);
-                if (_isSplitPipeline)
-                {
-                    try
-                    {
-                        RenumberSplitOutputs();
-                    }
-                    catch (Exception renameEx)
-                    {
-                        RegisterFileError("<Split rename>", "Failed to rename split outputs.", renameEx);
-                    }
-                }
-                if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
-                {
-                    File.Delete(_batchErrorsPath);
-                }
+                //if (_isSplitPipeline)
+                //{
+                //    try
+                //    {
+                //        RenumberSplitOutputs();
+                //    }
+                //    catch (Exception renameEx)
+                //    {
+                //        RegisterFileError("<Split rename>", "Failed to rename split outputs.", renameEx);
+                //    }
+                //}
+                //if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
+                //{
+                //    File.Delete(_batchErrorsPath);
+                //}
             }
             catch (OperationCanceledException)
             {
@@ -882,9 +884,43 @@ namespace ImgViewer.Models
                 _saveCh.Writer.TryComplete();
                 await Task.WhenAll(_savingTasks);
 
+                if (_isSplitPipeline)
+                {
+                    try
+                    {
+                        RenumberSplitOutputs();
+                    }
+                    catch (Exception renameEx)
+                    {
+                        RegisterFileError("<Split rename>", "Failed to rename split outputs.", renameEx);
+                    }
+                }
+                if (_fileErrors.IsEmpty && File.Exists(_batchErrorsPath))
+                {
+                    File.Delete(_batchErrorsPath);
+                }
+
                 try { _tokenRegistration.Dispose(); } catch { }
 
             }
         }
+
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+        private static extern int StrCmpLogicalW(string x, string y);
+
+        private sealed class ExplorerComparer : IComparer<string>
+        {
+            public static readonly ExplorerComparer Instance = new();
+
+            public int Compare(string? x, string? y)
+            {
+                if (ReferenceEquals(x, y)) return 0;
+                if (x is null) return -1;
+                if (y is null) return 1;
+                return StrCmpLogicalW(x, y);
+            }
+        }
+
+
     }
 }
