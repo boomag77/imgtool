@@ -1765,6 +1765,16 @@ namespace ImgViewer.Views
 
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
+            // Ctrl+S  save image as...
+            if (!e.IsRepeat &&
+                (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+                e.Key == Key.S)
+            {
+                SaveAs_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+
             // ESC  turn off both magnifiers
             if (e.Key == Key.Escape)
             {
@@ -1779,7 +1789,7 @@ namespace ImgViewer.Views
             }
 
             // M  on/off magnifier on PreviewImgBox (working image)
-            if (e.Key == Key.M)
+            if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.M)
             {
                 if (_magnifierEnabled)
                     DisableMagnifier();
@@ -1790,7 +1800,7 @@ namespace ImgViewer.Views
             }
 
             // S  on/off synced magnifier on OrigImgBox (original Image)
-            if (e.Key == Key.S)
+            if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.S)
             {
                 if (_originalMagnifierEnabled)
                     DisableOriginalMagnifier();

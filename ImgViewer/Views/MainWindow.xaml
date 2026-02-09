@@ -708,7 +708,7 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_Open Image" Click="OpenFile_Click"/>
                 <Separator/>
-                <MenuItem Header="_Save Image As..." Click="SaveAs_Click"/>
+                <MenuItem Header="_Save Image As..." Click="SaveAs_Click" InputGestureText="Ctrl+S"/>
                 <Separator/>
                 <MenuItem Header="_Tiff compression" Click="SavingOptions_Click"/>
                 <Separator/>
