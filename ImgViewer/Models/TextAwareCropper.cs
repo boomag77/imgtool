@@ -470,7 +470,7 @@ public class TextAwareCropper
                 var opacity = 20; // 0-255
                 var fillColor = new Scalar(0, 255, 0, opacity);
 
-                Cv2.Rectangle(outImg, rect, fillColor, thickness: -1);
+                Cv2.Rectangle(outImg, rect, fillColor, thickness: 1);
 
                 // подпись индекса (без ambigous Math)
                 string label = (i + 1).ToString();

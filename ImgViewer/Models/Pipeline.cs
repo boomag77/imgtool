@@ -398,7 +398,7 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma", "Color Adjust", "Brightness & Contrast"}, 0),
+                            new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma", "Color Adjust", "Brightness & Contrast", "Auto orient"}, 0),
                             new PipeLineParameter("CLAHE Clip Limit", "claheClipLimit", 4.0, 0.5, 12.0, 0.1),
                             new PipeLineParameter("CLAHE Grid Size", "claheGridSize", 8, 2, 64, 1),
                             new PipeLineParameter("Retinex Output Mode", "retinexOutputMode", new [] { "LogHighpass", "ReconstructExp" }, 0),

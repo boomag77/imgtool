@@ -931,6 +931,7 @@ namespace ImgViewer.Models
                     2 => EnhanceMode.Levels,
                     3 => EnhanceMode.ColorAdjust,
                     4 => EnhanceMode.BrightnessContrast,
+                    5 => EnhanceMode.AutoOrient,
                     _ => EnhanceMode.Clahe
                 };
             }
@@ -947,6 +948,10 @@ namespace ImgViewer.Models
                 method.Equals("Brightness/Contrast", StringComparison.OrdinalIgnoreCase) ||
                 method.Equals("Brightness and Contrast", StringComparison.OrdinalIgnoreCase))
                 return EnhanceMode.BrightnessContrast;
+            if (method.Equals("Auto orient", StringComparison.OrdinalIgnoreCase) ||
+                method.Equals("Auto-orient", StringComparison.OrdinalIgnoreCase) ||
+                method.Equals("Auto orientate", StringComparison.OrdinalIgnoreCase))
+                return EnhanceMode.AutoOrient;
 
             return EnhanceMode.Unknown;
         }
@@ -958,7 +963,8 @@ namespace ImgViewer.Models
             Retinex,
             Levels,
             ColorAdjust,
-            BrightnessContrast
+            BrightnessContrast,
+            AutoOrient
         }
 
 

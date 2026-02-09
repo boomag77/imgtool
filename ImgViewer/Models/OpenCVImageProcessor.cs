@@ -10,13 +10,18 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Tesseract;
 using static ImgViewer.Models.BordersRemover;
+using ImageFormat = ImgViewer.Interfaces.ImageFormat;
+using Rect = OpenCvSharp.Rect;
 
 namespace ImgViewer.Models
 {
     public class OpenCvImageProcessor : IImageProcessor, IDisposable
     {
         private byte[]? _binaryBuffer;
+
+        private readonly TesseractEngine? _tesseractOsdEngine;
 
         private Mat _currentImage;
         private readonly IAppManager _appManager;
@@ -151,6 +156,19 @@ namespace ImgViewer.Models
             if (appManager == null)
                 Cv2.SetNumThreads(cvNumThreads); // force single-threaded if no app manager (e.g. unit tests)
             //Debug.WriteLine($"[OpenCvImageProcessor] Initialized with Cv2.GetNumThreads()={Cv2.GetNumThreads()}");
+
+            try
+            {
+                var tessDataPath = Path.Combine(AppContext.BaseDirectory, "tessdata");
+                _tesseractOsdEngine = new TesseractEngine(tessDataPath, "osd+eng", EngineMode.Default);
+            }
+            catch (Exception ex)
+            {
+                var msg = $"[Tesseract] Failed to initialize: {ex}";
+                ErrorOccured?.Invoke(msg);
+                Debug.WriteLine(msg);
+                _tesseractOsdEngine = null;
+            }
 
             try
             {
@@ -321,6 +339,7 @@ namespace ImgViewer.Models
         public void Dispose()
         {
             _docBoundaryModel?.Dispose();
+            _tesseractOsdEngine?.Dispose();
             //_onnxCts.Dispose();
             lock (_imageLock)
             {
@@ -1978,6 +1997,23 @@ namespace ImgViewer.Models
                 bool isBrightnessContrast = methodName.Equals("Brightness & Contrast", StringComparison.OrdinalIgnoreCase) ||
                                             methodName.Equals("Brightness/Contrast", StringComparison.OrdinalIgnoreCase) ||
                                             methodName.Equals("Brightness and Contrast", StringComparison.OrdinalIgnoreCase);
+                bool isAutoOrient = methodName.Equals("Auto orient", StringComparison.OrdinalIgnoreCase) ||
+                                    methodName.Equals("Auto-orient", StringComparison.OrdinalIgnoreCase) ||
+                                    methodName.Equals("Auto orientate", StringComparison.OrdinalIgnoreCase);
+
+                if (isAutoOrient)
+                {
+                    if (_tesseractOsdEngine == null)
+                    {
+                        result = src.Clone();
+                        return true;
+                    }
+
+                    var orienter = new TextAwareOrienter(token, _tesseractOsdEngine);
+                    var oriented = orienter.Orient(src);
+                    result = ReferenceEquals(oriented, src) ? src.Clone() : oriented;
+                    return true;
+                }
 
                 if (isRetinex)
                 {
