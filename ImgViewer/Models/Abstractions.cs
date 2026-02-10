@@ -4,6 +4,22 @@ using System.Buffers;
 
 namespace ImgViewer.Models
 {
+    public struct ResizeParameters
+    {
+        public int MaxWidth { get; init; }
+        public int MaxHeight { get; init; }
+        public bool KeepAspectRatio { get; init; }
+        public ResizeMethod Method { get; init; }
+    }
+
+    public enum ResizeMethod
+    {
+        NearestNeighbor,
+        Bilinear,
+        Bicubic,
+        Lanczos4
+    }
+
 
     public enum PipelineOperationType
     {

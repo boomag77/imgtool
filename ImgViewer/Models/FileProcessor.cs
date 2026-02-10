@@ -10,11 +10,15 @@ using System.Security;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Printing.IndexedProperties;
 
 namespace ImgViewer.Models
 {
     internal class FileProcessor : IFileProcessor, IDisposable
     {
+
+
+
         private CancellationToken _token;
 
         private static int _magickConfigured = 0;
@@ -122,6 +126,44 @@ namespace ImgViewer.Models
                 _magickGate.Release();
             }
         }
+
+        public bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers)
+        {
+            try
+            {
+                foreach (var folderPath in folderPaths)
+                {
+                    if (token.IsCancellationRequested) return false;
+                    if (!Directory.Exists(folderPath))
+                    {
+                        ErrorOccured?.Invoke($"Directory does not exist: {folderPath}");
+                        continue;
+                    }
+                    Parallel.ForEach(Directory.GetFiles(folderPath), new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = maxWorkers }, imagePath =>
+                    {
+                        // Здесь логика ресайза для каждого изображения
+                        // Например, можно вызвать метод ResizeImage(imagePath, parameters);
+                    });
+                }
+                
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Error resizing folders: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                // Здесь можно выполнить очистку ресурсов, если это необходимо
+            }
+        }
+
+
 
 
         private FileStream OpenReadShared(string path) =>
@@ -414,6 +456,7 @@ namespace ImgViewer.Models
 
 
         }
+
 
 
         public (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null)
