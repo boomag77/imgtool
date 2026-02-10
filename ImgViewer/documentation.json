@@ -205,7 +205,7 @@
   {
     "id": "enhance",
     "title": "Enhance",
-    "summary": "Boost contrast before binarizing or saving, using CLAHE, Homomorphic Retinex, or Levels & Gamma.",
+    "summary": "Boost contrast before binarizing or saving, using CLAHE, Homomorphic Retinex, Levels & Gamma, or Auto orient.",
     "paragraphs": [
       {
         "heading": "When to use it",
@@ -213,7 +213,11 @@
       },
       {
         "heading": "Choosing a method",
-        "body": "- `CLAHE` (Contrast Limited Adaptive Histogram Equalization) is the fast global option; great for lightly faded laser prints.\n- `Homomorphic Retinex` evens out heavy lighting gradients and yellowed paper by operating in log space.\n- `Levels & Gamma` is the manual \"classic levels\" tool for users who like precise percentile control.\nTip: switch methods before tuning sliders because each method shows different controls."
+        "body": "- `CLAHE` (Contrast Limited Adaptive Histogram Equalization) is the fast global option; great for lightly faded laser prints.\n- `Homomorphic Retinex` evens out heavy lighting gradients and yellowed paper by operating in log space.\n- `Levels & Gamma` is the manual \"classic levels\" tool for users who like precise percentile control.\n- `Auto orient` uses Tesseract OSD to rotate upside-down or sideways pages to upright orientation.\nTip: switch methods before tuning sliders because each method shows different controls."
+      },
+      {
+        "heading": "Auto orient recommendations",
+        "body": "- `Auto orient min confidence`: minimum OSD confidence required before applying rotation (range 1-20, step 0.5, default 4).\n- Lower values (1-4) are more permissive and help on faint scans; higher values (8-12) are safer for pages with little text or heavy graphics.\n- If orientation keeps flipping incorrectly on low-text pages, raise confidence; if it never rotates when it should, lower confidence."
       },
       {
         "heading": "CLAHE recommendations",

@@ -18,9 +18,9 @@ namespace ImgViewer.Models
             _engine = engine;
         }
 
-        public Mat Orient(Mat src)
+        public Mat Orient(Mat src, double minConfidence = 4.0)
         {
-            int orientation = GetOrientation(src);
+            int orientation = GetOrientation(src, minConfidence);
             return Rotate(src, orientation);
         }
 
@@ -47,7 +47,7 @@ namespace ImgViewer.Models
 
 
         //returns orientation in degrees (0, 90, 180, 270) or 0 if confidence is low
-        private int GetOrientation(Mat src, int minConfidence = 5)
+        public int GetOrientation(Mat src, double minConfidence = 4.0)
         {
             //using var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
             if (!TryConvertMatToPix(src, out Pix? pixSrc) || pixSrc is null)

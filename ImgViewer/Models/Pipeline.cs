@@ -127,7 +127,7 @@ public class Pipeline
                         buttonText,
                         new[]
                         {
-                            new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments", "Perspective" }, 0),
+                            new PipeLineParameter("Algorithm", "deskewAlgorithm", new [] { "Auto", "ByBorders", "Hough", "Projection", "PCA", "Moments", "Perspective", "Text aware" }, 0),
                             new PipeLineParameter("cannyTresh1", "cannyTresh1", 50, 10, 250, 1),
                             new PipeLineParameter("cannyTresh2", "cannyTresh2", 150, 10, 250, 1),
                             new PipeLineParameter("Morph kernel", "morphKernel", 5, 1, 10, 1),
@@ -399,6 +399,7 @@ public class Pipeline
                         new[]
                         {
                             new PipeLineParameter("Method", "enhanceMethod", new [] {"CLAHE", "Homomorphic Retinex", "Levels & Gamma", "Color Adjust", "Brightness & Contrast", "Auto orient"}, 0),
+                            new PipeLineParameter("Auto orient min confidence", "autoOrientMinConfidence", 4.0, 1.0, 20.0, 0.5),
                             new PipeLineParameter("CLAHE Clip Limit", "claheClipLimit", 4.0, 0.5, 12.0, 0.1),
                             new PipeLineParameter("CLAHE Grid Size", "claheGridSize", 8, 2, 64, 1),
                             new PipeLineParameter("Retinex Output Mode", "retinexOutputMode", new [] { "LogHighpass", "ReconstructExp" }, 0),

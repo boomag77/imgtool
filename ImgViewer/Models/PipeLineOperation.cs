@@ -808,6 +808,9 @@ namespace ImgViewer.Models
                     case "contrast":
                         parameter.IsVisible = mode == EnhanceMode.BrightnessContrast;
                         break;
+                    case "autoOrientMinConfidence":
+                        parameter.IsVisible = mode == EnhanceMode.AutoOrient;
+                        break;
                     default:
                         break;
                 }

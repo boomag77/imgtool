@@ -2009,8 +2009,20 @@ namespace ImgViewer.Models
                         return true;
                     }
 
+                    double autoOrientMinConfidence = 4.0;
+                    if (parameters.TryGetValue("autoOrientMinConfidence", out var confObj))
+                    {
+                        autoOrientMinConfidence = SafeDouble(confObj, autoOrientMinConfidence);
+                    }
+                    else if (parameters.TryGetValue("autoOrientMainConfidence", out var legacyConfObj))
+                    {
+                        // Backward compatibility for previously saved pipelines.
+                        autoOrientMinConfidence = SafeDouble(legacyConfObj, autoOrientMinConfidence);
+                    }
+                    autoOrientMinConfidence = Math.Max(1.0, Math.Min(20.0, autoOrientMinConfidence));
+
                     var orienter = new TextAwareOrienter(token, _tesseractOsdEngine);
-                    var oriented = orienter.Orient(src);
+                    var oriented = orienter.Orient(src, autoOrientMinConfidence);
                     result = ReferenceEquals(oriented, src) ? src.Clone() : oriented;
                     return true;
                 }
@@ -3526,6 +3538,43 @@ namespace ImgViewer.Models
         {
             if (src == null || src.Empty()) return new Mat();
 
+            string deskewAlgorithm = "Auto";
+            if (parameters != null && parameters.TryGetValue("deskewAlgorithm", out var algoObj))
+                deskewAlgorithm = algoObj?.ToString() ?? "Auto";
+
+            bool isTextAware = deskewAlgorithm.Equals("Text aware", StringComparison.OrdinalIgnoreCase) ||
+                               deskewAlgorithm.Equals("Text-aware", StringComparison.OrdinalIgnoreCase);
+
+            if (isTextAware)
+            {
+                try
+                {
+                    if (_tesseractOsdEngine == null)
+                    {
+                        return src.Clone();
+                    }
+
+                    var orienter = new TextAwareOrienter(_token, _tesseractOsdEngine);
+                    double angle = orienter.GetDeskewAngle(src);
+
+                    if (double.IsNaN(angle) || double.IsInfinity(angle) || Math.Abs(angle) < 0.005)
+                        return src.Clone();
+
+                    // Tesseract deskew angle is page skew; rotate opposite to deskew.
+                    return Rotate(src, angle);
+                }
+                catch (OperationCanceledException)
+                {
+                    string logMessage = "Deskew (Text aware) operation cancelled.";
+                    Debug.WriteLine(logMessage);
+                    return src.Clone();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error while Deskew (Text aware): {ex.Message}");
+                    return src.Clone();
+                }
+            }
 
             var p = new Deskewer.Parameters();
 
@@ -3547,6 +3596,38 @@ namespace ImgViewer.Models
                 return src.Clone();
             }
 
+        }
+
+        private Mat Rotate(Mat src, double angle)
+        {
+            if (src == null || src.Empty())
+                return src?.Clone() ?? new Mat();
+
+            if (double.IsNaN(angle) || double.IsInfinity(angle) || Math.Abs(angle) < 0.005)
+                return src.Clone();
+
+            var center = new Point2f(src.Width / 2f, src.Height / 2f);
+            var rotationMat = Cv2.GetRotationMatrix2D(center, angle, 1.0);
+
+            double absCos = Math.Abs(rotationMat.At<double>(0, 0));
+            double absSin = Math.Abs(rotationMat.At<double>(0, 1));
+            int boundW = (int)Math.Round(src.Height * absSin + src.Width * absCos);
+            int boundH = (int)Math.Round(src.Height * absCos + src.Width * absSin);
+
+            rotationMat.Set(0, 2, rotationMat.At<double>(0, 2) + boundW / 2.0 - center.X);
+            rotationMat.Set(1, 2, rotationMat.At<double>(1, 2) + boundH / 2.0 - center.Y);
+
+            var dst = new Mat();
+            Cv2.WarpAffine(
+                src,
+                dst,
+                rotationMat,
+                new OpenCvSharp.Size(boundW, boundH),
+                InterpolationFlags.Linear,
+                BorderTypes.Constant,
+                Scalar.All(255));
+
+            return dst;
         }
 
 
