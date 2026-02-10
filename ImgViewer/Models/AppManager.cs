@@ -717,6 +717,11 @@ namespace ImgViewer.Models
             }
         }
 
+        public Task<bool> ResizeFolders(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers, Action<int, int, string?>? progress = null)
+        {
+            return Task.Run(() => _fileProcessor.TryResizeImagesIn(folderPaths, parameters, token, maxWorkers, progress), token);
+        }
+
         public async Task ProcessFolder(string srcFolder)
         {
             _rootFolderCts?.Cancel();

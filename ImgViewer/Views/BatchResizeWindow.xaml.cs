@@ -1,0 +1,154 @@
+using ImgViewer.Interfaces;
+using ImgViewer.Models;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Windows;
+
+namespace ImgViewer.Views
+{
+    public partial class BatchResizeWindow : Window
+    {
+        private readonly IAppManager _appManager;
+        private readonly ObservableCollection<string> _folders = new();
+        private bool _isRunning;
+
+        public BatchResizeWindow(IAppManager appManager)
+        {
+            InitializeComponent();
+
+            _appManager = appManager;
+            FoldersListBox.ItemsSource = _folders;
+            ResizeMethodComboBox.ItemsSource = Enum.GetValues(typeof(ResizeMethod)).Cast<ResizeMethod>();
+            ResizeMethodComboBox.SelectedItem = ResizeMethod.NearestNeighbor;
+        }
+
+        private void AddFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                CheckFileExists = false,
+                CheckPathExists = true,
+                ValidateNames = false,
+                FileName = "Select folder"
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            string? selectedFolder = Path.GetDirectoryName(dialog.FileName);
+            if (string.IsNullOrWhiteSpace(selectedFolder))
+                return;
+
+            if (_folders.Any(f => string.Equals(f, selectedFolder, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            _folders.Add(selectedFolder);
+        }
+
+        private void RemoveSelectedFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (FoldersListBox.SelectedItem is string selected)
+            {
+                _folders.Remove(selected);
+            }
+        }
+
+        private void ClearFolders_Click(object sender, RoutedEventArgs e)
+        {
+            _folders.Clear();
+        }
+
+        private async void StartResize_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning)
+                return;
+
+            if (_folders.Count == 0)
+            {
+                MessageBox.Show("Add at least one folder.", "Batch resize", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!int.TryParse(LongestDimensionTextBox.Text?.Trim(), out int longestDimension) || longestDimension <= 0)
+            {
+                MessageBox.Show("Longest dimension must be a positive integer.", "Batch resize", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (ResizeMethodComboBox.SelectedItem is not ResizeMethod method)
+            {
+                MessageBox.Show("Select resize method.", "Batch resize", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var parameters = new ResizeParameters
+            {
+                MaxWidth = longestDimension,
+                MaxHeight = longestDimension,
+                KeepAspectRatio = true,
+                Method = method
+            };
+
+            _isRunning = true;
+            StartResizeButton.IsEnabled = false;
+
+            using var cts = new CancellationTokenSource();
+            var progressWindow = new ResizeProgressWindow
+            {
+                Owner = this
+            };
+            progressWindow.Show();
+
+            try
+            {
+                bool success = await _appManager.ResizeFolders(
+                    _folders.ToArray(),
+                    parameters,
+                    cts.Token,
+                    Math.Max(1, Environment.ProcessorCount - 1),
+                    (processed, total, currentFile) =>
+                    {
+                        Dispatcher.InvokeAsync(() =>
+                        {
+                            if (progressWindow.IsLoaded)
+                                progressWindow.UpdateProgress(processed, total, currentFile);
+                        });
+                    });
+
+                if (progressWindow.IsLoaded)
+                    progressWindow.Close();
+
+                MessageBox.Show(
+                    success ? "Batch resizing finished." : "Batch resizing finished with errors.",
+                    "Batch resize",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                if (progressWindow.IsLoaded)
+                    progressWindow.Close();
+
+                MessageBox.Show(
+                    $"Batch resizing failed: {ex.Message}",
+                    "Batch resize",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                _isRunning = false;
+                StartResizeButton.IsEnabled = true;
+            }
+        }
+
+        private void Close_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isRunning)
+                return;
+
+            Close();
+        }
+    }
+}

@@ -950,11 +950,11 @@ namespace ImgViewer.Views
 
         private void BatchResizeInside_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show(
-                "Batch resize is not implemented yet.",
-                "Tools",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            var window = new BatchResizeWindow(_manager)
+            {
+                Owner = this
+            };
+            window.ShowDialog();
         }
 
         private void OperationHelpButton_Click(object sender, RoutedEventArgs e)

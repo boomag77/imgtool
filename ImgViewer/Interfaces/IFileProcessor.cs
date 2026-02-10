@@ -15,7 +15,7 @@ namespace ImgViewer.Interfaces
 
         void SaveBytesToFile(ReadOnlySpan<byte> bytes, string path);
 
-        bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers);
+        bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers, Action<int, int, string?>? progress = null);
 
         public IEnumerable<string> EnumerateSubFolderPaths(string rootFolderPath, bool fullTree, CancellationToken token);
 

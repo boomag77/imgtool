@@ -11,7 +11,6 @@ using System.Security;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 using DrawingImageFormat = System.Drawing.Imaging.ImageFormat;
 
 namespace ImgViewer.Models
@@ -129,29 +128,71 @@ namespace ImgViewer.Models
             }
         }
 
-        public bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers)
+        public bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers, Action<int, int, string?>? progress = null)
         {
             var decoder = new WpfPixelDecoder();
             var resizer = new ImageResizer();
             try
             {
-                foreach (var folderPath in folderPaths)
+                bool IsSupportedImagePath(string path)
                 {
-                    if (token.IsCancellationRequested) return false;
+                    var ext = Path.GetExtension(path);
+                    if (string.IsNullOrWhiteSpace(ext))
+                        return false;
+
+                    return ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                           ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                           ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+                           ext.Equals(".bmp", StringComparison.OrdinalIgnoreCase) ||
+                           ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
+                           ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase);
+                }
+
+                var filesToResize = new List<(string SourcePath, string DestFolder)>();
+                foreach (var folderPath in folderPaths ?? Array.Empty<string>())
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (string.IsNullOrWhiteSpace(folderPath))
+                        continue;
                     if (!Directory.Exists(folderPath))
                     {
                         ErrorOccured?.Invoke($"Directory does not exist: {folderPath}");
                         continue;
                     }
-                    string parentDir = System.IO.Path.GetDirectoryName(folderPath);
-                    var resizedFolder = System.IO.Path.Combine(parentDir!, "_resized");
+
+                    var parentDir = Path.GetDirectoryName(folderPath);
+                    var resizedDirName = Path.GetFileName(folderPath) + "_resized";
+                    var resizedFolder = parentDir != null ? Path.Combine(parentDir, resizedDirName) : folderPath + "_resized";
                     Directory.CreateDirectory(resizedFolder);
 
-                    Parallel.ForEach(Directory.GetFiles(folderPath), new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = maxWorkers }, imagePath =>
+                    foreach (var imagePath in Directory.EnumerateFiles(folderPath))
                     {
-                        if (!decoder.TryDecodeToBgra32(imagePath, out int w, out int h, out int stride, out var inOwner, out var fail))
+                        if (!IsSupportedImagePath(imagePath))
+                            continue;
+                        filesToResize.Add((imagePath, resizedFolder));
+                    }
+                }
+
+                int total = filesToResize.Count;
+                int processed = 0;
+                progress?.Invoke(0, total, null);
+
+                Parallel.ForEach(
+                    filesToResize,
+                    new ParallelOptions
+                    {
+                        CancellationToken = token,
+                        MaxDegreeOfParallelism = Math.Max(1, maxWorkers)
+                    },
+                    item =>
+                    {
+                        string imagePath = item.SourcePath;
+                        var imageSource = LoadImageSource(imagePath, isBatch: false);
+                        if (!decoder.TryDecodeToBgra32(imageSource.Item1, out int w, out int h, out int stride, out var inOwner, out var fail))
                         {
                             ErrorOccured?.Invoke($"Decode fail: {imagePath}. Reason: {fail}");
+                            int failProcessed = Interlocked.Increment(ref processed);
+                            progress?.Invoke(failProcessed, total, imagePath);
                             return;
                         }
 
@@ -163,15 +204,25 @@ namespace ImgViewer.Models
                                                         out var outOwner, out int outW, out int outH, out int outStride))
                             {
                                 ErrorOccured?.Invoke($"Resize fail: {imagePath}. Reason: unknown.");
+                                int failProcessed = Interlocked.Increment(ref processed);
+                                progress?.Invoke(failProcessed, total, imagePath);
                                 return;
                             }
                             using (outOwner!)
                             {
-                                string originalFileName = System.IO.Path.GetFileName(imagePath);
-                                string resizedFilePath = System.IO.Path.Combine(resizedFolder, originalFileName);
+                                string originalFileName = Path.GetFileName(imagePath);
+                                string originalExtension = Path.GetExtension(imagePath);
+                                string resizedFilePath = Path.Combine(item.DestFolder, originalFileName);
 
                                 var bmpSource = BitmapSource.Create(outW, outH, 96, 96, PixelFormats.Bgra32, null, outOwner!.Memory.ToArray(), outStride);
-                                var encoder = new PngBitmapEncoder();
+                                BitmapEncoder encoder = originalExtension.ToLowerInvariant() switch
+                                {
+                                    ".jpg" or ".jpeg" => new JpegBitmapEncoder(),
+                                    ".png" => new PngBitmapEncoder(),
+                                    ".bmp" => new BmpBitmapEncoder(),
+                                    ".tif" or ".tiff" => new TiffBitmapEncoder(),
+                                    _ => new PngBitmapEncoder() // default to PNG if somehow unsupported
+                                };
                                 encoder.Frames.Add(BitmapFrame.Create(bmpSource));
                                 using var fs = new FileStream(resizedFilePath, FileMode.Create);
                                 encoder.Save(fs);
@@ -179,9 +230,10 @@ namespace ImgViewer.Models
 
                         }
 
+                        int done = Interlocked.Increment(ref processed);
+                        progress?.Invoke(done, total, imagePath);
                     });
-                }
-                
+
                 return true;
             }
             catch (OperationCanceledException)
