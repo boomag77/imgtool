@@ -728,7 +728,11 @@
               VerticalAlignment="Center"
               Margin="6,0,0,0"/>
                     </Grid>
-                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="Batch resize"
+                          Click="BatchResizeInside_Click"/>
+            </MenuItem>
             <MenuItem Header="_Help"
                       Click="DocumentationMenu_Click"/>
         </Menu>

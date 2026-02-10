@@ -948,6 +948,15 @@ namespace ImgViewer.Views
             OpenDocumentationWindow(sectionId: null);
         }
 
+        private void BatchResizeInside_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Batch resize is not implemented yet.",
+                "Tools",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
         private void OperationHelpButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement fe && fe.DataContext is PipelineOperation operation)
