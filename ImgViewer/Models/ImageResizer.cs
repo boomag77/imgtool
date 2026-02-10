@@ -27,6 +27,10 @@ namespace ImgViewer.Models
             public ResizeMethod Method;
         }
 
+        public ImageResizer()
+        {
+        }
+
         public bool TryResizeImage(ReadOnlyMemory<byte> inputPixels,
                                    int inputWidth, int inputHeight, int inputStrideBytes,
                                    int requestedOutputWidth, int requestedOutputHeight, bool keepAspectRatio,

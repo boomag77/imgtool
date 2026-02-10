@@ -1,16 +1,18 @@
 ﻿using BitMiracle.LibTiff.Classic;
 using ImageMagick;
 using ImgViewer.Interfaces;
+using System.Buffers;
 using System.Diagnostics;
 using System.Drawing;
-using DrawingImageFormat = System.Drawing.Imaging.ImageFormat;
 using System.IO;
+using System.Printing.IndexedProperties;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Printing.IndexedProperties;
+using System.Windows.Shapes;
+using DrawingImageFormat = System.Drawing.Imaging.ImageFormat;
 
 namespace ImgViewer.Models
 {
@@ -129,6 +131,8 @@ namespace ImgViewer.Models
 
         public bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers)
         {
+            var decoder = new WpfPixelDecoder();
+            var resizer = new ImageResizer();
             try
             {
                 foreach (var folderPath in folderPaths)
@@ -139,10 +143,42 @@ namespace ImgViewer.Models
                         ErrorOccured?.Invoke($"Directory does not exist: {folderPath}");
                         continue;
                     }
+                    string parentDir = System.IO.Path.GetDirectoryName(folderPath);
+                    var resizedFolder = System.IO.Path.Combine(parentDir!, "_resized");
+                    Directory.CreateDirectory(resizedFolder);
+
                     Parallel.ForEach(Directory.GetFiles(folderPath), new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = maxWorkers }, imagePath =>
                     {
-                        // Здесь логика ресайза для каждого изображения
-                        // Например, можно вызвать метод ResizeImage(imagePath, parameters);
+                        if (!decoder.TryDecodeToBgra32(imagePath, out int w, out int h, out int stride, out var inOwner, out var fail))
+                        {
+                            ErrorOccured?.Invoke($"Decode fail: {imagePath}. Reason: {fail}");
+                            return;
+                        }
+
+                        using (inOwner!)
+                        {
+                            if (!resizer.TryResizeImage(inOwner!.Memory, w, h, stride,
+                                                        (int)parameters.MaxWidth, (int)parameters.MaxHeight, parameters.KeepAspectRatio, 4,
+                                                        parameters.Method,
+                                                        out var outOwner, out int outW, out int outH, out int outStride))
+                            {
+                                ErrorOccured?.Invoke($"Resize fail: {imagePath}. Reason: unknown.");
+                                return;
+                            }
+                            using (outOwner!)
+                            {
+                                string originalFileName = System.IO.Path.GetFileName(imagePath);
+                                string resizedFilePath = System.IO.Path.Combine(resizedFolder, originalFileName);
+
+                                var bmpSource = BitmapSource.Create(outW, outH, 96, 96, PixelFormats.Bgra32, null, outOwner!.Memory.ToArray(), outStride);
+                                var encoder = new PngBitmapEncoder();
+                                encoder.Frames.Add(BitmapFrame.Create(bmpSource));
+                                using var fs = new FileStream(resizedFilePath, FileMode.Create);
+                                encoder.Save(fs);
+                            }
+
+                        }
+
                     });
                 }
                 
@@ -160,6 +196,7 @@ namespace ImgViewer.Models
             finally
             {
                 // Здесь можно выполнить очистку ресурсов, если это необходимо
+                ; // Принудительно очистить пул памяти
             }
         }
 
@@ -457,6 +494,34 @@ namespace ImgViewer.Models
 
         }
 
+        private bool TryLoadBytes(string path, out byte[] bytes, out string? fail)
+        {
+            bytes = Array.Empty<byte>();
+            fail = null;
+            try
+            {
+                _token.ThrowIfCancellationRequested();
+                var loaded = LoadImageSource(path, isBatch: true);
+                if (loaded.Item2 == null || loaded.Item2.Length == 0)
+                {
+                    fail = "No bytes returned by batch loader.";
+                    return false;
+                }
+
+                bytes = loaded.Item2;
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                fail = ex.GetType().Name + ": " + ex.Message;
+                ErrorOccured?.Invoke($"Failed to load bytes for {path}: {fail}");
+                return false;
+            }
+        }
 
 
         public (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null)
