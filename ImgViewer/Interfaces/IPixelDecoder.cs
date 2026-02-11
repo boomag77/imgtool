@@ -13,6 +13,8 @@ namespace ImgViewer.Interfaces
                                 out int width,
                                 out int height,
                                 out int strideBytes,
+                                out double dpiX,
+                                out double dpiY,
                                 out IMemoryOwner<byte>? pixelsOwner,
                                 out string? fail);
     }

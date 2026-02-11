@@ -9,7 +9,10 @@ namespace ImgViewer.Models
 {
     public sealed class WpfPixelDecoder : IPixelDecoder
     {
-        public bool TryDecodeToBgra32(ImageSource imageSource, out int width, out int height, out int strideBytes, out IMemoryOwner<byte>? pixelsOwner, out string? fail)
+        public bool TryDecodeToBgra32(ImageSource imageSource,
+                                        out int width, out int height, out int strideBytes,
+                                        out double dpiX, out double dpiY,
+                                        out IMemoryOwner<byte>? pixelsOwner, out string? fail)
         {
             try
             {
@@ -17,6 +20,7 @@ namespace ImgViewer.Models
                 if (src == null)
                 {
                     width = height = strideBytes = 0;
+                    dpiX = dpiY = 0;
                     pixelsOwner = null;
                     fail = "Invalid image source.";
                     return false;
@@ -24,6 +28,8 @@ namespace ImgViewer.Models
 
                 width = src.PixelWidth;
                 height = src.PixelHeight;
+                dpiX = src.DpiX;
+                dpiY = src.DpiY;
 
                 if (src.Format != PixelFormats.Bgra32)
                 {
@@ -52,6 +58,7 @@ namespace ImgViewer.Models
             catch (Exception ex)
             {
                 width = height = strideBytes = 0;
+                dpiX = dpiY = 0;
                 pixelsOwner = null;
                 fail = ex.Message;
                 return false;

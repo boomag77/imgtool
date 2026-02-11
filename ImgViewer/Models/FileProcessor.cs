@@ -193,7 +193,10 @@ namespace ImgViewer.Models
                         var resizer = resizerTL.Value!;
                         string imagePath = item.SourcePath;
                         var imageSource = LoadImageSource(imagePath, isBatch: false);
-                        if (!decoder.TryDecodeToBgra32(imageSource.Item1, out int w, out int h, out int stride, out var inOwner, out var fail))
+                        if (!decoder.TryDecodeToBgra32(imageSource.Item1,
+                                                        out int w, out int h, out int stride,
+                                                        out double dpiX, out double dpiY,
+                                                        out var inOwner, out var fail))
                         {
                             ErrorOccured?.Invoke($"Decode fail: {imagePath}. Reason: {fail}");
                             int failProcessed = Interlocked.Increment(ref processed);
@@ -220,7 +223,7 @@ namespace ImgViewer.Models
                                 string resizedFilePath = Path.Combine(item.DestFolder, originalFileName);
 
                                 var pixelSpan = outOwner!.Memory.Span.Slice(0, outStride * outH);
-                                var bmpSource = CreateBitmapSourceFromBgra32(pixelSpan, outW, outH, outStride);
+                                var bmpSource = CreateBitmapSourceFromBgra32(pixelSpan, outW, outH, outStride, dpiX, dpiY);
 
                                 int jpegQuality = Math.Max(1, Math.Min(100, parameters.JpegQuality <= 0 ? 90 : parameters.JpegQuality));
 
@@ -262,10 +265,13 @@ namespace ImgViewer.Models
             }
         }
 
-        static unsafe BitmapSource CreateBitmapSourceFromBgra32(
-                                                                ReadOnlySpan<byte> pixels, int width, int height, int strideBytes)
+        private static unsafe BitmapSource CreateBitmapSourceFromBgra32(
+                                                                ReadOnlySpan<byte> pixels, int width, int height, int strideBytes,
+                                                                double dpiX, double dpiY)
         {
-            var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+            if (dpiX <= 0) dpiX = 96;
+            if (dpiY <= 0) dpiY = 96;
+            var wb = new WriteableBitmap(width, height, dpiX, dpiY, PixelFormats.Bgra32, null);
 
             fixed (byte* p = pixels)
             {

@@ -11,6 +11,8 @@ namespace ImgViewer.Models
         public bool KeepAspectRatio { get; init; }
         public ResizeMethod Method { get; init; }
         public int JpegQuality { get; init; }
+        public double dpiX { get; init; }
+        public double dpiY { get; init; }
     }
 
     public enum ResizeMethod
