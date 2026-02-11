@@ -29,7 +29,7 @@ namespace ImgViewer.Models
                 {
                     src = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
                 }
-                strideBytes = (checked(width * 4 + 3) & ~3); // выравнивание stride до 4 байт (требование WPF)
+                strideBytes = (checked(width * 4 + 3) & ~3); 
                 int totalBytes = checked(strideBytes * height);
                 
 
