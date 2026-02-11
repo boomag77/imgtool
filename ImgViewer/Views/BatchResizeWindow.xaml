@@ -176,7 +176,7 @@
                              Grid.Row="0"
                              Grid.Column="1"
                              Style="{StaticResource InputTextBoxStyle}"
-                             Text="1920"/>
+                             Text="1024"/>
 
                     <TextBlock Grid.Row="0"
                                Grid.Column="3"
