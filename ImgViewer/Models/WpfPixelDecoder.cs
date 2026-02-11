@@ -1,9 +1,8 @@
 ﻿using ImgViewer.Interfaces;
-using System.IO;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Buffers;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Models
 {
@@ -35,9 +34,9 @@ namespace ImgViewer.Models
                 {
                     src = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
                 }
-                strideBytes = (checked(width * 4 + 3) & ~3); 
+                strideBytes = (checked(width * 4 + 3) & ~3);
                 int totalBytes = checked(strideBytes * height);
-                
+
 
                 pixelsOwner = MemoryPool<byte>.Shared.Rent(totalBytes);
                 var mem = pixelsOwner.Memory.Slice(0, totalBytes);
