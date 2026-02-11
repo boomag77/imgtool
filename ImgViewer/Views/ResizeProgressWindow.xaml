@@ -2,12 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Batch resize progress"
-        Height="170"
+        Height="210"
         Width="520"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -31,5 +32,13 @@
                    Margin="0,8,0,0"
                    Text=""
                    TextWrapping="Wrap"/>
+
+        <Button x:Name="CancelButton"
+                Grid.Row="3"
+                Content="Cancel"
+                Width="100"
+                HorizontalAlignment="Right"
+                Margin="0,10,0,0"
+                Click="CancelButton_Click"/>
     </Grid>
 </Window>

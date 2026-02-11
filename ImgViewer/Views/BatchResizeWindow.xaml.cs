@@ -82,12 +82,19 @@ namespace ImgViewer.Views
                 return;
             }
 
+            if (!int.TryParse(JpegQualityTextBox.Text?.Trim(), out int jpegQuality) || jpegQuality < 1 || jpegQuality > 100)
+            {
+                MessageBox.Show("JPG quality must be in range 1..100.", "Batch resize", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var parameters = new ResizeParameters
             {
                 MaxWidth = longestDimension,
                 MaxHeight = longestDimension,
                 KeepAspectRatio = true,
-                Method = method
+                Method = method,
+                JpegQuality = jpegQuality
             };
 
             _isRunning = true;
@@ -98,6 +105,11 @@ namespace ImgViewer.Views
             {
                 Owner = this
             };
+            progressWindow.CancelRequested += () =>
+            {
+                if (!cts.IsCancellationRequested)
+                    cts.Cancel();
+            };
             progressWindow.Show();
 
             try
@@ -106,7 +118,7 @@ namespace ImgViewer.Views
                     _folders.ToArray(),
                     parameters,
                     cts.Token,
-                    Math.Max(1, Environment.ProcessorCount - 1),
+                    Math.Max(1, Environment.ProcessorCount - 2),
                     (processed, total, currentFile) =>
                     {
                         Dispatcher.InvokeAsync(() =>
@@ -117,7 +129,7 @@ namespace ImgViewer.Views
                     });
 
                 if (progressWindow.IsLoaded)
-                    progressWindow.Close();
+                    progressWindow.CloseByOwner();
 
                 MessageBox.Show(
                     success ? "Batch resizing finished." : "Batch resizing finished with errors.",
@@ -128,7 +140,7 @@ namespace ImgViewer.Views
             catch (Exception ex)
             {
                 if (progressWindow.IsLoaded)
-                    progressWindow.Close();
+                    progressWindow.CloseByOwner();
 
                 MessageBox.Show(
                     $"Batch resizing failed: {ex.Message}",

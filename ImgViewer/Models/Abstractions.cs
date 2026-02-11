@@ -10,6 +10,7 @@ namespace ImgViewer.Models
         public int MaxHeight { get; init; }
         public bool KeepAspectRatio { get; init; }
         public ResizeMethod Method { get; init; }
+        public int JpegQuality { get; init; }
     }
 
     public enum ResizeMethod

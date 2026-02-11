@@ -8,6 +8,7 @@ using System.IO;
 using System.Printing.IndexedProperties;
 using System.Runtime.InteropServices;
 using System.Security;
+using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -130,8 +131,8 @@ namespace ImgViewer.Models
 
         public bool TryResizeImagesIn(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers, Action<int, int, string?>? progress = null)
         {
-            var decoder = new WpfPixelDecoder();
-            var resizer = new ImageResizer();
+            var decoderTL = new ThreadLocal<WpfPixelDecoder>(() => new WpfPixelDecoder());
+            var resizerTL = new ThreadLocal<ImageResizer>(() => new ImageResizer());
             try
             {
                 bool IsSupportedImagePath(string path)
@@ -177,6 +178,8 @@ namespace ImgViewer.Models
                 int processed = 0;
                 progress?.Invoke(0, total, null);
 
+                
+
                 Parallel.ForEach(
                     filesToResize,
                     new ParallelOptions
@@ -186,6 +189,8 @@ namespace ImgViewer.Models
                     },
                     item =>
                     {
+                        var decoder = decoderTL.Value!;
+                        var resizer = resizerTL.Value!;
                         string imagePath = item.SourcePath;
                         var imageSource = LoadImageSource(imagePath, isBatch: false);
                         if (!decoder.TryDecodeToBgra32(imageSource.Item1, out int w, out int h, out int stride, out var inOwner, out var fail))
@@ -214,10 +219,14 @@ namespace ImgViewer.Models
                                 string originalExtension = Path.GetExtension(imagePath);
                                 string resizedFilePath = Path.Combine(item.DestFolder, originalFileName);
 
-                                var bmpSource = BitmapSource.Create(outW, outH, 96, 96, PixelFormats.Bgra32, null, outOwner!.Memory.ToArray(), outStride);
+                                var pixelSpan = outOwner!.Memory.Span.Slice(0, outStride * outH);
+                                var bmpSource = CreateBitmapSourceFromBgra32(pixelSpan, outW, outH, outStride);
+
+                                int jpegQuality = Math.Max(1, Math.Min(100, parameters.JpegQuality <= 0 ? 90 : parameters.JpegQuality));
+
                                 BitmapEncoder encoder = originalExtension.ToLowerInvariant() switch
                                 {
-                                    ".jpg" or ".jpeg" => new JpegBitmapEncoder(),
+                                    ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = jpegQuality },
                                     ".png" => new PngBitmapEncoder(),
                                     ".bmp" => new BmpBitmapEncoder(),
                                     ".tif" or ".tiff" => new TiffBitmapEncoder(),
@@ -248,11 +257,28 @@ namespace ImgViewer.Models
             finally
             {
                 // Здесь можно выполнить очистку ресурсов, если это необходимо
-                ; // Принудительно очистить пул памяти
+                decoderTL.Dispose();
+                resizerTL.Dispose();
             }
         }
 
+        static unsafe BitmapSource CreateBitmapSourceFromBgra32(
+                                                                ReadOnlySpan<byte> pixels, int width, int height, int strideBytes)
+        {
+            var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
 
+            fixed (byte* p = pixels)
+            {
+                wb.WritePixels(
+                    new Int32Rect(0, 0, width, height),
+                    (IntPtr)p,
+                    strideBytes * height,   // bufferSize
+                    strideBytes);
+            }
+
+            wb.Freeze(); // IMPORTANT for Parallel / cross-thread usage
+            return wb;
+        }
 
 
         private FileStream OpenReadShared(string path) =>
