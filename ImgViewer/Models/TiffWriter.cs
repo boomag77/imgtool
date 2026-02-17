@@ -21,12 +21,15 @@ namespace ImgViewer.Models
 {
     public static class TiffWriter
     {
+        
+
         public static bool SaveNonCcittTiff(byte[] pixels,
                                     int width, int height, int bpp,
                                     TiffCompression compression, int dpi,
                                     string path, bool overwrite = true,
                                     bool photometricMinIsWhite = true,
                                     int jpegQuality = 95,
+                                    SubSamplingMode subSamplingMode = SubSamplingMode.NoSubsampling,
                                     string? metadataJson = null)
         {
             if (bpp < 8)
@@ -45,6 +48,24 @@ namespace ImgViewer.Models
                 else
                     throw new IOException($"File already exists: {path}");
             }
+
+            if (compression == TiffCompression.JPEG && bpp == 24)
+            {
+                var effectiveSsMode = NormalizeSubSampling(width, height, subSamplingMode);
+                if (effectiveSsMode != SubSamplingMode.NoSubsampling)
+                {
+                    return SaveJpegSubsampledWithEncodedStrips(
+                        pixels,
+                        width,
+                        height,
+                        dpi,
+                        path,
+                        Math.Clamp(jpegQuality, 1, 100),
+                        effectiveSsMode,
+                        metadataJson);
+                }
+            }
+
             var compressionMethod = compression switch
             {
                 TiffCompression.None => Compression.NONE,
@@ -77,18 +98,24 @@ namespace ImgViewer.Models
             tif.SetField(TiffTag.SAMPLESPERPIXEL, spp);
             if (bps == 8 && (compression == TiffCompression.LZW || compression == TiffCompression.Deflate))
                 tif.SetField(TiffTag.PREDICTOR, Predictor.HORIZONTAL);
-            tif.SetField(TiffTag.COMPRESSION, compressionMethod);
-            if (compression == TiffCompression.JPEG)
-            {
-                tif.SetField(TiffTag.JPEGQUALITY, Math.Clamp(jpegQuality, 1, 100));
-            }
+
             var photometric = (spp == 1) ? (photometricMinIsWhite ? Photometric.MINISWHITE : Photometric.MINISBLACK) :
                                (spp == 3 || spp == 4) ? Photometric.RGB :
                                throw new ArgumentException("Unsupported samples per pixel for photometric interpretation.");
             tif.SetField(TiffTag.PHOTOMETRIC, photometric);
+
+            tif.SetField(TiffTag.COMPRESSION, compressionMethod);
+            if (compression == TiffCompression.JPEG)
+                tif.SetField(TiffTag.JPEGQUALITY, Math.Clamp(jpegQuality, 1, 100));
+
             int rowsPerStrip = Math.Min(height, 128);
+
             tif.SetField(TiffTag.ROWSPERSTRIP, rowsPerStrip);
-            if (bpp > 8)
+            //if (bpp > 8)
+            //{
+            //    tif.SetField(TiffTag.PLANARCONFIG, PlanarConfig.CONTIG);
+            //}
+            if (spp > 1 || compression == TiffCompression.JPEG)
             {
                 tif.SetField(TiffTag.PLANARCONFIG, PlanarConfig.CONTIG);
             }
@@ -119,10 +146,130 @@ namespace ImgViewer.Models
                 if (!ok) throw new IOException($"WriteScanline failed at row {y}");
             }
 
-            return tif.WriteDirectory();
+            bool okFinal = tif.WriteDirectory();
+            if (!okFinal) throw new IOException("WriteDirectory failed after writing all scanlines.");
+
+            return okFinal;
         }
 
         // ---------------- helpers ----------------
+
+        static SubSamplingMode NormalizeSubSampling(int width, int height, SubSamplingMode requested)
+        {
+            var mode = requested;
+            if (mode == SubSamplingMode.SubSampling420 && ((width % 16) != 0 || (height % 16) != 0))
+                mode = SubSamplingMode.SubSampling422;
+            if (mode == SubSamplingMode.SubSampling422 && ((width % 16) != 0 || (height % 8) != 0))
+                mode = SubSamplingMode.NoSubsampling;
+            return mode;
+        }
+
+        private static int AlignUp(int value, int align)
+        {
+            if (align <= 1)
+                return value;
+
+            int rem = value % align;
+            if (rem == 0)
+                return value;
+
+            return checked(value + (align - rem));
+        }
+
+        private static bool SaveJpegSubsampledWithEncodedStrips(
+            byte[] pixels,
+            int width,
+            int height,
+            int dpi,
+            string path,
+            int jpegQuality,
+            SubSamplingMode subSamplingMode,
+            string? metadataJson)
+        {
+            if (subSamplingMode == SubSamplingMode.NoSubsampling)
+                throw new ArgumentException("Subsampled writer requires 4:2:2 or 4:2:0 mode.", nameof(subSamplingMode));
+
+            const int spp = 3;
+            const int bps = 8;
+            int rowBytes = checked(width * spp);
+            int requiredBytes = checked(rowBytes * height);
+            if (pixels.Length < requiredBytes)
+                throw new ArgumentException("Pixel data length is less than required for specified width, height, and bpp.");
+
+            using var tif = Tiff.Open(path, "w");
+            if (tif == null)
+                throw new InvalidOperationException("Cannot open output tiff.");
+
+            tif.SetField(TiffTag.IMAGEWIDTH, width);
+            tif.SetField(TiffTag.IMAGELENGTH, height);
+            tif.SetField(TiffTag.BITSPERSAMPLE, (short)bps);
+            tif.SetField(TiffTag.SAMPLESPERPIXEL, (short)spp);
+            tif.SetField(TiffTag.PHOTOMETRIC, Photometric.YCBCR);
+            tif.SetField(TiffTag.COMPRESSION, Compression.JPEG);
+            tif.SetField(TiffTag.JPEGQUALITY, Math.Clamp(jpegQuality, 1, 100));
+            tif.SetField(TiffTag.JPEGCOLORMODE, (short)1);
+            tif.SetField(TiffTag.PLANARCONFIG, PlanarConfig.CONTIG);
+
+            int mcuRows;
+            if (subSamplingMode == SubSamplingMode.SubSampling420)
+            {
+                tif.SetField(TiffTag.YCBCRSUBSAMPLING, (short)2, (short)2);
+                mcuRows = 16;
+            }
+            else
+            {
+                tif.SetField(TiffTag.YCBCRSUBSAMPLING, (short)2, (short)1);
+                mcuRows = 8;
+            }
+
+            int rowsPerStrip = AlignUp(Math.Min(height, 128), mcuRows);
+            if (rowsPerStrip <= 0)
+                rowsPerStrip = mcuRows;
+            tif.SetField(TiffTag.ROWSPERSTRIP, rowsPerStrip);
+
+            if (dpi > 0)
+            {
+                tif.SetField(TiffTag.XRESOLUTION, (double)dpi);
+                tif.SetField(TiffTag.YRESOLUTION, (double)dpi);
+                tif.SetField(TiffTag.RESOLUTIONUNIT, ResUnit.INCH);
+            }
+
+            if (!string.IsNullOrEmpty(metadataJson))
+                tif.SetField(TiffTag.IMAGEDESCRIPTION, metadataJson);
+
+            int stripCount = checked((height + rowsPerStrip - 1) / rowsPerStrip);
+            int stripBytes = checked(rowsPerStrip * rowBytes);
+            byte[] stripBuffer = new byte[stripBytes];
+
+            for (int stripIndex = 0; stripIndex < stripCount; stripIndex++)
+            {
+                int startRow = checked(stripIndex * rowsPerStrip);
+                int rowsThisStrip = Math.Min(rowsPerStrip, height - startRow);
+                int copyBytes = checked(rowsThisStrip * rowBytes);
+                int srcOffset = checked(startRow * rowBytes);
+
+                Buffer.BlockCopy(pixels, srcOffset, stripBuffer, 0, copyBytes);
+
+                if (rowsThisStrip < rowsPerStrip)
+                {
+                    int padSrcOffset = checked((startRow + rowsThisStrip - 1) * rowBytes);
+                    for (int r = rowsThisStrip; r < rowsPerStrip; r++)
+                    {
+                        Buffer.BlockCopy(pixels, padSrcOffset, stripBuffer, checked(r * rowBytes), rowBytes);
+                    }
+                }
+
+                int written = tif.WriteEncodedStrip(stripIndex, stripBuffer, 0, stripBytes);
+                if (written <= 0)
+                    throw new IOException($"WriteEncodedStrip failed at strip {stripIndex} (start row {startRow}).");
+            }
+
+            bool okFinal = tif.WriteDirectory();
+            if (!okFinal)
+                throw new IOException("WriteDirectory failed after writing all encoded strips.");
+
+            return true;
+        }
 
         // Convert System.Drawing.Bitmap to binary array (0 or 255 per pixel)
         // returns byte[] length = width*height row-major

@@ -1,0 +1,76 @@
+ImgViewer - Intelligent Document Image Processing Suite
+
+Product Overview
+ImgViewer is a Windows desktop application for high-volume document image cleanup, enhancement, and export. It combines a configurable visual pipeline with production-ready batch processing so teams can standardize scan quality, reduce manual editing time, and deliver archive-ready output at scale.
+
+Who It Is For
+- Archives, libraries, and records management teams
+- Legal, compliance, and back-office document operations
+- Service bureaus handling bulk scan cleanup
+- Any organization converting mixed-quality paper scans into searchable, clean digital assets
+
+Business Value
+- Faster throughput: Automates repetitive cleanup tasks across entire folders and folder trees
+- Consistent quality: Reusable pipeline presets reduce operator variability
+- Lower rework: Built-in preview and per-step tuning catch issues before batch runs
+- Flexible output strategy: Choose compression for smallest size, best quality, or compatibility
+
+Company Advantages
+- Reduced operating costs: Less manual page-by-page correction means lower labor spend per document set
+- Higher team productivity: Operators process more pages per shift using batch pipelines and reusable presets
+- Better SLA performance: Faster turnaround and fewer exceptions improve delivery reliability for internal and external clients
+- Improved quality control: Standardized workflows reduce inconsistency between employees, shifts, and sites
+- Lower business risk: Automatic logs and error reports improve traceability for audits and incident reviews
+- Easier onboarding: New staff can follow predefined pipelines instead of learning complex manual editing procedures
+- Scalable operations: Processing can expand from single folders to full repository trees without redesigning workflow
+- Stronger client confidence: Predictable output quality supports premium service positioning and long-term contracts
+
+Core Capabilities
+1. Visual Processing Pipeline
+- Drag-and-configure operations with live preview
+- Per-operation parameter controls and visibility rules
+- Save/load pipeline presets (.igpreset)
+- Optional pipeline metadata logging alongside batch outputs
+
+2. Document Cleanup Operations
+- Deskew (multiple algorithms: Auto, Borders, Hough, Projection, PCA, etc.)
+- Border removal (Auto, Integral, Contrast, Contours, Manual)
+- Binarization (Threshold, Adaptive, Sauvola, Majority)
+- Invert modes for photostat and masked inversion scenarios
+- Punch-hole removal (circle/rect/both)
+- Despeckle and line removal for cleaner OCR-ready pages
+- Smart Crop (U-Net / EAST-driven modes)
+- Enhance module (CLAHE, Homomorphic Retinex, Levels & Gamma, Auto Orient)
+- Split Page mode for book spreads with left/right output generation
+
+3. AI-Assisted Features (On-Device)
+- ONNX model integration for document boundary/cropping workflows
+- EAST text detection and Tesseract-assisted orientation/cropping logic
+- All models are used locally in the desktop app workflow (no cloud dependency in this project)
+
+4. Batch and Enterprise-Style Processing
+- Process single folders or whole root trees
+- Parallel worker architecture with progress reporting and cancellation
+- Existing-output conflict handling (Yes/No/Yes to All/No to All)
+- Automatic batch logs and error reports (_processing_log.txt, _batch_errors.txt)
+
+5. Format and Export Support
+- Input: .jpg, .jpeg, .png, .bmp, .gif, .tif, .tiff
+- Output workflows include TIFF, PNG, JPEG, and BMP
+- TIFF compression options: CCITT G3/G4, LZW, Deflate, JPEG, PackBits, None
+- JPEG-specific TIFF controls: Quality and chroma subsampling modes
+
+User Experience Highlights
+- Dual-pane workflow (original vs processed preview)
+- Built-in in-app documentation for each pipeline operation
+- Batch progress windows and per-folder status management
+- Persistent app settings for operational continuity
+
+Technology Profile
+- Platform: .NET Windows Desktop (WPF), x64
+- Image processing: OpenCV + LibTiff.NET + Magick.NET integrations
+- OCR/orientation components: Tesseract data included
+- Test project included for core processing validation and smoke checks
+
+Why Customers Buy ImgViewer
+ImgViewer delivers a practical balance of control and automation: operators can fine-tune edge cases when needed, while operations teams can run repeatable, high-volume pipelines with predictable output quality. It is well-suited for organizations that need dependable document image normalization without building custom tooling from scratch.

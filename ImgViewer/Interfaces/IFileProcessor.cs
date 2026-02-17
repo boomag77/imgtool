@@ -10,7 +10,7 @@ namespace ImgViewer.Interfaces
 
         (ImageSource?, byte[]?) LoadImageSource(string path, bool isBatch, uint? decodePixelWidth = null);
 
-        public void SaveTiff(TiffInfo tiffInfo, string path, bool overwrite = true, string? metadataJson = null);
+        public void SaveTiff(TiffInfo tiffInfo, string path, SubSamplingMode subSamplingMode, bool overwrite = true, int jpegQuality = 75, string? metadataJson = null);
         void SaveStreamToFile(MemoryStream stream, string path);
 
         void SaveBytesToFile(ReadOnlySpan<byte> bytes, string path);

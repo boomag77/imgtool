@@ -178,7 +178,7 @@ namespace ImgViewer.Models
                 int processed = 0;
                 progress?.Invoke(0, total, null);
 
-                
+
 
                 Parallel.ForEach(
                     filesToResize,
@@ -697,7 +697,7 @@ namespace ImgViewer.Models
         }
 
         // ImgWorkerPool uses this method to save CCITT TIFFs
-        public void SaveTiff(TiffInfo tiffInfo, string path, bool overwrite = true, string? metadataJson = null)
+        public void SaveTiff(TiffInfo tiffInfo, string path, SubSamplingMode subSamplingMode, bool overwrite = true, int jpegQuality = 75, string? metadataJson = null)
         {
             if (!IsValidPath(path))
             {
@@ -737,7 +737,8 @@ namespace ImgViewer.Models
                                     tiffInfo.Dpi,
                                     path,
                                     overwrite, false,
-                                    jpegQuality: 95,
+                                    jpegQuality: Math.Clamp(jpegQuality, 1, 100),
+                                    subSamplingMode,
                                     metadataJson
                     );
                     if (!ok)

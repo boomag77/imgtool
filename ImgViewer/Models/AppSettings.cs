@@ -7,6 +7,8 @@ namespace ImgViewer.Models
     internal class AppSettings : IDisposable
     {
         private TiffCompression _tiffCompression;
+        private int _tiffJpegQuality;
+        private SubSamplingMode _tiffSubSamplingMode;
         private string _lastOpenedFolder;
         private string _lastSavedFolder;
 
@@ -60,6 +62,8 @@ namespace ImgViewer.Models
         public AppSettings()
         {
             _tiffCompression = TiffCompression.CCITTG4;
+            _tiffJpegQuality = 75;
+            _tiffSubSamplingMode = SubSamplingMode.SubSampling422;
             _lastOpenedFolder = string.Empty;
             _lastSavedFolder = string.Empty;
             try
@@ -78,6 +82,26 @@ namespace ImgViewer.Models
             set
             {
                 _tiffCompression = value;
+                ScheduleSave();
+            }
+        }
+
+        public int TiffJpegQuality
+        {
+            get { return _tiffJpegQuality; }
+            set
+            {
+                _tiffJpegQuality = Math.Clamp(value, 1, 100);
+                ScheduleSave();
+            }
+        }
+
+        public SubSamplingMode TiffSubSamplingMode
+        {
+            get { return _tiffSubSamplingMode; }
+            set
+            {
+                _tiffSubSamplingMode = Enum.IsDefined(value) ? value : SubSamplingMode.SubSampling422;
                 ScheduleSave();
             }
         }
@@ -170,6 +194,8 @@ namespace ImgViewer.Models
                 var dto = new AppSettingsDto
                 {
                     TiffCompression = this.TiffCompression,
+                    TiffJpegQuality = this.TiffJpegQuality,
+                    TiffSubSamplingMode = this.TiffSubSamplingMode,
                     LastOpenedFolder = this.LastOpenedFolder,
                     LastSavedFolder = this.LastSavedFolder,
                     SavePipeLineToMd = this._savePipelineToMd,
@@ -216,6 +242,10 @@ namespace ImgViewer.Models
                 if (dto != null)
                 {
                     _tiffCompression = dto.TiffCompression;
+                    _tiffJpegQuality = dto.TiffJpegQuality is >= 1 and <= 100 ? dto.TiffJpegQuality : 75;
+                    _tiffSubSamplingMode = dto.TiffSubSamplingMode.HasValue && Enum.IsDefined(dto.TiffSubSamplingMode.Value)
+                        ? dto.TiffSubSamplingMode.Value
+                        : SubSamplingMode.SubSampling422;
                     _lastOpenedFolder = NormalizeFolder(dto.LastOpenedFolder);
                     _lastSavedFolder = NormalizeFolder(dto.LastSavedFolder);
                     _savePipelineToMd = dto.SavePipeLineToMd;
@@ -251,6 +281,8 @@ namespace ImgViewer.Models
         private class AppSettingsDto
         {
             public TiffCompression TiffCompression { get; set; }
+            public int TiffJpegQuality { get; set; }
+            public SubSamplingMode? TiffSubSamplingMode { get; set; }
             public string? LastOpenedFolder { get; set; }
             public string? LastSavedFolder { get; set; }
 

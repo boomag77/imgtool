@@ -23,6 +23,13 @@ namespace ImgViewer.Models
         Lanczos4
     }
 
+    public enum SubSamplingMode
+    {
+        NoSubsampling,
+        SubSampling422,
+        SubSampling420,
+    }
+
 
     public enum PipelineOperationType
     {

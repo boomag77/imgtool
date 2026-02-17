@@ -33,7 +33,9 @@ namespace ImgViewer.Models
         private readonly Channel<SourceImageFile> _filesCh;
         private readonly Channel<SaveTaskInfo> _saveCh;
 
-
+        private TiffCompression _tiffCompression;
+        private readonly int _jpegQuality;
+        private readonly SubSamplingMode _subSamplingMode;
 
         private readonly CancellationTokenSource _cts;
         private readonly CancellationToken _token;
@@ -88,6 +90,9 @@ namespace ImgViewer.Models
 
         public ImgWorkerPool(CancellationTokenSource cts,
                              Pipeline pipeline,
+                             TiffCompression tiffCompression,
+                             int jpegQuality,
+                             SubSamplingMode subSamplingMode,
                              int maxWorkersCount,
                              string sourceFolderPath,
                              int maxFilesQueue,
@@ -96,6 +101,9 @@ namespace ImgViewer.Models
                              Action<ExistingFilesChoice>? setExistingFilesChoice = null,
                              Action? onBatchCanceled = null)
         {
+            _tiffCompression = tiffCompression;
+            _jpegQuality = Math.Clamp(jpegQuality, 1, 100);
+            _subSamplingMode = subSamplingMode;
             _cts = cts;
             _token = _cts.Token;
             _getExistingFilesChoice = getExistingFilesChoice;
@@ -577,7 +585,8 @@ namespace ImgViewer.Models
                     var finalPath = saveTask.OutputFilePath;
                     var tempPath = string.Concat(finalPath, ".tmp");
                     currentOutputFile = finalPath;
-                    fileProc.SaveTiff(tiffInfo, tempPath, true, _plJson);
+                    tiffInfo.Compression = _tiffCompression;
+                    fileProc.SaveTiff(tiffInfo, tempPath, _subSamplingMode, true, _jpegQuality, _plJson);
                     File.Move(tempPath, finalPath, overwrite: true);
                 }
             }
@@ -720,7 +729,8 @@ namespace ImgViewer.Models
                     var outputFilePath = Path.Combine(_outputFolder, fileName);
                     try
                     {
-                        var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
+                        //var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
+                        var tiffInfo = imgProc.GetTiffInfo(_tiffCompression, 300);
                         var saveTask = new SaveTaskInfo
                         {
                             OutputFilePath = outputFilePath,

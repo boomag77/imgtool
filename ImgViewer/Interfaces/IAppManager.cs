@@ -8,6 +8,8 @@ namespace ImgViewer.Interfaces
     public interface IAppManager
     {
         public TiffCompression CurrentTiffCompression { get; set;  }
+        public int CurrentTiffJpegQuality { get; set; }
+        public SubSamplingMode CurrentTiffSubSamplingMode { get; set; }
         public string LastOpenedFolder { get; set; }
 
         public string LastSavedFolder { get; set; }

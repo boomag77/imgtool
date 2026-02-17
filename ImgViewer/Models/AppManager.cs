@@ -186,6 +186,18 @@ namespace ImgViewer.Models
             set { _appSettings.TiffCompression = value; }
         }
 
+        public int CurrentTiffJpegQuality
+        {
+            get { return _appSettings.TiffJpegQuality; }
+            set { _appSettings.TiffJpegQuality = Math.Clamp(value, 1, 100); }
+        }
+
+        public SubSamplingMode CurrentTiffSubSamplingMode
+        {
+            get { return _appSettings.TiffSubSamplingMode; }
+            set { _appSettings.TiffSubSamplingMode = value; }
+        }
+
         public string LastSavedFolder
         {
             get
@@ -460,7 +472,9 @@ namespace ImgViewer.Models
                 _fileProcessor.SaveTiff(
                     tiffInfo,
                     outputPath,
+                    _appSettings.TiffSubSamplingMode,
                     overwrite: true,
+                    jpegQuality: _appSettings.TiffJpegQuality,
                     metadataJson: null);
             }
             catch (Exception ex)
@@ -778,6 +792,9 @@ namespace ImgViewer.Models
                 using (var workerPool = new ImgWorkerPool(
                     _poolCts,
                     pipeline,
+                    _appSettings.TiffCompression,
+                    _appSettings.TiffJpegQuality,
+                    _appSettings.TiffSubSamplingMode,
                     0,
                     srcFolder,
                     0,

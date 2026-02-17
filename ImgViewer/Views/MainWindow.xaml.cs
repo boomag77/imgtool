@@ -1447,12 +1447,17 @@ namespace ImgViewer.Views
         {
 
 
-            var tiffOptionsWindow = new TiffSavingOptionsWindow();
+            var tiffOptionsWindow = new TiffSavingOptionsWindow(
+                _manager.CurrentTiffCompression,
+                _manager.CurrentTiffJpegQuality,
+                _manager.CurrentTiffSubSamplingMode);
             tiffOptionsWindow.Owner = this;
 
             if (tiffOptionsWindow.ShowDialog() == true)
             {
                 _manager.CurrentTiffCompression = tiffOptionsWindow.SelectedCompression;
+                _manager.CurrentTiffJpegQuality = tiffOptionsWindow.SelectedJpegQuality;
+                _manager.CurrentTiffSubSamplingMode = tiffOptionsWindow.SelectedSubSamplingMode;
                 _viewModel.TiffCompressionLabel = tiffOptionsWindow.SelectedCompression.ToString();
             }
             else
