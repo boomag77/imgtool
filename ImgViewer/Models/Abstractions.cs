@@ -57,6 +57,16 @@ namespace ImgViewer.Models
         public int Dpi { get; set; }
     }
 
+    public struct PngInfo
+    {
+        public IMemoryOwner<byte> MemoryOwner;
+        public int EncodedDataLength;
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int Quality { get; set; }
+        public int Dpi { get; set; }
+    }
+
     public sealed class TiffInfo : IDisposable
     {
         public byte[] Pixels { get; set; } = Array.Empty<byte>();

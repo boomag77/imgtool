@@ -2,6 +2,7 @@
 using ImgViewer.Models.Onnx;
 using OpenCvSharp;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -422,6 +423,133 @@ namespace ImgViewer.Models
             jpegInfo.Quality = quality;
             jpegInfo.Dpi = dpi;
             return jpegInfo;
+        }
+
+        public PngInfo GetPngInfo(int quality = 9, int dpi = 300)
+        {
+            var pngInfo = new PngInfo();
+            using var img = WorkingImage;
+            if (img == null || img.Empty())
+                throw new InvalidOperationException("WorkingImage is null or empty");
+            byte[] pngData = img.ImEncode(".png", new[]
+            {
+                new ImageEncodingParam(ImwriteFlags.PngCompression, Math.Clamp(quality, 0, 9)),
+            });
+            if (TrySetPngDpi(pngData, dpi, out var patched))
+                pngData = patched;
+
+            var pngDataLength  = pngData.Length;
+            Span<byte> pngSpan = pngData.AsSpan();
+            var owner = MemoryPool<byte>.Shared.Rent(pngDataLength);
+            pngSpan.CopyTo(owner.Memory.Span);
+            pngInfo.MemoryOwner = owner;
+            pngInfo.EncodedDataLength = pngDataLength;
+            pngInfo.Width = img.Width;
+            pngInfo.Height = img.Height;
+            pngInfo.Quality = quality;
+            pngInfo.Dpi = dpi;
+            return pngInfo;
+        }
+
+        private static ReadOnlySpan<byte> Sig => new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 };
+
+        private static bool TrySetPngDpi(ReadOnlySpan<byte> png, int dpi, out byte[] patched)
+        {
+            patched = Array.Empty<byte>();
+            if (dpi <= 0) return false;
+            if (png.Length < 8 || !png[..8].SequenceEqual(Sig)) return false;
+
+            // Convert DPI -> pixels per meter (pHYs uses meters)
+            uint ppm = (uint)Math.Clamp((int)Math.Round(dpi * 39.37007874015748), 1, int.MaxValue);
+
+            // Walk chunks; we will:
+            // - if pHYs exists -> replace its data and CRC in place (same length)
+            // - else insert pHYs after IHDR (recommended)
+            int pos = 8;
+            int ihdrEnd = -1;
+            int physStart = -1;
+
+            while (pos + 8 <= png.Length)
+            {
+                uint len = BinaryPrimitives.ReadUInt32BigEndian(png.Slice(pos, 4));
+                var type = png.Slice(pos + 4, 4);
+
+                int chunkTotal = checked((int)len + 12); // len + type(4) + crc(4) + len field(4)
+                if (pos + chunkTotal > png.Length) return false;
+
+                if (type.SequenceEqual("IHDR"u8))
+                    ihdrEnd = pos + chunkTotal;
+
+                if (type.SequenceEqual("pHYs"u8))
+                {
+                    physStart = pos;
+                    break;
+                }
+
+                if (type.SequenceEqual("IEND"u8))
+                    break;
+
+                pos += chunkTotal;
+            }
+
+            if (ihdrEnd < 0) return false;
+
+            if (physStart >= 0)
+            {
+                // Replace pHYs data (must be length 9)
+                uint len = BinaryPrimitives.ReadUInt32BigEndian(png.Slice(physStart, 4));
+                if (len != 9) return false;
+
+                patched = png.ToArray();
+                int dataPos = physStart + 8;
+
+                BinaryPrimitives.WriteUInt32BigEndian(patched.AsSpan(dataPos, 4), ppm);      // X
+                BinaryPrimitives.WriteUInt32BigEndian(patched.AsSpan(dataPos + 4, 4), ppm);  // Y
+                patched[dataPos + 8] = 1; // unit = meter
+
+                // Recompute CRC over type+data
+                uint crc = Crc32(patched.AsSpan(physStart + 4, 4 + 9));
+                BinaryPrimitives.WriteUInt32BigEndian(patched.AsSpan(physStart + 8 + 9, 4), crc);
+                return true;
+            }
+            else
+            {
+                // Insert new pHYs chunk right after IHDR
+                byte[] physChunk = BuildPhysChunk(ppm, ppm);
+
+                patched = new byte[png.Length + physChunk.Length];
+                png[..ihdrEnd].CopyTo(patched);
+                physChunk.CopyTo(patched.AsSpan(ihdrEnd));
+                png[ihdrEnd..].CopyTo(patched.AsSpan(ihdrEnd + physChunk.Length));
+                return true;
+            }
+        }
+
+        private static byte[] BuildPhysChunk(uint ppmX, uint ppmY)
+        {
+            // length(4) + type(4) + data(9) + crc(4)
+            byte[] chunk = new byte[4 + 4 + 9 + 4];
+            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(0, 4), 9);
+            "pHYs"u8.CopyTo(chunk.AsSpan(4, 4));
+            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(8, 4), ppmX);
+            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(12, 4), ppmY);
+            chunk[16] = 1; // meter
+            uint crc = Crc32(chunk.AsSpan(4, 4 + 9));
+            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(17, 4), crc);
+            return chunk;
+        }
+
+        // Simple CRC32 (IEEE) for PNG chunks
+        private static uint Crc32(ReadOnlySpan<byte> data)
+        {
+            uint crc = 0xFFFFFFFFu;
+            foreach (byte b in data)
+            {
+                crc ^= b;
+                for (int k = 0; k < 8; k++)
+                    crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : (crc >> 1);
+            }
+            return ~crc;
         }
 
         private static bool TrySetJfifDpi(Span<byte> jpeg, ushort dpiX, ushort dpiY)

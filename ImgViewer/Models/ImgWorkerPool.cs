@@ -6,9 +6,11 @@ using OpenCvSharp;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Threading.Channels;
 using System.Windows.Media;
 
@@ -226,7 +228,7 @@ namespace ImgViewer.Models
                 SingleReader = false  // saving workers many readers
             });
 
-            _maxSavingWorkers = 2;
+            _maxSavingWorkers = 1;
 
             _tokenRegistration = _token.Register(() =>
             {
@@ -589,9 +591,9 @@ namespace ImgViewer.Models
                 {
                     token.ThrowIfCancellationRequested();
                     using var tiffInfo = saveTask.TiffInfo;
-                    using var jpegBytes = saveTask.MemoryOwner;
-                    if (tiffInfo == null && jpegBytes == null)
-                        throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo/JpegData nor ImageStream.");
+                    using var bytesOwner = saveTask.MemoryOwner;
+                    if (tiffInfo == null && bytesOwner == null)
+                        throw new InvalidOperationException("SaveTaskInfo contains neither TiffInfo/JpegData/PngData nor ImageStream.");
 
                     var finalPath = saveTask.OutputFilePath;
                     var tempPath = string.Concat(finalPath, ".tmp");
@@ -601,20 +603,32 @@ namespace ImgViewer.Models
                         
                         if (saveTask.SavingFileFormat == BatchSavingFileFormat.Jpeg)
                         {
-                            using IMemoryOwner<byte>? owner = saveTask.MemoryOwner;
-                            if (owner is null || saveTask.EncodedDataLength is not int length || length > owner.Memory.Length)
+
+                            if (bytesOwner is null || saveTask.EncodedDataLength is not int length || length > bytesOwner.Memory.Length)
                             {
                                 RegisterFileError(currentOutputFile, $"[saving worker] Jpeg data is Empty or corrupted.");
                                 continue;
                             }
                             
-                            var bytesSpan = owner.Memory.Span[..length];
+                            var bytesSpan = bytesOwner.Memory.Span[..length];
                             fileProc.SaveBytesToFile(bytesSpan, tempPath);
                             File.Move(tempPath, finalPath, overwrite: true);
                             continue;
                         }
-                        RegisterFileError(currentOutputFile, $"[saving worker]Unsupported saving format: {_batchSaveFormat}. Only TIFF is implemented.");
-                        continue;
+                        if (saveTask.SavingFileFormat == BatchSavingFileFormat.Png)
+                        {
+                            if (bytesOwner is null || saveTask.EncodedDataLength is not int length || length > bytesOwner.Memory.Length)
+                            {
+                                RegisterFileError(currentOutputFile, $"[saving worker] PNG data is Empty or corrupted.");
+                                continue;
+                            }
+
+                            var bytesSpan = bytesOwner.Memory.Span[..length];
+                            fileProc.SaveBytesToFile(bytesSpan, tempPath);
+                            File.Move(tempPath, finalPath, overwrite: true);
+                            continue;
+                        }
+
                     }
                     tiffInfo.Compression = _tiffCompression;
                     fileProc.SaveTiff(tiffInfo, tempPath, _subSamplingMode, true, _jpegQuality, _plJson);
@@ -668,7 +682,6 @@ namespace ImgViewer.Models
 
                     if (loaded.Item2 == null)
                     {
-                        // если здесь токен отменён — просто выходим/продолжаем без ошибки
                         if (token.IsCancellationRequested) throw new OperationCanceledException(token);
                         RegisterFileError(file.Path, "Load failed: FileProcessor.Load returned null.");
                         continue;
@@ -690,8 +703,6 @@ namespace ImgViewer.Models
                             {
                                 continue;
                             }
-                            //var parameters = op.CreateParameterDictionary();
-                            // if command is Border remove and border removal algo is Manual, check if the file layout left or right
                             if (op.Command == ProcessorCommand.BordersRemove &&
                                 op.Params.ContainsKey("borderRemovalAlgorithm") &&
                                 op.Params["borderRemovalAlgorithm"] is string algo &&
@@ -765,50 +776,77 @@ namespace ImgViewer.Models
 
                     var fileName = Path.ChangeExtension(Path.GetFileName(file.Path), extension);
                     var outputFilePath = Path.Combine(_outputFolder, fileName);
+                    SaveTaskInfo? saveTask = null;
                     try
                     {
+                        
                         //var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
-                        if (_batchSaveFormat != BatchSavingFileFormat.Tiff)
-                        {
-                            if (_batchSaveFormat != BatchSavingFileFormat.Jpeg)
-                            {
-                                RegisterFileError(file.Path, $"[processing worker] Unsupported saving format: {_batchSaveFormat}. Only TIFF and JPEG are implemented.");
-                                continue;
-                            }
-                            if (_batchSaveFormat == BatchSavingFileFormat.Jpeg)
-                            {
-                                var jpegInfo = imgProc.GetJpegInfo(_jpegQuality, _dpi, (int)_subSamplingMode);
-                                var jpgSaveTask = new SaveTaskInfo
-                                {
-                                    SavingFileFormat = _batchSaveFormat,
-                                    MemoryOwner = jpegInfo.MemoryOwner,
-                                    EncodedDataLength = jpegInfo.EncodedDataLength,
-                                    OutputFilePath = outputFilePath,
-                                };
-                                await _saveCh.Writer.WriteAsync(jpgSaveTask, token);
-                                continue;
-                            }
-                        }
-                        var tiffInfo = imgProc.GetTiffInfo(_tiffCompression, _dpi);
-                        var saveTask = new SaveTaskInfo
-                        {
-                            SavingFileFormat = _batchSaveFormat,
-                            OutputFilePath = outputFilePath,
-                            TiffInfo = tiffInfo,
+                        //if (_batchSaveFormat != BatchSavingFileFormat.Tiff)
+                        //{
+                        //    if (_batchSaveFormat != BatchSavingFileFormat.Jpeg)
+                        //    {
+                        //        RegisterFileError(file.Path, $"[processing worker] Unsupported saving format: {_batchSaveFormat}. Only TIFF and JPEG are implemented.");
+                        //        continue;
+                        //    }
+                        //    if (_batchSaveFormat == BatchSavingFileFormat.Jpeg)
+                        //    {
+                        //        var jpegInfo = imgProc.GetJpegInfo(_jpegQuality, _dpi, (int)_subSamplingMode);
+                        //        saveTask = new SaveTaskInfo
+                        //        {
+                        //            SavingFileFormat = _batchSaveFormat,
+                        //            MemoryOwner = jpegInfo.MemoryOwner,
+                        //            EncodedDataLength = jpegInfo.EncodedDataLength,
+                        //            OutputFilePath = outputFilePath,
+                        //        };
+                        //        //await _saveCh.Writer.WriteAsync(jpgSaveTask, token);
+                        //        //continue;
+                        //    }
+                        //}
+                        //else
+                        //{
+                        //    var tiffInfo = imgProc.GetTiffInfo(_tiffCompression, _dpi);
+                        //    saveTask = new SaveTaskInfo
+                        //    {
+                        //        SavingFileFormat = _batchSaveFormat,
+                        //        OutputFilePath = outputFilePath,
+                        //        TiffInfo = tiffInfo,
 
+                        //    };
+                        //}
+
+                        saveTask = _batchSaveFormat switch
+                        {
+                            BatchSavingFileFormat.Tiff => CreateTiffSaveTask(imgProc, outputFilePath),
+                            BatchSavingFileFormat.Jpeg => CreateJpegSaveTask(imgProc, outputFilePath),
+                            BatchSavingFileFormat.Png => CreatePngSaveTask(imgProc, outputFilePath),
+                            _ => null
                         };
+
+                        if (saveTask == null)
+                        {
+                            RegisterFileError(file.Path, $"[processing worker] Unsupported saving format: {_batchSaveFormat}. Only TIFF and JPEG are implemented.");
+                            continue;
+                        }
+                        
                         await _saveCh.Writer.WriteAsync(saveTask, token);
 
                     }
-                    catch (OperationCanceledException) { throw; }
+                    catch (OperationCanceledException)
+                    {
+                        saveTask?.MemoryOwner?.Dispose();
+                        saveTask?.TiffInfo?.Dispose();
+                        throw;
+                    }
                     catch (Exception exSave)
                     {
+                        saveTask?.MemoryOwner?.Dispose();
+                        saveTask?.TiffInfo?.Dispose();
                         RegisterFileError(file.Path, "Error saving processed image.", exSave);
                         continue;
                     }
                     int processedAfterSave = Interlocked.Increment(ref _processedCount);
                     ReportProgress(processedAfterSave);
-
+                    
                 }
             }
             catch (OperationCanceledException)
@@ -828,6 +866,42 @@ namespace ImgViewer.Models
 #endif
             }
 
+        }
+
+        private SaveTaskInfo? CreateTiffSaveTask(OpenCvImageProcessor imgProc, string outputFilePath)
+        {
+            var tiffInfo = imgProc.GetTiffInfo(_tiffCompression, _dpi);
+            return new SaveTaskInfo
+            {
+                SavingFileFormat = _batchSaveFormat,
+                OutputFilePath = outputFilePath,
+                TiffInfo = tiffInfo,
+
+            };
+        }
+
+        private SaveTaskInfo? CreateJpegSaveTask(OpenCvImageProcessor imgProc, string outputFilePath)
+        {
+            var jpegInfo = imgProc.GetJpegInfo(_jpegQuality, _dpi, (int)_subSamplingMode);
+            return new SaveTaskInfo
+            {
+                SavingFileFormat = _batchSaveFormat,
+                MemoryOwner = jpegInfo.MemoryOwner,
+                EncodedDataLength = jpegInfo.EncodedDataLength,
+                OutputFilePath = outputFilePath,
+            };
+        }
+
+        private SaveTaskInfo? CreatePngSaveTask(OpenCvImageProcessor imgProc, string outFilePath)
+        {
+            var pngInfo = imgProc.GetPngInfo(quality: 9, _dpi);
+            return new SaveTaskInfo
+            {
+                SavingFileFormat = _batchSaveFormat,
+                MemoryOwner = pngInfo.MemoryOwner,
+                EncodedDataLength = pngInfo.EncodedDataLength,
+                OutputFilePath = outFilePath,
+            };
         }
 
         private void SaveProcessingLog(string logMsg, string timeMsg, string plOps, string errors, bool cancelled)

@@ -37,7 +37,8 @@ namespace ImgViewer.Models
         public void Dispose()
         {
             // Dispose of unmanaged resources here if needed
-            _magickGate.Dispose();
+            //_magickGate.Dispose();
+            GC.SuppressFinalize(this);
         }
 
         private void ConfigureMagickOnce()
