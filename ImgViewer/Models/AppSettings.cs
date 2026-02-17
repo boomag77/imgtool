@@ -6,7 +6,14 @@ namespace ImgViewer.Models
 {
     internal class AppSettings : IDisposable
     {
-        private TiffCompression _tiffCompression;
+        private const int DefaultDpi = 300;
+        private const BatchSavingFileFormat DefaultBatchSavingFileFormat = BatchSavingFileFormat.Tiff;
+        private const TiffCompression DefaultTiffCompression = TiffCompression.CCITTG4;
+
+        private int _dpi = DefaultDpi;
+        private JpegSettings _jpegSettings = new JpegSettings { Quality = 75, SubSampling = SubSamplingMode.NoSubsampling };
+        private BatchSavingFileFormat _batchSavingFileFormat = DefaultBatchSavingFileFormat;
+        private TiffCompression _tiffCompression = DefaultTiffCompression;
         private int _tiffJpegQuality;
         private SubSamplingMode _tiffSubSamplingMode;
         private string _lastOpenedFolder;
@@ -23,6 +30,45 @@ namespace ImgViewer.Models
 
 
         public event Action<string> ErrorOccured;
+
+        public int Dpi
+        {
+            get
+            {
+                return _dpi;
+            }
+            set
+            {
+                _dpi = value > 0 ? value : DefaultDpi;
+                ScheduleSave();
+            }
+        }
+
+        public BatchSavingFileFormat BatchSavingFileFormat
+        {
+            get
+            {
+                return _batchSavingFileFormat;
+            }
+            set
+            {
+                _batchSavingFileFormat = value;
+                ScheduleSave();
+            }
+        }
+
+        public JpegSettings JpegSettings
+        {
+            get
+            {
+                return _jpegSettings;
+            }
+            set
+            {
+                _jpegSettings = value;
+                ScheduleSave();
+            }
+        }
 
         public double EraseOperationOffset
         {
@@ -193,6 +239,9 @@ namespace ImgViewer.Models
 
                 var dto = new AppSettingsDto
                 {
+                    Dpi = this.Dpi,
+                    BatchSavingFileFormat = this.BatchSavingFileFormat,
+                    JpegSettings = this.JpegSettings,
                     TiffCompression = this.TiffCompression,
                     TiffJpegQuality = this.TiffJpegQuality,
                     TiffSubSamplingMode = this.TiffSubSamplingMode,
@@ -241,6 +290,14 @@ namespace ImgViewer.Models
                 var dto = JsonSerializer.Deserialize<AppSettingsDto>(json, options);
                 if (dto != null)
                 {
+                    _dpi = dto.Dpi > 0 ? dto.Dpi : DefaultDpi;
+                    _batchSavingFileFormat = Enum.IsDefined(dto.BatchSavingFileFormat)
+                        ? dto.BatchSavingFileFormat
+                        : DefaultBatchSavingFileFormat;
+                    _jpegSettings = dto.JpegSettings;
+                    _jpegSettings.Quality = Math.Clamp(_jpegSettings.Quality <= 0 ? 75 : _jpegSettings.Quality, 1, 100);
+                    if (!Enum.IsDefined(_jpegSettings.SubSampling))
+                        _jpegSettings.SubSampling = SubSamplingMode.NoSubsampling;
                     _tiffCompression = dto.TiffCompression;
                     _tiffJpegQuality = dto.TiffJpegQuality is >= 1 and <= 100 ? dto.TiffJpegQuality : 75;
                     _tiffSubSamplingMode = dto.TiffSubSamplingMode.HasValue && Enum.IsDefined(dto.TiffSubSamplingMode.Value)
@@ -280,6 +337,11 @@ namespace ImgViewer.Models
         // small DTO used for JSON serialization (keeps shape stable)
         private class AppSettingsDto
         {
+            public int Dpi { get; set; }
+            public BatchSavingFileFormat BatchSavingFileFormat { get; set; }
+
+            public JpegSettings JpegSettings { get; set; }
+
             public TiffCompression TiffCompression { get; set; }
             public int TiffJpegQuality { get; set; }
             public SubSamplingMode? TiffSubSamplingMode { get; set; }
@@ -307,5 +369,6 @@ namespace ImgViewer.Models
                 return string.Empty;
             }
         }
+
     }
 }

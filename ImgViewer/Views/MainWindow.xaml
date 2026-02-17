@@ -710,11 +710,11 @@
                 <Separator/>
                 <MenuItem Header="_Save Image As..." Click="SaveAs_Click" InputGestureText="Ctrl+S"/>
                 <Separator/>
-                <MenuItem Header="_Tiff compression" Click="SavingOptions_Click"/>
-                <Separator/>
                 <MenuItem Header="_Exit" Click="ExitClick"/>
             </MenuItem>
             <MenuItem Header="_Settings">
+                    <MenuItem Header="_Batch saving options" Click="SavingOptions_Click"/>
+                    <Separator/>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -739,56 +739,84 @@
         
         <!-- Status bar -->
         <StatusBar Grid.Row="4" Grid.ColumnSpan="3" VerticalAlignment="Bottom">
-            <StatusBarItem>
-                <TextBlock x:Name="StatusText" Text="{Binding Status}" />
-            </StatusBarItem>
-            <StatusBarItem>
-                <ProgressBar x:Name="MyProgressBar"
-                             Width="200"
-                             Height="16"
-                             Minimum="0"
-                             Maximum="100"
-                             Value="{Binding Progress}"
-                             Cursor="Hand"
-                             MouseLeftButtonUp="ProgressBar_MouseLeftButtonUp" />
-            </StatusBarItem>
-            <StatusBarItem HorizontalAlignment="Right">
-                <TextBlock HorizontalAlignment="Right" Text="{Binding TiffCompressionLabel}"/>
-            </StatusBarItem>
-            <StatusBarItem HorizontalAlignment="Right">
-                <StackPanel Orientation="Horizontal">
-                    <ToggleButton Content="V"
-                                  Style="{StaticResource StatusBarToggleButtonStyle}"
-                                  Margin="0,0,4,0"
-                                  ToolTip="Split preview vertically"
-                                  IsChecked="{Binding IsVerticalSplitPreview, Mode=TwoWay}"
-                                  IsEnabled="{Binding AreSplitOrientationButtonsEnabled}"/>
-                    <ToggleButton Content="H"
-                                  Style="{StaticResource StatusBarToggleButtonStyle}"
-                                  ToolTip="Split preview horizontally"
-                                  IsChecked="{Binding IsHorizontalSplitPreview, Mode=TwoWay}"
-                                  IsEnabled="{Binding AreSplitOrientationButtonsEnabled}"/>
-                    <Button x:Name="SplitCountButton"
-                            Content="{Binding PreviewSplitCountLabel}"
-                            Margin="6,0,0,0"
-                            Style="{StaticResource StatusBarButtonStyle}"
-                            ToolTip="Choose number of preview panes"
-                            Click="SplitCountButton_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="2 views"
-                                          Tag="2"
-                                          Click="SplitCountMenuItem_Click"/>
-                                <MenuItem Header="4 views"
-                                          Tag="4"
-                                          Click="SplitCountMenuItem_Click"/>
-                                <MenuItem Header="6 views"
-                                          Tag="6"
-                                          Click="SplitCountMenuItem_Click"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                </StackPanel>
+            <StatusBarItem HorizontalContentAlignment="Stretch" Padding="0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="StatusText" Text="{Binding Status}" VerticalAlignment="Center"/>
+                        <ProgressBar x:Name="MyProgressBar"
+                                     Width="200"
+                                     Height="16"
+                                     Margin="8,0,0,0"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="{Binding Progress}"
+                                     Cursor="Hand"
+                                     MouseLeftButtonUp="ProgressBar_MouseLeftButtonUp" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <Button Content="{Binding BatchSavingFileFormatLabel}"
+                                Click="SavingOptions_Click"
+                                Cursor="Hand"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="2,0"/>
+                        <TextBlock Text=" | "
+                                   VerticalAlignment="Center"
+                                   Margin="4,0,4,0"
+                                   Visibility="{Binding TiffCompressionVisibility}"/>
+                        <Button Content="{Binding TiffCompressionLabel}"
+                                Click="SavingOptions_Click"
+                                Cursor="Hand"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="2,0"
+                                Visibility="{Binding TiffCompressionVisibility}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ToggleButton Content="V"
+                                      Style="{StaticResource StatusBarToggleButtonStyle}"
+                                      Margin="0,0,4,0"
+                                      ToolTip="Split preview vertically"
+                                      IsChecked="{Binding IsVerticalSplitPreview, Mode=TwoWay}"
+                                      IsEnabled="{Binding AreSplitOrientationButtonsEnabled}"/>
+                        <ToggleButton Content="H"
+                                      Style="{StaticResource StatusBarToggleButtonStyle}"
+                                      ToolTip="Split preview horizontally"
+                                      IsChecked="{Binding IsHorizontalSplitPreview, Mode=TwoWay}"
+                                      IsEnabled="{Binding AreSplitOrientationButtonsEnabled}"/>
+                        <Button x:Name="SplitCountButton"
+                                Content="{Binding PreviewSplitCountLabel}"
+                                Margin="6,0,0,0"
+                                Style="{StaticResource StatusBarButtonStyle}"
+                                ToolTip="Choose number of preview panes"
+                                Click="SplitCountButton_Click">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="2 views"
+                                              Tag="2"
+                                              Click="SplitCountMenuItem_Click"/>
+                                    <MenuItem Header="4 views"
+                                              Tag="4"
+                                              Click="SplitCountMenuItem_Click"/>
+                                    <MenuItem Header="6 views"
+                                              Tag="6"
+                                              Click="SplitCountMenuItem_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </StatusBarItem>
         </StatusBar>
 

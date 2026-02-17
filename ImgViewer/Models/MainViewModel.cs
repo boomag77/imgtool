@@ -22,6 +22,7 @@ namespace ImgViewer.Models
         private ImageSource? _originalImage;
         private ImageSource? _imageOnPreview;
         private string? _imageOnPreviewPath;
+        private string _batchSavingFileFormatLabel;
         private string _tiffCompressionLabel;
         private ImageSource? _splitPreviewLeft;
         private ImageSource? _splitPreviewRight;
@@ -85,6 +86,28 @@ namespace ImgViewer.Models
             {
                 _tiffCompressionLabel = value;
                 OnPropertyChanged();
+            }
+        }
+
+        public Visibility TiffCompressionVisibility =>
+            _manager.BatchSavingFileFormat == BatchSavingFileFormat.Tiff
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        public string BatchSavingFileFormatLabel
+        {
+            get => _manager.BatchSavingFileFormat switch
+            {
+                BatchSavingFileFormat.Tiff => "TIFF",
+                BatchSavingFileFormat.Jpeg => "JPEG",
+                BatchSavingFileFormat.Png => "PNG",
+                _ => _manager.BatchSavingFileFormat.ToString()
+            };
+            set
+            {
+                _batchSavingFileFormatLabel = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(TiffCompressionVisibility));
             }
         }
 

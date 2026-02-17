@@ -5,57 +5,264 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ImgViewer.Views"
         mc:Ignorable="d"
-        Title="TIFF saving options" Height="260" Width="360" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+        Title="Batch saving options"
+        Width="380"
+        MinWidth="380"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        Background="#1C1F24">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#2F3136"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#464A52"/>
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E5E7EA"/>
+        <SolidColorBrush x:Key="InputBackgroundBrush" Color="#1E2024"/>
 
-        <TextBlock Text="Select TIFF-compression type:" FontWeight="Bold"/>
+        <Style x:Key="InputTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,3"/>
+        </Style>
 
-        <ComboBox Name="CompressionComboBox"
-                  Grid.Row="1"
-                  Margin="0,8,0,8"
-                  Height="26"
-                  DisplayMemberPath="Key"
-                  SelectionChanged="CompressionComboBox_SelectionChanged"/>
+        <Style x:Key="InputComboItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}"/>
+            <Setter Property="Padding" Value="6,3"/>
+        </Style>
 
-        <Border x:Name="JpegOptionsPanel"
-                Grid.Row="2"
-                Margin="0,4,0,10"
-                Padding="8"
-                BorderBrush="#DDD"
+        <Style x:Key="InputComboStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource InputComboItemStyle}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Focusable="False"
+                                          ClickMode="Press"
+                                          OverridesDefaultStyle="True"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <Border x:Name="ComboBorder"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="24"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ContentPresenter Grid.Column="0"
+                                                          Margin="8,0,0,0"
+                                                          VerticalAlignment="Center"
+                                                          HorizontalAlignment="Left"
+                                                          Content="{TemplateBinding SelectionBoxItem}"
+                                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                          TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                        <Path Grid.Column="1"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M 0 0 L 4 4 L 8 0 Z"
+                                              Fill="{TemplateBinding Foreground}"/>
+                                    </Grid>
+                                </Border>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Focusable="False"
+                                   AllowsTransparency="True"
+                                   PopupAnimation="Slide">
+                                <Border Background="{StaticResource InputBackgroundBrush}"
+                                        BorderBrush="{StaticResource PanelBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Margin="0,2,0,0"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer SnapsToDevicePixels="True">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ComboBorder" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InlineButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#3A3E46"/>
+            <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                CornerRadius="6"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#45515F"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2A3441"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Border Background="{StaticResource PanelBackgroundBrush}"
+                BorderBrush="{StaticResource PanelBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="4"
-                Visibility="Collapsed">
+                CornerRadius="8"
+                Padding="12">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="JPEG options" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock Text="Select file format:"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryTextBrush}"/>
 
-                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Quality (1-100):" Margin="0,0,8,6"/>
-                <TextBox x:Name="JpegQualityTextBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,6" VerticalContentAlignment="Center"/>
+                <ComboBox Name="FileFormatComboBox"
+                          Grid.Row="1"
+                          Margin="0,8,0,8"
+                          Height="28"
+                          Style="{StaticResource InputComboStyle}"
+                          SelectionChanged="FileFormatComboBox_SelectionChanged"/>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Subsampling:" Margin="0,0,8,0"/>
-                <ComboBox x:Name="SubsamplingComboBox" Grid.Row="2" Grid.Column="1" DisplayMemberPath="Key"/>
+                <StackPanel Grid.Row="2"
+                            Margin="0,0,0,8">
+                    <TextBlock Text="DPI:"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryTextBrush}"/>
+                    <TextBox x:Name="DpiTextBox"
+                             Margin="0,8,0,0"
+                             Style="{StaticResource InputTextBoxStyle}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="TiffOptionsPanel"
+                            Grid.Row="3">
+                    <TextBlock Text="Select TIFF-compression type:"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryTextBrush}"/>
+
+                    <ComboBox Name="CompressionComboBox"
+                              Margin="0,8,0,8"
+                              Height="28"
+                              Style="{StaticResource InputComboStyle}"
+                              DisplayMemberPath="Key"
+                              SelectionChanged="CompressionComboBox_SelectionChanged"/>
+                </StackPanel>
+
+                <Border x:Name="JpegOptionsPanel"
+                        Grid.Row="4"
+                        Margin="0,4,0,10"
+                        Padding="8"
+                        BorderBrush="{StaticResource PanelBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Background="{StaticResource InputBackgroundBrush}"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Grid.ColumnSpan="2"
+                                   Text="JPEG options"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   Margin="0,0,0,6"/>
+
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   Text="Quality (1-100):"
+                                   Margin="0,0,8,6"/>
+                        <TextBox x:Name="JpegQualityTextBox"
+                                 Grid.Row="1"
+                                 Grid.Column="1"
+                                 Margin="0,0,0,6"
+                                 VerticalContentAlignment="Center"
+                                 Style="{StaticResource InputTextBoxStyle}"/>
+
+                        <TextBlock Grid.Row="2"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   Text="Subsampling:"
+                                   Margin="0,0,8,0"/>
+                        <ComboBox x:Name="SubsamplingComboBox"
+                                  Grid.Row="2"
+                                  Grid.Column="1"
+                                  Style="{StaticResource InputComboStyle}"
+                                  DisplayMemberPath="Key"/>
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="5"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Name="OkButton"
+                            Content="OK"
+                            Width="90"
+                            Margin="0,0,8,0"
+                            Style="{StaticResource InlineButtonStyle}"
+                            Click="OkButton_Click"/>
+                    <Button Name="CancelButton"
+                            Content="Cancel"
+                            Width="90"
+                            Style="{StaticResource InlineButtonStyle}"
+                            Click="CancelButton_Click"/>
+                </StackPanel>
             </Grid>
         </Border>
-
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Name="OkButton" Content="OK" Width="80" Margin="0,0,8,0" Click="OkButton_Click"/>
-            <Button Name="CancelButton" Content="Cancel" Width="80" Click="CancelButton_Click"/>
-        </StackPanel>
     </Grid>
 </Window>

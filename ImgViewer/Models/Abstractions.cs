@@ -296,7 +296,22 @@ namespace ImgViewer.Models
 
     }
 
+    public enum BatchSavingFileFormat
+    {
+        Tiff,
+        Jpeg,
+        Png
+    }
 
+    public struct JpegSettings
+    {
+        public int Quality { get; set; } // 0-100
+        public int? Width { get; set; }
+        public int? Height { get; set; }
+        public int? Depth { get; set; }
+        public SubSamplingMode SubSampling { get; set; }
+
+    }
 
 
 }

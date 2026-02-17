@@ -10,6 +10,9 @@ namespace ImgViewer.Interfaces
         public TiffCompression CurrentTiffCompression { get; set;  }
         public int CurrentTiffJpegQuality { get; set; }
         public SubSamplingMode CurrentTiffSubSamplingMode { get; set; }
+        public int Dpi { get; set; }
+        public BatchSavingFileFormat BatchSavingFileFormat { get; set; }
+        public JpegSettings BatchJpegSettings { get; set; }
         public string LastOpenedFolder { get; set; }
 
         public string LastSavedFolder { get; set; }

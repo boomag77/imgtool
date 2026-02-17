@@ -198,6 +198,24 @@ namespace ImgViewer.Models
             set { _appSettings.TiffSubSamplingMode = value; }
         }
 
+        public int Dpi
+        {
+            get { return _appSettings.Dpi; }
+            set { _appSettings.Dpi = value; }
+        }
+
+        public BatchSavingFileFormat BatchSavingFileFormat
+        {
+            get { return _appSettings.BatchSavingFileFormat; }
+            set { _appSettings.BatchSavingFileFormat = value; }
+        }
+
+        public JpegSettings BatchJpegSettings
+        {
+            get { return _appSettings.JpegSettings; }
+            set { _appSettings.JpegSettings = value; }
+        }
+
         public string LastSavedFolder
         {
             get

@@ -1418,7 +1418,7 @@ namespace ImgViewer.Views
                 {
                     case ".tif":
                     case ".tiff":
-                        _manager.SaveProcessedImageToTiff(path, compression, 300);
+                        _manager.SaveProcessedImageToTiff(path, compression, _manager.Dpi);
                         break;
                     case ".png":
                     case ".jpg":
@@ -1448,16 +1448,24 @@ namespace ImgViewer.Views
 
 
             var tiffOptionsWindow = new TiffSavingOptionsWindow(
+                _manager.BatchSavingFileFormat,
+                _manager.BatchJpegSettings,
                 _manager.CurrentTiffCompression,
+                _manager.Dpi,
                 _manager.CurrentTiffJpegQuality,
                 _manager.CurrentTiffSubSamplingMode);
             tiffOptionsWindow.Owner = this;
 
             if (tiffOptionsWindow.ShowDialog() == true)
             {
+                _manager.BatchSavingFileFormat = tiffOptionsWindow.SelectedBatchSavingFileFormat;
+                _manager.BatchJpegSettings = tiffOptionsWindow.SelectedJpegSettings;
                 _manager.CurrentTiffCompression = tiffOptionsWindow.SelectedCompression;
+                _manager.Dpi = tiffOptionsWindow.SelectedDpi;
                 _manager.CurrentTiffJpegQuality = tiffOptionsWindow.SelectedJpegQuality;
                 _manager.CurrentTiffSubSamplingMode = tiffOptionsWindow.SelectedSubSamplingMode;
+                if (_viewModel is MainViewModel vm)
+                    vm.BatchSavingFileFormatLabel = tiffOptionsWindow.SelectedBatchSavingFileFormat.ToString();
                 _viewModel.TiffCompressionLabel = tiffOptionsWindow.SelectedCompression.ToString();
             }
             else
