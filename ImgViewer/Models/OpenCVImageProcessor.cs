@@ -401,6 +401,25 @@ namespace ImgViewer.Models
             return true;
         }
 
+        public JpegInfo GetJpegInfo(int quality, int dpi)
+        {
+            var jpegInfo = new JpegInfo();
+            using var img = WorkingImage; // cloned
+            if (img == null || img.Empty())
+                throw new InvalidOperationException("WorkingImage is null or empty");
+            byte[] jpgData = img.ImEncode(".jpg", new ImageEncodingParam(ImwriteFlags.JpegQuality, quality));
+            var jpgDataLength = jpgData.Length;
+            ReadOnlySpan<byte> jpgSpan = jpgData.AsSpan();
+            var owner = MemoryPool<byte>.Shared.Rent(jpgDataLength);
+            jpgSpan.CopyTo(owner.Memory.Span);
+            jpegInfo.MemoryOwner = owner;
+            jpegInfo.EncodedDataLength = jpgDataLength;
+            jpegInfo.Width = img.Width;
+            jpegInfo.Height = img.Height;
+            jpegInfo.Quality = quality;
+            jpegInfo.Dpi = dpi;
+            return jpegInfo;
+        }
 
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi)
         {

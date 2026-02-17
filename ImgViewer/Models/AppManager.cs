@@ -810,9 +810,11 @@ namespace ImgViewer.Models
                 using (var workerPool = new ImgWorkerPool(
                     _poolCts,
                     pipeline,
+                    _appSettings.BatchSavingFileFormat,
                     _appSettings.TiffCompression,
                     _appSettings.TiffJpegQuality,
                     _appSettings.TiffSubSamplingMode,
+                    _appSettings.Dpi,
                     0,
                     srcFolder,
                     0,
