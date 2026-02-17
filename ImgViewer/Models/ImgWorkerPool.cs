@@ -777,7 +777,7 @@ namespace ImgViewer.Models
                             }
                             if (_batchSaveFormat == BatchSavingFileFormat.Jpeg)
                             {
-                                var jpegInfo = imgProc.GetJpegInfo(_jpegQuality, _dpi);
+                                var jpegInfo = imgProc.GetJpegInfo(_jpegQuality, _dpi, (int)_subSamplingMode);
                                 var jpgSaveTask = new SaveTaskInfo
                                 {
                                     SavingFileFormat = _batchSaveFormat,

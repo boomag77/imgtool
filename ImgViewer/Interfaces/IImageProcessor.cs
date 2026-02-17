@@ -12,7 +12,7 @@ namespace ImgViewer.Interfaces
         public bool TryGetStreamForSave(ImageFormat format, out MemoryStream? ms, out string error);
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi);
         //Mat ProcessSingle(Mat src, ProcessorCommand command, Dictionary<string, object> parameters, CancellationToken token, bool batchProcessing);
-        public JpegInfo GetJpegInfo(int quality, int dpi);
+        public JpegInfo GetJpegInfo(int quality, int dpi, int subSampling);
         bool TryApplyCommand(ProcessorCommand commandName,
             Dictionary<string, object> parameters,
             bool batchProcessing = false,

@@ -23,11 +23,11 @@ namespace ImgViewer.Models
         Lanczos4
     }
 
-    public enum SubSamplingMode
+    public enum SubSamplingMode : int
     {
-        NoSubsampling,
-        SubSampling422,
-        SubSampling420,
+        NoSubsampling = 0x111111,
+        SubSampling422 = 0x221111,
+        SubSampling420 = 0x211111,
     }
 
 
@@ -52,6 +52,8 @@ namespace ImgViewer.Models
         public int Width { get; set; }
         public int Height { get; set; }
         public int Quality { get; set; }
+
+        public SubSamplingMode SubSamplingMode { get; set; }
         public int Dpi { get; set; }
     }
 

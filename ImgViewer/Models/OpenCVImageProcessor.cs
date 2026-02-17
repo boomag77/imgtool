@@ -8,6 +8,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Tesseract;
@@ -401,15 +402,17 @@ namespace ImgViewer.Models
             return true;
         }
 
-        public JpegInfo GetJpegInfo(int quality, int dpi)
+        public JpegInfo GetJpegInfo(int quality, int dpi, int subSampling)
         {
             var jpegInfo = new JpegInfo();
             using var img = WorkingImage; // cloned
             if (img == null || img.Empty())
                 throw new InvalidOperationException("WorkingImage is null or empty");
-            byte[] jpgData = img.ImEncode(".jpg", new ImageEncodingParam(ImwriteFlags.JpegQuality, quality));
+            byte[] jpgData = img.ImEncode(".jpg", new ImageEncodingParam(ImwriteFlags.JpegQuality, quality),
+                                                    new ImageEncodingParam((ImwriteFlags)7, subSampling));
             var jpgDataLength = jpgData.Length;
-            ReadOnlySpan<byte> jpgSpan = jpgData.AsSpan();
+            Span<byte> jpgSpan = jpgData.AsSpan();
+            TrySetJfifDpi(jpgSpan, (ushort)dpi, (ushort)dpi);
             var owner = MemoryPool<byte>.Shared.Rent(jpgDataLength);
             jpgSpan.CopyTo(owner.Memory.Span);
             jpegInfo.MemoryOwner = owner;
@@ -419,6 +422,66 @@ namespace ImgViewer.Models
             jpegInfo.Quality = quality;
             jpegInfo.Dpi = dpi;
             return jpegInfo;
+        }
+
+        private static bool TrySetJfifDpi(Span<byte> jpeg, ushort dpiX, ushort dpiY)
+        {
+            // JPEG must start with SOI: FF D8
+            if (jpeg.Length < 20 || jpeg[0] != 0xFF || jpeg[1] != 0xD8)
+                return false;
+
+            // Walk marker segments until SOS (FF DA) or EOI (FF D9)
+            int i = 2;
+            while (i + 4 <= jpeg.Length)
+            {
+                if (jpeg[i] != 0xFF)
+                    return false;
+
+                byte marker = jpeg[i + 1];
+                if (marker == 0xDA || marker == 0xD9) // SOS / EOI
+                    break;
+
+                // Standalone markers (no length) - rare here; skip
+                if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7))
+                {
+                    i += 2;
+                    continue;
+                }
+
+                // Segment length (includes the 2 length bytes)
+                int segLen = (jpeg[i + 2] << 8) | jpeg[i + 3];
+                if (segLen < 2 || i + 2 + segLen > jpeg.Length)
+                    return false;
+
+                // APP0?
+                if (marker == 0xE0)
+                {
+                    int dataStart = i + 4;                 // after FF E0 + length(2)
+                    int dataLen = segLen - 2;
+
+                    // Need at least: "JFIF\0"(5) + ver(2) + units(1) + xden(2) + yden(2) = 12 bytes
+                    if (dataLen >= 12 &&
+                        jpeg[dataStart + 0] == (byte)'J' &&
+                        jpeg[dataStart + 1] == (byte)'F' &&
+                        jpeg[dataStart + 2] == (byte)'I' &&
+                        jpeg[dataStart + 3] == (byte)'F' &&
+                        jpeg[dataStart + 4] == 0x00)
+                    {
+                        int unitsOffset = dataStart + 5 + 2; // id + version
+                        jpeg[unitsOffset] = 0x01;            // 1 = pixels per inch
+                        jpeg[unitsOffset + 1] = (byte)(dpiX >> 8);
+                        jpeg[unitsOffset + 2] = (byte)(dpiX & 0xFF);
+                        jpeg[unitsOffset + 3] = (byte)(dpiY >> 8);
+                        jpeg[unitsOffset + 4] = (byte)(dpiY & 0xFF);
+                        return true;
+                    }
+                }
+
+                i += 2 + segLen; // marker(2) + segment(length includes its 2 bytes)
+            }
+
+            // No JFIF APP0 found (many JPEGs are Exif-only). Then you'd need to INSERT a new APP0 segment.
+            return false;
         }
 
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi)
