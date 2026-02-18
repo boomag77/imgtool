@@ -1249,25 +1249,32 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Margin="10">
-                            <Button Style="{StaticResource ElevatedRoundedButton}"
+                            <Button x:Name="CurrentFolderProcessButton"
+                                    Style="{StaticResource ElevatedRoundedButton}"
                                     Margin="5" Width="Auto" 
                                     Click="ApplyCurrentPipelineToCurrentFolder_Click">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <Viewbox Width="14" Height="14" Stretch="Uniform">
                                         <Canvas Width="8" Height="10">
                                             <!-- triangle polygon; Fill bound to Button.Foreground so it inherits color -->
-                                            <Polygon Points="0,0 0,10 8,5"
+                                            <Polygon x:Name="CurrentFolderProcessIconPolygon"
+                                                Points="0,0 0,10 8,5"
                                                 Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                         </Canvas>
                                     </Viewbox>
-                                    <TextBlock Text="current folder" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="CurrentFolderProcessText"
+                                               Text="current folder"
+                                               Margin="6,0,0,0"
+                                               VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
                             <Button Style="{StaticResource ElevatedRoundedButton}"
+                                    x:Name="RootFolderProcessButton"
                                     Margin="5,5,5,5"
                                     Width="Auto"
                                     Click="ApplyCurrentPipelineToSelectedRootFolder_Click">
-                                    selected folder
+                                    <TextBlock x:Name="RootFolderProcessText"
+                                               Text="Root folder"/>
                             </Button>
                             <Button Style="{StaticResource ElevatedRoundedButton}"
                                     Margin="5,5,5,5"

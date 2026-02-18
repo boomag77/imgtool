@@ -81,6 +81,8 @@ namespace ImgViewer.Views
 
         private CurrentFolderIndex _currentFolderIndex;
         private CancellationTokenSource _folderIndexCts;
+        private bool _isCurrentFolderProcessing;
+        private bool _isRootFolderProcessing;
 
 
         // Rect selection
@@ -350,6 +352,32 @@ namespace ImgViewer.Views
         private void StopProcessing_Click(object sender, RoutedEventArgs e)
         {
             _manager.CancelBatchProcessing();
+            SetCurrentFolderProcessingState(false);
+            SetRootFolderProcessingState(false);
+        }
+
+        private void SetCurrentFolderProcessingState(bool isProcessing)
+        {
+            _isCurrentFolderProcessing = isProcessing;
+            if (CurrentFolderProcessText != null)
+            {
+                CurrentFolderProcessText.Text = isProcessing ? "Stop processing" : "current folder";
+            }
+            if (CurrentFolderProcessIconPolygon != null)
+            {
+                CurrentFolderProcessIconPolygon.Points = isProcessing
+                    ? new PointCollection(new[] { new Point(0, 0), new Point(0, 8), new Point(8, 8), new Point(8, 0) })
+                    : new PointCollection(new[] { new Point(0, 0), new Point(0, 10), new Point(8, 5) });
+            }
+        }
+
+        private void SetRootFolderProcessingState(bool isProcessing)
+        {
+            _isRootFolderProcessing = isProcessing;
+            if (RootFolderProcessText != null)
+            {
+                RootFolderProcessText.Text = isProcessing ? "Stop processing" : "Root folder";
+            }
         }
 
         private void SplitCountButton_Click(object sender, RoutedEventArgs e)
@@ -1306,6 +1334,13 @@ namespace ImgViewer.Views
 
         private async void ApplyCurrentPipelineToSelectedRootFolder_Click(object sender, RoutedEventArgs e)
         {
+            if (_isRootFolderProcessing)
+            {
+                StopProcessing_Click(sender, e);
+                return;
+            }
+
+            bool processingStarted = false;
             if (Pipeline == null) return;
             if (Pipeline.Operations.Count == 0)
             {
@@ -1335,6 +1370,8 @@ namespace ImgViewer.Views
 
             try
             {
+                SetRootFolderProcessingState(true);
+                processingStarted = true;
                 await _manager.ProcessRootFolder(rootFolder, Pipeline, true);
             }
             catch (Exception ex)
@@ -1344,11 +1381,25 @@ namespace ImgViewer.Views
                                                MessageBoxButton.OK,
                                                MessageBoxImage.Error);
             }
+            finally
+            {
+                if (processingStarted)
+                {
+                    SetRootFolderProcessingState(false);
+                }
+            }
 
         }
 
         private async void ApplyCurrentPipelineToCurrentFolder_Click(object sender, RoutedEventArgs e)
         {
+            if (_isCurrentFolderProcessing)
+            {
+                StopProcessing_Click(sender, e);
+                return;
+            }
+
+            bool processingStarted = false;
             try
             {
 
@@ -1379,6 +1430,8 @@ namespace ImgViewer.Views
                                                          MessageBoxImage.Question);
                 if (res != MessageBoxResult.OK) return;
 
+                SetCurrentFolderProcessingState(true);
+                processingStarted = true;
 
                 await _manager.ProcessFolder(folder);
 
@@ -1389,6 +1442,13 @@ namespace ImgViewer.Views
                                                "Error",
                                                MessageBoxButton.OK,
                                                MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (processingStarted)
+                {
+                    SetCurrentFolderProcessingState(false);
+                }
             }
         }
 
