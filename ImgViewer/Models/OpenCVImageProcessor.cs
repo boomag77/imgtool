@@ -403,10 +403,13 @@ namespace ImgViewer.Models
             return true;
         }
 
-        public JpegInfo GetJpegInfo(int quality, int dpi, int subSampling)
+        
+        // if outSrc didn't pass (null) -> returns JpegInfo from WorkingImage Mat, otherwise -> from outSrc Mat
+        // TODO: errors handling
+        public JpegInfo GetJpegInfo(int quality, int dpi, int subSampling, Mat? outSrc = null)
         {
             var jpegInfo = new JpegInfo();
-            using var img = WorkingImage; // cloned
+            using var img = outSrc != null ? outSrc! : WorkingImage; // cloned
             if (img == null || img.Empty())
                 throw new InvalidOperationException("WorkingImage is null or empty");
             byte[] jpgData = img.ImEncode(".jpg", new ImageEncodingParam(ImwriteFlags.JpegQuality, quality),
@@ -425,10 +428,12 @@ namespace ImgViewer.Models
             return jpegInfo;
         }
 
-        public PngInfo GetPngInfo(int quality = 9, int dpi = 300)
+        // if outSrc didn't pass (null) -> returns PngInfo from WorkingImage Mat, otherwise -> from outSrc Mat
+        // TODO: errors handling
+        public PngInfo GetPngInfo(int quality = 9, int dpi = 300, Mat? outSrc = null)
         {
             var pngInfo = new PngInfo();
-            using var img = WorkingImage;
+            using var img = outSrc != null ? outSrc! : WorkingImage; // cloned
             if (img == null || img.Empty())
                 throw new InvalidOperationException("WorkingImage is null or empty");
             byte[] pngData = img.ImEncode(".png", new[]
@@ -3095,24 +3100,31 @@ namespace ImgViewer.Models
 
             return settings;
         }
-        public Mat[]? GetSplitResults()
+        public ISplitResult[]? GetSplitResults(ImageFormat format)
         {
             lock (_splitLock)
             {
                 if (_splitWorkingImages == null)
                     return null;
 
-                var clones = new List<Mat>(_splitWorkingImages.Length);
+                var splitResults = new List<ISplitResult>(_splitWorkingImages.Length);
                 foreach (var mat in _splitWorkingImages)
                 {
                     if (mat == null || mat.IsDisposed)
                         continue;
                     if (mat.Empty())
                         continue;
-                    clones.Add(mat.Clone());
+                    ISplitResult splitResult = format switch
+                    {
+                        ImageFormat.Jpeg => GetJpegInfo(95, 300, 0, mat),
+                        ImageFormat.Png => GetPngInfo(9, 300, mat),
+                        _ => GetJpegInfo(95, 300, 0, mat)
+                    };
+
+                    splitResults.Add(splitResult);
                 }
 
-                return clones.Count > 0 ? clones.ToArray() : null;
+                return splitResults.Count > 0 ? splitResults.ToArray() : null;
             }
         }
 

@@ -1,16 +1,11 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Views;
-using OpenCvSharp;
-
-//using OpenCvSharp;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Threading.Channels;
 using System.Windows.Media;
 
@@ -357,67 +352,55 @@ namespace ImgViewer.Models
             return set;
         }
 
-        private bool TrySaveSplitOutputs(OpenCvImageProcessor imgProc, SourceImageFile file)
+        private bool TrySaveSplitOutputs(IFileProcessor fileProc, OpenCvImageProcessor imgProc, SourceImageFile file)
         {
-            var splitResults = imgProc.GetSplitResults();
+
+            ReadOnlySpan<char> extension = Path.GetExtension(file.Path.AsSpan());
+            if (extension.Length == 0) return false;
+            ImageFormat requestedFormat = extension switch
+            {
+                ".jpg" => ImageFormat.Jpeg,
+                ".jpeg" => ImageFormat.Jpeg,
+                ".png" => ImageFormat.Png,
+                _ => ImageFormat.Jpeg
+            };
+            var splitResults = imgProc.GetSplitResults(requestedFormat);
             if (splitResults == null || splitResults.Length == 0)
 
                 return false;
 
             try
             {
-                SaveSplitResults(splitResults, file);
+                SaveSplitResults(fileProc, splitResults, file, requestedFormat);
                 return true;
             }
             finally
             {
-                foreach (var mat in splitResults)
-                {
-                    mat?.Dispose();
-                }
                 imgProc.ClearSplitResults();
             }
         }
 
-        private void SaveSplitResults(Mat[] splitResults, SourceImageFile file)
+        private void SaveSplitResults(IFileProcessor fileProc, ISplitResult[] splitResults, SourceImageFile file, ImageFormat format)
         {
             if (splitResults == null || splitResults.Length == 0)
                 return;
+            string originalExtension = format switch
+            {
+                ImageFormat.Jpeg => ".jpg",
+                ImageFormat.Png => ".png",
+                _ => ".jpg"
+            };
 
-            var originalExtension = Path.GetExtension(file.Path);
-            if (string.IsNullOrWhiteSpace(originalExtension))
-                originalExtension = ".tif";
-
-            var encodeExt = NormalizeEncodeExtension(originalExtension);
             var baseName = Path.GetFileNameWithoutExtension(file.Path);
 
             for (int i = 0; i < splitResults.Length; i++)
             {
-                var mat = splitResults[i];
-                if (mat == null || mat.IsDisposed)
-                    continue;
-                if (mat.Empty())
-                    throw new InvalidOperationException("Split image is empty.");
+                ISplitResult splitResult = splitResults[i];
 
                 var finalPath = Path.Combine(_outputFolder, $"{baseName}_{i + 1}{originalExtension}");
-                SaveMatToFile(mat, encodeExt, finalPath);
+                using var memoryOwner = splitResult.MemoryOwner;
+                fileProc.SaveBytesToFile(memoryOwner.Memory.Span[0..splitResult.EncodedDataLength], finalPath);
             }
-        }
-
-        private void SaveMatToFile(Mat mat, string encodeExt, string finalPath)
-        {
-            if (mat == null)
-                throw new ArgumentNullException(nameof(mat));
-            if (mat.IsDisposed)
-                throw new ObjectDisposedException(nameof(mat));
-            if (mat.Empty())
-                throw new InvalidOperationException("Split image is empty.");
-
-            Cv2.ImEncode(encodeExt, mat, out var buffer);
-            var tempPath = finalPath + ".tmp";
-            
-            File.WriteAllBytes(tempPath, buffer);
-            File.Move(tempPath, finalPath, overwrite: true);
         }
 
         private void RenumberSplitOutputs()
@@ -445,37 +428,57 @@ namespace ImgViewer.Models
             {
                 var extension = Path.GetExtension(file);
                 var tempPath = file + ".renaming";
-                File.Move(file, tempPath);
+                if (!TryMoveWithRetry(file, tempPath, 3, out string error))
+                {
+                    RegisterFileError(file, error);
+                    continue;
+                }
                 var finalPath = Path.Combine(_outputFolder, index.ToString("D3") + extension);
                 pendingMoves.Add((tempPath, finalPath));
                 index++;
             }
-
             foreach (var move in pendingMoves)
             {
-                File.Move(move.Temp, move.Final, overwrite: true);
+                if (!TryMoveWithRetry(move.Temp, move.Final, 3, out string error))
+                {
+                    RegisterFileError(move.Temp, error);
+                }
             }
         }
 
-        
 
-
-
-        private string NormalizeEncodeExtension(string originalExtension)
+        private bool TryMoveWithRetry(string origFilePath, string newFilePath, int tryCount, out string error, bool overwrite = true)
         {
-            if (string.IsNullOrWhiteSpace(originalExtension))
-                return ".tif";
-
-            var lower = originalExtension.ToLowerInvariant();
-            return lower switch
+            if (!System.IO.File.Exists(origFilePath))
             {
-                ".jpg" => ".jpg",
-                ".jpeg" => ".jpg",
-                ".png" => ".png",
-                ".bmp" => ".bmp",
-                ".tif" => ".tif",
-                ".tiff" => ".tif"
-            };
+                error = $"[Split result renaming] original file {origFilePath} doesn't exist.";
+                return false;
+            }
+            error = string.Empty;
+            while (tryCount > 0)
+            {
+                try
+                {
+                    System.IO.File.Move(origFilePath, newFilePath, overwrite);
+                    error = null;
+                    return true;
+                }
+                catch (IOException ex1)
+                {
+                    error = $"[Split result renaming] IOException orig file: {origFilePath}, new file: {newFilePath}, {ex1}";
+                    tryCount--;
+                    Thread.Sleep(100);
+                    continue;
+                }
+                catch (UnauthorizedAccessException ex2)
+                {
+                    error = $"[Split result renaming] UnauthorizedAccessException orig file: {origFilePath}, new file: {newFilePath}, {ex2}";
+                    tryCount--;
+                    Thread.Sleep(100);
+                    continue;
+                }
+            }
+            return false;
         }
 
 
@@ -600,7 +603,7 @@ namespace ImgViewer.Models
                     currentOutputFile = finalPath;
                     if (_batchSaveFormat != BatchSavingFileFormat.Tiff)
                     {
-                        
+
                         if (saveTask.SavingFileFormat == BatchSavingFileFormat.Jpeg)
                         {
 
@@ -609,7 +612,7 @@ namespace ImgViewer.Models
                                 RegisterFileError(currentOutputFile, $"[saving worker] Jpeg data is Empty or corrupted.");
                                 continue;
                             }
-                            
+
                             var bytesSpan = bytesOwner.Memory.Span[..length];
                             fileProc.SaveBytesToFile(bytesSpan, tempPath);
                             File.Move(tempPath, finalPath, overwrite: true);
@@ -752,7 +755,7 @@ namespace ImgViewer.Models
                     bool handledSplit = false;
                     try
                     {
-                        handledSplit = TrySaveSplitOutputs(imgProc, file);
+                        handledSplit = TrySaveSplitOutputs(fileProc, imgProc, file);
                     }
                     catch (Exception splitEx)
                     {
@@ -779,7 +782,7 @@ namespace ImgViewer.Models
                     SaveTaskInfo? saveTask = null;
                     try
                     {
-                        
+
                         //var tiffInfo = imgProc.GetTiffInfo(TiffCompression.CCITTG4, 300);
                         //if (_batchSaveFormat != BatchSavingFileFormat.Tiff)
                         //{
@@ -827,7 +830,7 @@ namespace ImgViewer.Models
                             RegisterFileError(file.Path, $"[processing worker] Unsupported saving format: {_batchSaveFormat}. Only TIFF and JPEG are implemented.");
                             continue;
                         }
-                        
+
                         await _saveCh.Writer.WriteAsync(saveTask, token);
 
                     }
@@ -846,7 +849,7 @@ namespace ImgViewer.Models
                     }
                     int processedAfterSave = Interlocked.Increment(ref _processedCount);
                     ReportProgress(processedAfterSave);
-                    
+
                 }
             }
             catch (OperationCanceledException)
@@ -929,12 +932,12 @@ namespace ImgViewer.Models
                 {
                     _workersCount = Math.Max(1, _workersCount - 1);
                 }
-                if (_plOperations.Any(op => op.Command == ProcessorCommand.Binarize && 
-                                           op.Params.ContainsKey("method") && 
-                                           op.Params["method"] is string method && 
+                if (_plOperations.Any(op => op.Command == ProcessorCommand.Binarize &&
+                                           op.Params.ContainsKey("method") &&
+                                           op.Params["method"] is string method &&
                                            method == "Sauvola"))
                 {
-                    _workersCount = Math.Max(1, _workersCount/2);
+                    _workersCount = Math.Max(1, _workersCount / 2);
                 }
                 for (int i = 0; i < _workersCount; i++)
                 {

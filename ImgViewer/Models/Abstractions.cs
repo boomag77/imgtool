@@ -4,6 +4,12 @@ using System.Buffers;
 
 namespace ImgViewer.Models
 {
+
+    public interface ISplitResult
+    {
+        IMemoryOwner<byte> MemoryOwner { get; }
+        int EncodedDataLength { get; }
+    }
     public struct ResizeParameters
     {
         public int MaxWidth { get; init; }
@@ -45,10 +51,10 @@ namespace ImgViewer.Models
         Enhance
     }
 
-    public struct JpegInfo
+    public struct JpegInfo : ISplitResult
     {
-        public IMemoryOwner<byte> MemoryOwner;
-        public int EncodedDataLength;
+        public IMemoryOwner<byte> MemoryOwner { get; set; }
+        public int EncodedDataLength { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public int Quality { get; set; }
@@ -57,10 +63,10 @@ namespace ImgViewer.Models
         public int Dpi { get; set; }
     }
 
-    public struct PngInfo
+    public struct PngInfo : ISplitResult
     {
-        public IMemoryOwner<byte> MemoryOwner;
-        public int EncodedDataLength;
+        public IMemoryOwner<byte> MemoryOwner {  get; set; }
+        public int EncodedDataLength {  get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public int Quality { get; set; }
