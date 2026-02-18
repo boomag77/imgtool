@@ -240,9 +240,9 @@ namespace ImgViewer.Models
                 var dto = new AppSettingsDto
                 {
                     Dpi = this.Dpi,
-                    BatchSavingFileFormat = this.BatchSavingFileFormat,
+                    //BatchSavingFileFormat = this.BatchSavingFileFormat,
                     JpegSettings = this.JpegSettings,
-                    TiffCompression = this.TiffCompression,
+                    //TiffCompression = this.TiffCompression,
                     TiffJpegQuality = this.TiffJpegQuality,
                     TiffSubSamplingMode = this.TiffSubSamplingMode,
                     LastOpenedFolder = this.LastOpenedFolder,
@@ -291,14 +291,12 @@ namespace ImgViewer.Models
                 if (dto != null)
                 {
                     _dpi = dto.Dpi > 0 ? dto.Dpi : DefaultDpi;
-                    _batchSavingFileFormat = Enum.IsDefined(dto.BatchSavingFileFormat)
-                        ? dto.BatchSavingFileFormat
-                        : DefaultBatchSavingFileFormat;
+                    _batchSavingFileFormat = DefaultBatchSavingFileFormat;
                     _jpegSettings = dto.JpegSettings;
                     _jpegSettings.Quality = Math.Clamp(_jpegSettings.Quality <= 0 ? 75 : _jpegSettings.Quality, 1, 100);
                     if (!Enum.IsDefined(_jpegSettings.SubSampling))
                         _jpegSettings.SubSampling = SubSamplingMode.NoSubsampling;
-                    _tiffCompression = dto.TiffCompression;
+                    _tiffCompression = DefaultTiffCompression;
                     _tiffJpegQuality = dto.TiffJpegQuality is >= 1 and <= 100 ? dto.TiffJpegQuality : 75;
                     _tiffSubSamplingMode = dto.TiffSubSamplingMode.HasValue && Enum.IsDefined(dto.TiffSubSamplingMode.Value)
                         ? dto.TiffSubSamplingMode.Value
