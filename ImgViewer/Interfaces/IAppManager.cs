@@ -51,6 +51,7 @@ namespace ImgViewer.Interfaces
         public Task ProcessFolder(string srcFolder);
 
         public Task ProcessRootFolder(string rootFolder, Pipeline pipeline, bool fullTree);
+        public Task ProcessSelectedFolders(IEnumerable<string> folders, Pipeline pipeline);
         public void CancelFolderProcessing(string folderPath);
         public Task<bool> ResizeFolders(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers, Action<int, int, string?>? progress = null);
 

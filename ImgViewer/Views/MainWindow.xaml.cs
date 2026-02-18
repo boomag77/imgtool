@@ -1452,6 +1452,15 @@ namespace ImgViewer.Views
             }
         }
 
+        private void ApplyCurrentPipelineToSelectedFolders_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new SelectedFoldersProcessingWindow(_manager, Pipeline)
+            {
+                Owner = this
+            };
+            window.ShowDialog();
+        }
+
         private void ResetButton_Click(object sender, RoutedEventArgs e)
         {
             _manager.ResetWorkingImagePreview();

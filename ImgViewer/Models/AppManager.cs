@@ -610,6 +610,7 @@ namespace ImgViewer.Models
 
             var startTime = DateTime.Now;
 
+
             UpdateStatus($"Processing folders in " + rootFolderPath);
 
             var processedCount = 0;
@@ -651,43 +652,7 @@ namespace ImgViewer.Models
                             ReportError($"Error while processing sub-folder {folderPath} in root folder {rootFolderPath}.", ex, "Processing Error");
                     }
                 }
-                
-                UpdateBatchViewModel(vm =>
-                {
-                    foreach (var folderPath in pendingFolders)
-                    {
-                        vm.AddPending(folderPath, BuildBatchDisplayName(folderPath));
-                    }
-                });
-                
-                foreach (var folderPath in pendingFolders)
-                {
-                    if (batchToken.IsCancellationRequested) break;
-                    try
-                    {
-                        if (IsFolderCanceled(folderPath))
-                        {
-                            UpdateBatchViewModel(vm => vm.Remove(folderPath));
-                            continue;
-                        }
-
-                        await ProcessFolder(folderPath, pipeline, batchToken).ConfigureAwait(false);
-                        processedCount++;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                #if DEBUG
-                        Debug.WriteLine("Processing Root Folder was canceled.");
-                #endif
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        _rootBatchIssues.Enqueue($"[ProcessFolder] {folderPath}: {ex.Message}");
-                        if (!_inRootFolderBatch)
-                            ReportError($"Error while processing sub-folder {folderPath} in root folder {rootFolderPath}.", ex, "Processing Error");
-                    }
-                }
+                processedCount = await ProcessFoldersList(pendingFolders, pipeline, batchToken, rootFolderPath).ConfigureAwait(false);
                 var duration = DateTime.Now - startTime;
                 var durationHours = (int)duration.TotalHours;
                 var durationMinutes = duration.Minutes;
@@ -747,6 +712,124 @@ namespace ImgViewer.Models
                 try { _rootFolderCts?.Dispose(); } catch { }
                 _rootFolderCts = null;
             }
+        }
+
+        public async Task ProcessSelectedFolders(IEnumerable<string> folders, Pipeline pipeline)
+        {
+            if (pipeline == null) return;
+            _rootFolderCts?.Cancel();
+            _rootFolderCts?.Dispose();
+
+            _inRootFolderBatch = true;
+            _batchExistingFilesChoice = null;
+            lock (_batchCancelLock)
+            {
+                _canceledFolders.Clear();
+            }
+            while (_rootBatchIssues.TryDequeue(out _)) { }
+            UpdateBatchViewModel(vm => vm.Clear());
+
+            _rootFolderCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            var batchToken = _rootFolderCts.Token;
+
+            UpdateStatus("Processing selected folders");
+
+            try
+            {
+                var pendingFolders = new List<string>();
+                foreach (var folderPath in folders)
+                {
+                    if (batchToken.IsCancellationRequested) break;
+                    if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+                    {
+                        _rootBatchIssues.Enqueue($"SKIP_INVALID_FOLDER: '{folderPath}'");
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (!TryHasAnyImageFast(folderPath, batchToken, out var issue))
+                        {
+                            _rootBatchIssues.Enqueue(issue ?? $"SKIP_NO_IMAGES: '{folderPath}'");
+                            continue;
+                        }
+
+                        pendingFolders.Add(folderPath);
+                    }
+                    catch (OperationCanceledException)
+                    {
+#if DEBUG
+                        Debug.WriteLine("Processing selected folders was canceled.");
+#endif
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _rootBatchIssues.Enqueue($"[ProcessFolder] {folderPath}: {ex.Message}");
+                    }
+                }
+
+                await ProcessFoldersList(pendingFolders, pipeline, batchToken, "<selected folders>").ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // cancellation requested
+            }
+            catch (Exception ex)
+            {
+                ReportError("Error while processing selected folders.", ex, "Processing Error");
+            }
+            finally
+            {
+                _inRootFolderBatch = false;
+                UpdateStatus("Standby");
+                try { _rootFolderCts?.Dispose(); } catch { }
+                _rootFolderCts = null;
+            }
+        }
+
+        private async Task<int> ProcessFoldersList(List<string> pendingFolders, Pipeline pipeline, CancellationToken batchToken, string rootFolderPath)
+        {
+            var processedCount = 0;
+
+            UpdateBatchViewModel(vm =>
+            {
+                foreach (var folderPath in pendingFolders)
+                {
+                    vm.AddPending(folderPath, BuildBatchDisplayName(folderPath));
+                }
+            });
+
+            foreach (var folderPath in pendingFolders)
+            {
+                if (batchToken.IsCancellationRequested) break;
+                try
+                {
+                    if (IsFolderCanceled(folderPath))
+                    {
+                        UpdateBatchViewModel(vm => vm.Remove(folderPath));
+                        continue;
+                    }
+
+                    await ProcessFolder(folderPath, pipeline, batchToken).ConfigureAwait(false);
+                    processedCount++;
+                }
+                catch (OperationCanceledException)
+                {
+#if DEBUG
+                    Debug.WriteLine("Processing Root Folder was canceled.");
+#endif
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _rootBatchIssues.Enqueue($"[ProcessFolder] {folderPath}: {ex.Message}");
+                    if (!_inRootFolderBatch)
+                        ReportError($"Error while processing sub-folder {folderPath} in root folder {rootFolderPath}.", ex, "Processing Error");
+                }
+            }
+
+            return processedCount;
         }
 
         public Task<bool> ResizeFolders(string[] folderPaths, ResizeParameters parameters, CancellationToken token, int maxWorkers, Action<int, int, string?>? progress = null)

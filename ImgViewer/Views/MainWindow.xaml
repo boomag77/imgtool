@@ -1279,8 +1279,8 @@
                             <Button Style="{StaticResource ElevatedRoundedButton}"
                                     Margin="5,5,5,5"
                                     Width="Auto"
-                                    Click="StopProcessing_Click">
-                               Stop processing
+                                    Click="ApplyCurrentPipelineToSelectedFolders_Click">
+                               Selected folders
                             </Button>
 
                         </StackPanel>
