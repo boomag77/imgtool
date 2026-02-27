@@ -691,8 +691,8 @@ namespace ImgViewer.Models
                     }
 
                     ReadOnlyMemory<byte> imageBytes = loaded.Item2;
-                    imgProc.CurrentImage = imageBytes;
-
+                    //imgProc.CurrentImage = imageBytes;
+                    imgProc.SetImage(imageBytes);
 
 
                     foreach (var op in _plOperations)

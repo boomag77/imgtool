@@ -1,10 +1,12 @@
 ﻿using ImgViewer.Interfaces;
 using ImgViewer.Views;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using static ImgViewer.Interfaces.IImageProcessor;
 
 namespace ImgViewer.Models
 {
@@ -342,11 +344,63 @@ namespace ImgViewer.Models
             await _currentImageLock.WaitAsync();
             try
             {
-                await Task.Run(() => _imageProcessor.CurrentImage = bmp);
+                await Task.Run(() =>
+                {
+                    //_imageProcessor.CurrentImage = bmp;
+                    var rawImageData = ToRawImageData(bmp);
+                    _imageProcessor.SetImage(rawImageData);
+                });
+                
             }
             finally
             {
                 _currentImageLock.Release();
+            }
+        }
+
+        private static RawImageData ToRawImageData(ImageSource image)
+        {
+            if (image is not BitmapSource src)
+                throw new InvalidOperationException("Expected BitmapSource.");
+
+            if (!src.IsFrozen && src.CanFreeze) src.Freeze();
+
+            BitmapSource bmp = src.Format switch
+            {
+                var f when f == PixelFormats.Bgr24 => src,
+                var f when f == PixelFormats.Bgra32 => src,
+                var f when f == PixelFormats.Gray8 => src,
+                _ => new FormatConvertedBitmap(src, PixelFormats.Bgr24, null, 0)
+            };
+
+            int width = bmp.PixelWidth;
+            int height = bmp.PixelHeight;
+            int stride = (width * bmp.Format.BitsPerPixel + 7) / 8;
+            int size = checked(stride * height);
+            IMemoryOwner<byte> owner = MemoryPool<byte>.Shared.Rent(size);
+            byte[] tmp = ArrayPool<byte>.Shared.Rent(size);
+            try
+            {
+                // simple path (no unsafe)
+                bmp.CopyPixels(tmp, stride, 0);
+                tmp.AsSpan(0, size).CopyTo(owner.Memory.Span);
+
+                var fmt = bmp.Format == PixelFormats.Gray8
+                    ? IImageProcessor.RawPixelFormat.Gray8
+                    : bmp.Format == PixelFormats.Bgra32
+                        ? IImageProcessor.RawPixelFormat.Bgra32
+                        : IImageProcessor.RawPixelFormat.Bgr24;
+
+                return new IImageProcessor.RawImageData(owner, width, height, stride, fmt);
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(tmp);
             }
         }
 

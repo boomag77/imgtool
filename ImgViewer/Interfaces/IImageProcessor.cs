@@ -1,13 +1,32 @@
 ﻿using ImgViewer.Models;
 using OpenCvSharp;
+using System.Buffers;
 using System.IO;
 
 namespace ImgViewer.Interfaces
 {
     public interface IImageProcessor
     {
+        public enum RawPixelFormat
+        {
+            Gray8,
+            Bgr24,
+            Bgra32
+        }
 
-        public object CurrentImage { set; }
+        public readonly record struct RawImageData(
+            IMemoryOwner<byte> Owner,
+            int Width,
+            int Height,
+            int Stride,
+            RawPixelFormat Format);
+
+        void SetImage(Mat mat);
+        void SetImage(byte[] rawPixels);
+        void SetImage(ReadOnlyMemory<byte> rom);
+        void SetImage(RawImageData raw);
+
+        //public object CurrentImage { set; }
         public void UpdateCancellationToken(CancellationToken token);
         public bool TryGetStreamForSave(ImageFormat format, out MemoryStream? ms, out string error);
         public TiffInfo GetTiffInfo(TiffCompression compression, int dpi);

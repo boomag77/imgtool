@@ -12,6 +12,7 @@ using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Tesseract;
+using static ImgViewer.Interfaces.IImageProcessor;
 using static ImgViewer.Models.BordersRemover;
 using ImageFormat = ImgViewer.Interfaces.ImageFormat;
 using Rect = OpenCvSharp.Rect;
@@ -94,56 +95,222 @@ namespace ImgViewer.Models
         //    }
         //}
 
-        public object CurrentImage
-        {
-            set
+        public void SetImage(Mat mat)
+        { 
+            try
             {
-                try
+                if (mat == null || mat.Empty())
                 {
-                    if (value == null)
-                    {
-                        ErrorOccured?.Invoke("CurrentImage set to null.");
-                        return;
-                    }
-                    ClearSplitResults();
-                    // if value is raw pixels
-                    Mat? mat = null;
-                    if (value is byte[] rawPixels)
-                    {
-                        mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
-                    }
-                    else if (value is BitmapSource bmp)
-                    {
-                        mat = BitmapSourceToMat(bmp);
-                    }
-                    else if (value is ReadOnlyMemory<byte> rom)
-                    {
-                        mat = Cv2.ImDecode(rom.Span, ImreadModes.Color);
-                    }
-                    else
-                    {
-                        ErrorOccured?.Invoke($"Unsupported type for CurrentImage: {value.GetType()}");
-                        return;
-                    }
-                    if (mat == null || mat.Empty())
-                    {
-                        mat?.Dispose();
-                        return;
-                    }
-
-                    WorkingImage = mat;
+                    ErrorOccured?.Invoke("SetImage called with null or empty Mat.");
+                    return;
                 }
-
-                catch (OperationCanceledException)
-                {
-
-                }
-                catch (Exception ex)
-                {
-                    ErrorOccured?.Invoke($"Failed to set Current Image: {ex.Message}");
-                }
+                ClearSplitResults();
+                WorkingImage = mat.Clone();
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Failed to set Current Image from Mat: {ex.Message}");
             }
         }
+
+        public void SetImage(byte[] rawPixels)
+        {
+            try
+            {
+                if (rawPixels == null)
+                {
+                    ErrorOccured?.Invoke("SetImage called with null byte array.");
+                    return;
+                }
+                ClearSplitResults();
+                Mat? mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
+                if (mat == null || mat.Empty())
+                {
+                    mat?.Dispose();
+                    return;
+                }
+                WorkingImage = mat;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                ErrorOccured?.Invoke($"Failed to set Current Image from byte array: {ex.Message}");
+            }
+        }
+
+        public void SetImage(ReadOnlyMemory<byte> rom)
+        {
+            try
+            {
+                ClearSplitResults();
+                Mat? mat = Cv2.ImDecode(rom.Span, ImreadModes.Color);
+                if (mat == null || mat.Empty())
+                {
+                    mat?.Dispose();
+                    return;
+                }
+                WorkingImage = mat;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                
+                ErrorOccured?.Invoke($"Failed to set Current Image from ReadOnlyMemory<byte>: {ex.Message}");
+            }   
+        }
+
+        public void SetImage(RawImageData raw)
+        {
+            if (raw.Width <= 0 || raw.Height <= 0 || raw.Stride <= 0 || raw.Owner.Memory.IsEmpty)
+            {
+                ErrorOccured?.Invoke("Invalid RawImageData: dimensions and stride must be positive, and pixel data cannot be empty.");
+                return;
+            }
+
+            Mat? bgr = null;
+            byte[]? tempBuffer = null;
+            try
+            {
+                
+
+                MatType srcType = raw.Format switch
+                {
+                    RawPixelFormat.Gray8 => MatType.CV_8UC1,
+                    RawPixelFormat.Bgr24 => MatType.CV_8UC3,
+                    RawPixelFormat.Bgra32 => MatType.CV_8UC4,
+                    _ => throw new NotSupportedException()
+                };
+
+                
+
+                int channels = raw.Format switch
+                {
+                    RawPixelFormat.Gray8 => 1,
+                    RawPixelFormat.Bgr24 => 3,
+                    RawPixelFormat.Bgra32 => 4,
+                    _ => 3
+                };
+                int rowBytes = checked(raw.Width * channels);
+
+                if (raw.Stride < rowBytes)
+                    throw new ArgumentException($"Stride {raw.Stride} is smaller than row size {rowBytes}.");
+
+                long required = (long)raw.Stride * raw.Height;
+                if (required > int.MaxValue)
+                    throw new ArgumentException("Raw image buffer is too large.");
+
+                if (raw.Owner.Memory.Length < required)
+                    throw new ArgumentException(
+                        $"Buffer too small. Have {raw.Owner.Memory.Length}, need at least {required}.");
+
+                var memoryBytes = raw.Owner.Memory;
+                using var src = new Mat(raw.Height, raw.Width, srcType);
+                bool ok = MemoryMarshal.TryGetArray<byte>(memoryBytes, out var segment);
+                if (!ok)
+                {
+                    tempBuffer = ArrayPool<byte>.Shared.Rent(rowBytes);
+                }
+                for (int r = 0; r < raw.Height; r++)
+                {
+                    if (ok)
+                        Marshal.Copy(segment.Array!, segment.Offset + r * raw.Stride, src.Data + r * (int)src.Step(), rowBytes);
+                    else
+                    {
+                        
+                        Memory<byte> bytesMemory = tempBuffer.AsMemory(0, rowBytes);
+                        raw.Owner.Memory.Slice(r * raw.Stride, rowBytes).CopyTo(bytesMemory);
+                        Marshal.Copy(tempBuffer!, 0, src.Data + r * (int)src.Step(), rowBytes);
+                    }
+                        
+                }
+
+                bgr = raw.Format switch
+                {
+                    RawPixelFormat.Bgr24 => src.Clone(),
+                    RawPixelFormat.Gray8 => src.CvtColor(ColorConversionCodes.GRAY2BGR),
+                    RawPixelFormat.Bgra32 => src.CvtColor(ColorConversionCodes.BGRA2BGR),
+                    _ => throw new NotSupportedException()
+                };
+
+                ClearSplitResults();
+                WorkingImage = bgr;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                bgr?.Dispose();
+                ErrorOccured?.Invoke($"Failed to set Current Image from RawImageData: {ex.Message}");
+            }
+            finally
+            {
+                if (tempBuffer != null)
+                {
+                    ArrayPool<byte>.Shared.Return(tempBuffer);
+                }
+                raw.Owner.Dispose();
+            }
+        }
+
+
+        //public object CurrentImage
+        //{
+        //    set
+        //    {
+        //        try
+        //        {
+        //            if (value == null)
+        //            {
+        //                ErrorOccured?.Invoke("CurrentImage set to null.");
+        //                return;
+        //            }
+        //            ClearSplitResults();
+        //            // if value is raw pixels
+        //            Mat? mat = null;
+        //            if (value is byte[] rawPixels)
+        //            {
+        //                mat = Cv2.ImDecode(rawPixels, ImreadModes.Color);
+        //            }
+        //            else if (value is BitmapSource bmp)
+        //            {
+        //                mat = BitmapSourceToMat(bmp);
+        //            }
+        //            else if (value is ReadOnlyMemory<byte> rom)
+        //            {
+        //                mat = Cv2.ImDecode(rom.Span, ImreadModes.Color);
+        //            }
+        //            else
+        //            {
+        //                ErrorOccured?.Invoke($"Unsupported type for CurrentImage: {value.GetType()}");
+        //                return;
+        //            }
+        //            if (mat == null || mat.Empty())
+        //            {
+        //                mat?.Dispose();
+        //                return;
+        //            }
+
+        //            WorkingImage = mat;
+        //        }
+
+        //        catch (OperationCanceledException)
+        //        {
+
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            ErrorOccured?.Invoke($"Failed to set Current Image: {ex.Message}");
+        //        }
+        //    }
+        //}
 
 
 
