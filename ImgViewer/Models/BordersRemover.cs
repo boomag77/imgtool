@@ -366,7 +366,7 @@ namespace ImgViewer.Models
                         // 3) Inpaint по всей зоне outerMask
                         using var inpainted = new Mat();
                         double inpaintRadius = Math.Max(3.0, margin);
-                        Cv2.Inpaint(working, outerMask, inpainted, inpaintRadius, InpaintMethod.Telea);
+                        Cv2.Inpaint(working, outerMask, inpainted, inpaintRadius, InpaintTypes.Telea);
 
                         // 4) Собираем финальный результат
                         filled = working.Clone();
@@ -2282,8 +2282,8 @@ namespace ImgViewer.Models
                 double radius = Math.Max(2.0, inpaintRadius);
 
                 var method = (inpaintMode == BrickInpaintMode.Telea)
-                    ? InpaintMethod.Telea
-                    : InpaintMethod.NS;
+                    ? InpaintTypes.Telea
+                    : InpaintTypes.NS;
 
                 Cv2.Inpaint(bgr, outerMask, inpainted, radius, method);
 

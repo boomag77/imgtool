@@ -9,7 +9,6 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Tesseract;
@@ -403,7 +402,7 @@ namespace ImgViewer.Models
             return true;
         }
 
-        
+
         // if outSrc didn't pass (null) -> returns JpegInfo from WorkingImage Mat, otherwise -> from outSrc Mat
         // TODO: errors handling
         public JpegInfo GetJpegInfo(int quality, int dpi, int subSampling, Mat? outSrc = null)
@@ -443,7 +442,7 @@ namespace ImgViewer.Models
             if (TrySetPngDpi(pngData, dpi, out var patched))
                 pngData = patched;
 
-            var pngDataLength  = pngData.Length;
+            var pngDataLength = pngData.Length;
             Span<byte> pngSpan = pngData.AsSpan();
             var owner = MemoryPool<byte>.Shared.Rent(pngDataLength);
             pngSpan.CopyTo(owner.Memory.Span);

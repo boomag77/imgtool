@@ -311,7 +311,7 @@ public static class PunchHoleRemover
 
         Mat dst = new Mat();
         //Cv2.Inpaint(srcColor, holesMaskF, dst, inpaintRadius, InpaintMethod.Telea);
-        Cv2.Inpaint(srcColor, holesMaskF, dst, inpaintRadius, InpaintMethod.NS);
+        Cv2.Inpaint(srcColor, holesMaskF, dst, inpaintRadius, InpaintTypes.NS);
         //----- OLD INPAINT END
 
 

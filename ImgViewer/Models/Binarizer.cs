@@ -157,7 +157,7 @@ namespace ImgViewer.Models
 
             // binarize: srcD > thresh -> 255 else 0
             Mat bin = new();
-            Cv2.Compare(srcD, threshShifted, bin, CmpType.GT); // bin = 0 or 255 (CV_8U after convert)
+            Cv2.Compare(srcD, threshShifted, bin, CmpTypes.GT); // bin = 0 or 255 (CV_8U after convert)
             bin.ConvertTo(bin, MatType.CV_8UC1, 255.0);  // ensure 0/255
 
 

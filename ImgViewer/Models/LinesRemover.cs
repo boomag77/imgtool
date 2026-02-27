@@ -1,9 +1,6 @@
 ﻿using OpenCvSharp;
-using OpenCvSharp.XPhoto;
-using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using Point = OpenCvSharp.Point;
 using Size = OpenCvSharp.Size;
@@ -591,7 +588,7 @@ namespace ImgViewer.Models
             // Inpaint по маске
             Mat inpainted = new Mat();
             int inpaintRadius = Math.Max(3, lineWidthPx + 2);
-            Cv2.Inpaint(bgr, globalMask, inpainted, inpaintRadius, InpaintMethod.Telea);
+            Cv2.Inpaint(bgr, globalMask, inpainted, inpaintRadius, InpaintTypes.Telea);
 
             bgr.Dispose();
             return inpainted;
@@ -912,7 +909,7 @@ namespace ImgViewer.Models
             Mat inpainted = new Mat();
             // Радиус inpaint немного больше толщины
             int inpaintRadius = Math.Max(3, lineWidthPx + 2);
-            Cv2.Inpaint(inpaintSrc, linesMask, inpainted, inpaintRadius, InpaintMethod.Telea);
+            Cv2.Inpaint(inpaintSrc, linesMask, inpainted, inpaintRadius, OpenCvSharp.InpaintTypes.Telea);
 
             // очистка
             inpaintSrc.Dispose();

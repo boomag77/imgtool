@@ -76,7 +76,7 @@ namespace ImgViewer.Models
                     if (area < ctx.MinArea)
                         continue;
 
-                    Cv2.Compare(ctx.Labels, i, tmpMask, CmpType.EQ);
+                    Cv2.Compare(ctx.Labels, i, tmpMask, CmpTypes.EQ);
                     Cv2.BitwiseOr(componentMask, tmpMask, componentMask);
                     any = true;
                 }
@@ -103,7 +103,7 @@ namespace ImgViewer.Models
                 if (bestIdx < 0 || bestArea < ctx.MinArea)
                     return src.Clone();
 
-                Cv2.Compare(ctx.Labels, bestIdx, componentMask, CmpType.EQ);
+                Cv2.Compare(ctx.Labels, bestIdx, componentMask, CmpTypes.EQ);
             }
 
             using var filledMask = FillHoles(componentMask);
@@ -128,7 +128,7 @@ namespace ImgViewer.Models
                 Cv2.Erode(filledMask, ero, edgeKernel);
                 using var edgeMask = new Mat();
                 Cv2.Subtract(dil, ero, edgeMask);
-                Cv2.Inpaint(result, edgeMask, result, band, InpaintMethod.Telea);
+                Cv2.Inpaint(result, edgeMask, result, band, InpaintTypes.Telea);
             }
             return result;
         }
@@ -169,7 +169,7 @@ namespace ImgViewer.Models
                     }
                     else
                     {
-                        Cv2.Compare(ctx.Labels, i, tmpMask, CmpType.EQ);
+                        Cv2.Compare(ctx.Labels, i, tmpMask, CmpTypes.EQ);
                         rect = AutoTrimRect(tmpMask, rect, rectAutoTrimSensitivity);
                     }
                     if (rect.Width <= 0 || rect.Height <= 0)
@@ -207,7 +207,7 @@ namespace ImgViewer.Models
                 }
                 else
                 {
-                    Cv2.Compare(ctx.Labels, bestIdx, tmpMask, CmpType.EQ);
+                    Cv2.Compare(ctx.Labels, bestIdx, tmpMask, CmpTypes.EQ);
                     rect = AutoTrimRect(tmpMask, rect, rectAutoTrimSensitivity);
                 }
                 if (rect.Width <= 0 || rect.Height <= 0)
@@ -235,7 +235,7 @@ namespace ImgViewer.Models
                 Cv2.Erode(rectMask, ero, edgeKernel);
                 using var edgeMask = new Mat();
                 Cv2.Subtract(dil, ero, edgeMask);
-                Cv2.Inpaint(result, edgeMask, result, band, InpaintMethod.Telea);
+                Cv2.Inpaint(result, edgeMask, result, band, InpaintTypes.Telea);
             }
 
             return result;
@@ -269,7 +269,7 @@ namespace ImgViewer.Models
                     if (area < ctx.MinArea)
                         continue;
 
-                    Cv2.Compare(ctx.Labels, i, tmpMask, CmpType.EQ);
+                    Cv2.Compare(ctx.Labels, i, tmpMask, CmpTypes.EQ);
                     Cv2.BitwiseOr(componentMask, tmpMask, componentMask);
 
                     var rect = RectFromStats(ctx.Stats, i, src.Width, src.Height);
@@ -309,7 +309,7 @@ namespace ImgViewer.Models
                 if (bestIdx < 0 || bestArea < ctx.MinArea)
                     return src.Clone();
 
-                Cv2.Compare(ctx.Labels, bestIdx, tmpMask, CmpType.EQ);
+                Cv2.Compare(ctx.Labels, bestIdx, tmpMask, CmpTypes.EQ);
                 Cv2.BitwiseOr(componentMask, tmpMask, componentMask);
 
                 var rect = RectFromStats(ctx.Stats, bestIdx, src.Width, src.Height);
@@ -351,7 +351,7 @@ namespace ImgViewer.Models
                 Cv2.Erode(filledMask, ero, edgeKernel);
                 using var edgeMask = new Mat();
                 Cv2.Subtract(dil, ero, edgeMask);
-                Cv2.Inpaint(result, edgeMask, result, band, InpaintMethod.Telea);
+                Cv2.Inpaint(result, edgeMask, result, band, InpaintTypes.Telea);
             }
 
             return result;
