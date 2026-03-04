@@ -546,7 +546,7 @@ namespace ImgViewer.Models
                     var sourceFile = new SourceImageFile
                     {
                         Path = file,
-                        Layout = GetLayoutFromFileName(file.AsSpan()[^1])
+                        Layout = GetLayoutFromFileName(file.AsSpan())
                     };
                     await _filesCh.Writer.WriteAsync(sourceFile, _token);
 
@@ -571,17 +571,19 @@ namespace ImgViewer.Models
 
         }
 
-        private static SourceFileLayout GetLayoutFromFileName(char lastChar)
-
+        private static SourceFileLayout GetLayoutFromFileName(ReadOnlySpan<char> filePath)
         {
-            if (!char.IsDigit(lastChar))
-            {
+            int dot = filePath.LastIndexOf('.');
+            if (dot <= 0)
                 return SourceFileLayout.Right;
-            }
-            int digit = (int)(lastChar - '0');
-            return (digit % 2 == 1) ? SourceFileLayout.Left : SourceFileLayout.Right;
-        }
 
+            char c = filePath[dot - 1];
+            if (!char.IsDigit(c))
+                return SourceFileLayout.Right;
+
+            int digit = c - '0';
+            return (digit & 1) == 1 ? SourceFileLayout.Left : SourceFileLayout.Right;
+        }
 
         private async Task ImageSavingWorkerAsync()
         {
