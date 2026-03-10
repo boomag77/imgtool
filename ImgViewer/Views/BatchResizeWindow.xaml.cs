@@ -1,8 +1,6 @@
 using ImgViewer.Interfaces;
 using ImgViewer.Models;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
 using System.Windows;
 
 namespace ImgViewer.Views
@@ -12,6 +10,7 @@ namespace ImgViewer.Views
         private readonly IAppManager _appManager;
         private readonly ObservableCollection<string> _folders = new();
         private bool _isRunning;
+        private readonly HashSet<string> _folderSet = new(StringComparer.OrdinalIgnoreCase);
 
         public BatchResizeWindow(IAppManager appManager)
         {
@@ -25,25 +24,25 @@ namespace ImgViewer.Views
 
         private void AddFolder_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog
+            var dialog = new Microsoft.Win32.OpenFolderDialog()
             {
-                CheckFileExists = false,
-                CheckPathExists = true,
-                ValidateNames = false,
-                FileName = "Select folder"
+                Multiselect = true,
+                Title = "Select folder"
             };
 
             if (dialog.ShowDialog() != true)
                 return;
 
-            string? selectedFolder = Path.GetDirectoryName(dialog.FileName);
-            if (string.IsNullOrWhiteSpace(selectedFolder))
-                return;
+            foreach (string selectedFolder in dialog.FolderNames)
+            {
+                if (string.IsNullOrWhiteSpace(selectedFolder))
+                    continue;
 
-            if (_folders.Any(f => string.Equals(f, selectedFolder, StringComparison.OrdinalIgnoreCase)))
-                return;
+                if (!_folderSet.Add(selectedFolder))
+                    continue;
 
-            _folders.Add(selectedFolder);
+                _folders.Add(selectedFolder);
+            }
         }
 
         private void RemoveSelectedFolder_Click(object sender, RoutedEventArgs e)
