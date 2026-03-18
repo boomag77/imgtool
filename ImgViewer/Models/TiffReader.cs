@@ -195,7 +195,7 @@ namespace ImgViewer.Models
                             return null;
                         }
 #if DEBUG
-                        DumpTiffInfo(filePath);
+                        //DumpTiffInfo(filePath);
 #endif
                         int width = GetIntTag(tiff, TiffTag.IMAGEWIDTH);
                         int height = GetIntTag(tiff, TiffTag.IMAGELENGTH);
@@ -244,6 +244,8 @@ namespace ImgViewer.Models
                         byte[][] tiRawStrips = null;
                         int rowsPerStripOriginal = height;
 
+                        bool decodedFromOJPEG = false;
+
                         switch (compression)
                         {
                             case (int)TiffCompression.None:
@@ -267,8 +269,16 @@ namespace ImgViewer.Models
                                     rowsPerStripOriginal = GetIntTag(tiff, TiffTag.ROWSPERSTRIP, height);
                                 }
                                 break;
-                            case (int)TiffCompression.JPEG:
                             case (int)TiffCompression.OJPEG:
+                                data = tiff.IsTiled()
+                                    ? ExtractDecodedPixelsByTile(tiff, width, height)
+                                    : ExtractDecodedPixelsByStrip(tiff, width, height);
+                                isRaw = false;
+                                compression = (int)TiffCompression.None; // important: data is now decompressed
+                                decodedFromOJPEG = true;
+                                break;
+                            case (int)TiffCompression.JPEG:
+                            
                                 //data = ExtractJpegRaw(tiff);
                                 //isRaw = true;
 
@@ -292,6 +302,45 @@ namespace ImgViewer.Models
                             default:
                                 Debug.WriteLine($"Other compression: {compression}");
                                 break;
+                        }
+                        //if (compression == (int)TiffCompression.None)
+                        //{
+                        //    // Decoded JPEG/OJPEG raster must not keep legacy photometric tags.
+                        //    if (samplesPerPixel <= 1)
+                        //        photoMetric = (int)Photometric.MINISBLACK;
+                        //    else
+                        //        photoMetric = (int)Photometric.RGB;
+
+                        //    bitsPerSample = 8;
+                        //}
+                        if (decodedFromOJPEG && data.Length > 0 && width > 0 && height > 0)
+                        {
+                            int px = checked(width * height);
+
+                            // infer channels from decoded raster size
+                            if (data.Length == px)
+                            {
+                                samplesPerPixel = 1;
+                                bitsPerSample = 8;
+                                photoMetric = (int)Photometric.MINISBLACK;
+                            }
+                            else if (data.Length == px * 3)
+                            {
+                                samplesPerPixel = 3;
+                                bitsPerSample = 8;
+                                photoMetric = (int)Photometric.RGB;
+                            }
+                            else if (data.Length == px * 4)
+                            {
+                                // if you keep alpha, mark RGB + extra sample later when writing tags
+                                samplesPerPixel = 4;
+                                bitsPerSample = 8;
+                                photoMetric = (int)Photometric.RGB;
+                            }
+                            else
+                            {
+                                // unknown layout: keep existing tags to avoid lying
+                            }
                         }
                         return new TiffImageInfo
                         {
@@ -606,7 +655,7 @@ namespace ImgViewer.Models
             if (rawData.Length == 0)
                 return null;
 
-            if (tiffInfo.Value.Compression == (int)TiffCompression.JPEG)
+            if (tiffInfo.Value.Compression == (int)TiffCompression.JPEG || tiffInfo.Value.Compression == (int)TiffCompression.OJPEG)
             {
                 return await Task.Run(() => LoadImageSourceFromJpeg(rawData));
             }
@@ -660,7 +709,7 @@ namespace ImgViewer.Models
             if (rawData.Length == 0)
                 return null;
 
-            if (tiffInfo.Value.Compression == (int)TiffCompression.JPEG)
+            if (tiffInfo.Value.Compression == (int)TiffCompression.JPEG || tiffInfo.Value.Compression == (int)TiffCompression.OJPEG)
             {
                 return rawData;
             }
