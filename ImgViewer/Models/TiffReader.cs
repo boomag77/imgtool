@@ -181,7 +181,6 @@ namespace ImgViewer.Models
             return list.ToArray();
         }
 
-
         private static async Task<TiffImageInfo?> ReadTiff(string filePath)
         {
             return await Task.Run<TiffImageInfo?>(() =>
@@ -269,6 +268,7 @@ namespace ImgViewer.Models
                                 }
                                 break;
                             case (int)TiffCompression.JPEG:
+                            case (int)TiffCompression.OJPEG:
                                 //data = ExtractJpegRaw(tiff);
                                 //isRaw = true;
 
@@ -704,8 +704,6 @@ namespace ImgViewer.Models
             using var tiffStream = TiffMemoryStream(tiffInfo.Value);
             return tiffStream.ToArray();
         }
-
-
 
         private static ImageSource LoadImageSourceFromJpeg(byte[] jpegData)
         {

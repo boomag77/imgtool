@@ -13,6 +13,7 @@ public enum TiffCompression
     CCITTG4 = 4,
     LZW = 5,
     Deflate = 8,
+    OJPEG = 6,
     JPEG = 7,
     PackBits = 32773
 }
