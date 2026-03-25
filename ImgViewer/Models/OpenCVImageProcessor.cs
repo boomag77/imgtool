@@ -436,6 +436,8 @@ public class OpenCvImageProcessor : IImageProcessor, IDisposable
 
     public event Action<Stream>? ImageUpdated;
     public event Action<string>? ErrorOccured;
+    public event Action<BitmapSource, BitmapSource>? SplitPreviewUpdated;
+    public event Action? SplitPreviewCleared;
 
 
     public bool TryGetStreamForSave(ImageFormat imageFormat, out MemoryStream? ms, out string error)
@@ -3018,10 +3020,12 @@ public class OpenCvImageProcessor : IImageProcessor, IDisposable
                     var leftBmp = MatToBitmapSource(result.Left);
                     var rightBmp = MatToBitmapSource(result.Right);
                     _appManager.SetSplitPreviewImages(leftBmp, rightBmp);
+                    SplitPreviewUpdated?.Invoke(leftBmp, rightBmp);
                 }
                 else
                 {
                     _appManager.ClearSplitPreviewImages();
+                    SplitPreviewCleared?.Invoke();
                     var reason = result?.Reason;
                     if (!string.IsNullOrWhiteSpace(reason))
                         ErrorOccured?.Invoke($"Page split failed: {reason}");
@@ -3035,10 +3039,12 @@ public class OpenCvImageProcessor : IImageProcessor, IDisposable
         catch (OperationCanceledException)
         {
             _appManager.ClearSplitPreviewImages();
+            SplitPreviewCleared?.Invoke();
         }
         catch (Exception ex)
         {
             _appManager.ClearSplitPreviewImages();
+            SplitPreviewCleared?.Invoke();
             ErrorOccured?.Invoke($"Page split failed: {ex.Message}");
         }
     }
