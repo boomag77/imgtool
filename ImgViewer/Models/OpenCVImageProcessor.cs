@@ -60,7 +60,6 @@ public class OpenCvImageProcessor : IImageProcessor, IDisposable
             if (_appManager == null) { previewSnap.Dispose(); return; }
             try
             {
-                _appManager.SetBmpImageOnPreview(MatToBitmapSource(previewSnap));
                 ImageUpdated?.Invoke(MatToStream(previewSnap));
             }
             finally
