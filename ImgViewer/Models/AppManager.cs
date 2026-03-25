@@ -63,6 +63,9 @@ namespace ImgViewer.Models
             _imageProcessor.ErrorOccured += (msg) => ReportError(msg, null, "Image Processor Error");
             _appSettings.ErrorOccured += (msg) => ReportError(msg, null, "App Settings Error");
 
+            _imageProcessor.SplitPreviewUpdated += (l, r) => SetSplitPreviewImages(l, r);
+            _imageProcessor.SplitPreviewCleared += () => ClearSplitPreviewImages();
+
         }
 
         public BatchViewModel BatchViewModel => _batchViewModel;
