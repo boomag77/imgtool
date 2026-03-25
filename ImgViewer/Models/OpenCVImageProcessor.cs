@@ -61,6 +61,7 @@ public class OpenCvImageProcessor : IImageProcessor, IDisposable
             try
             {
                 _appManager.SetBmpImageOnPreview(MatToBitmapSource(previewSnap));
+                ImageUpdated?.Invoke(MatToStream(previewSnap));
             }
             finally
             {
