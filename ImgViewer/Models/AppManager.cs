@@ -65,7 +65,27 @@ namespace ImgViewer.Models
 
             _imageProcessor.SplitPreviewUpdated += (l, r) => SetSplitPreviewImages(l, r);
             _imageProcessor.SplitPreviewCleared += () => ClearSplitPreviewImages();
+            _imageProcessor.ImageUpdated += stream => SetBmpImageOnPreviewFromStream(stream);
+        }
 
+        private void SetBmpImageOnPreviewFromStream(Stream stream)
+        {
+            try
+            {
+                stream.Position = 0;
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.StreamSource = stream;
+                bmp.EndInit();
+                bmp.Freeze();
+                stream.Dispose();
+                _ = SetBmpImageOnPreview(bmp);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"SetBmpImageOnPreviewFromStream failed: {ex.Message}");
+            }
         }
 
         public BatchViewModel BatchViewModel => _batchViewModel;
