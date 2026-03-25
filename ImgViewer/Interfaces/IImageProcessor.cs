@@ -2,6 +2,7 @@
 using OpenCvSharp;
 using System.Buffers;
 using System.IO;
+using System.Windows.Media.Imaging;
 
 namespace ImgViewer.Interfaces
 {
@@ -40,6 +41,9 @@ namespace ImgViewer.Interfaces
 
         event Action<Stream> ImageUpdated;
         event Action<string> ErrorOccured;
+        event Action<BitmapSource, BitmapSource>? SplitPreviewUpdated;
+        event Action? SplitPreviewCleared;
+
     }
 
     public enum ImageProcessorType
